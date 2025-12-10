@@ -1,0 +1,7 @@
+bdk-wasm/
+data/*
+node_modules/
+package-lock.json
+.env
+dist/
+bdk-rn-2.2.0-alpha.1.tgz

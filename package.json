@@ -1,0 +1,57 @@
+{
+  "name": "rgb-sdk-rn",
+  "version": "1.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RGB-OS/rgb-sdk-rn.git"
+  },
+  "devDependencies": {
+    "@types/node": "^22.17.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "dev": "tsc -w",
+    "build": "tsup",
+    "prepare": "npm run build",
+    "version:patch": "npm version patch && git push && git push --tags && npm publish --access public",
+    "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
+    "version:major": "npm version major && git push && git push --tags && npm publish --access public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "@noble/secp256k1": "3.0.0",
+    "@scure/base": "^2.0.0",
+    "@scure/bip32": "^2.0.1",
+    "@scure/bip39": "^2.0.1",
+    "@scure/btc-signer": "^2.0.1",
+    "axios": "^1.8.4",
+    "bdk-rn": "https://github.com/bitcoindevkit/bdk-rn/releases/download/v2.2.0-alpha.1/bdk-rn-2.2.0-alpha.1.tgz"
+  },
+  "keywords": [
+    "rgb",
+    "rgb-protocol",
+    "bitcoin",
+    "sdk",
+    "bdk",
+    "taproot",
+    "assets",
+    "blockchain"
+  ],
+  "license": "MIT"
+}

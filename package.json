@@ -1,38 +1,70 @@
 {
   "name": "rgb-sdk-rn",
   "version": "1.0.1",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/RGB-OS/rgb-sdk-rn.git"
+  "description": "React Native SDK for Bitcoin RGB Protocol",
+  "main": "./lib/module/index.js",
+  "types": "./lib/typescript/src/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./lib/typescript/src/index.d.ts",
+      "default": "./lib/module/index.js"
+    },
+    "./package.json": "./package.json"
   },
-  "devDependencies": {
-    "@types/node": "^22.17.2",
-    "tsup": "^8.5.0",
-    "typescript": "^5.9.2"
-  },
-  "type": "commonjs",
+  "files": [
+    "src",
+    "lib",
+    "android",
+    "ios",
+    "*.podspec",
+    "!android/build",
+    "!ios/build",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
   "scripts": {
     "dev": "tsc -w",
-    "build": "tsup",
-    "prepare": "npm run build",
+    "clean": "del-cli android/build ios/build lib",
+    "prepare": "bob build",
+    "typecheck": "tsc",
+    "build": "bob build",
+    "build:watch": "tsc -w",
     "version:patch": "npm version patch && git push && git push --tags && npm publish --access public",
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public"
   },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.cjs"
-    }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RGB-OS/rgb-sdk-rn.git"
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "keywords": [
+    "rgb",
+    "rgb-protocol",
+    "bitcoin",
+    "sdk",
+    "bdk",
+    "taproot",
+    "assets",
+    "blockchain",
+    "react-native",
+    "ios",
+    "android"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.17.2",
+    "@types/react": "^19.2.0",
+    "react-native-builder-bob": "^0.40.17",
+    "typescript": "^5.9.2",
+    "del-cli": "^6.0.0"
+  },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "3.0.0",
@@ -43,15 +75,30 @@
     "axios": "^1.8.4",
     "bdk-rn": "https://github.com/bitcoindevkit/bdk-rn/releases/download/v2.2.0-alpha.1/bdk-rn-2.2.0-alpha.1.tgz"
   },
-  "keywords": [
-    "rgb",
-    "rgb-protocol",
-    "bitcoin",
-    "sdk",
-    "bdk",
-    "taproot",
-    "assets",
-    "blockchain"
-  ],
-  "license": "MIT"
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  },
+  "codegenConfig": {
+    "name": "RgbSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.rgbsdkrn"
+    }
+  }
 }

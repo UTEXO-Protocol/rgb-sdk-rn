@@ -75,9 +75,9 @@ export function normalizeSeedInput(seed: SeedInput, field: string = 'seed'): Uin
 export interface GeneratedKeys {
   mnemonic: string;
   xpub: string;
-  account_xpub_vanilla: string;
-  account_xpub_colored: string;
-  master_fingerprint: string;
+  accountXpubVanilla: string;
+  accountXpubColored: string;
+  masterFingerprint: string;
   xpriv: string;
 }
 
@@ -147,10 +147,10 @@ async function getAccountXpub(mnemonic: string, bitcoinNetwork: string | number,
 /**
  * Get master extended public key from mnemonic
  */
-async function getMasterXpub(mnemonic: string, bitcoinNetwork: string | number): Promise<string> {
-  const root = await mnemonicToRoot(mnemonic, bitcoinNetwork);
-  return root.neutered().toBase58();
-}
+// async function getMasterXpub(mnemonic: string, bitcoinNetwork: string | number): Promise<string> {
+//   const root = await mnemonicToRoot(mnemonic, bitcoinNetwork);
+//   return root.neutered().toBase58();
+// }
 
 /**
  * Get master extended private key (xpriv) from mnemonic
@@ -183,9 +183,9 @@ async function buildGeneratedKeysFromRoot(
   return {
     mnemonic,
     xpub,
-    account_xpub_vanilla,
-    account_xpub_colored,
-    master_fingerprint,
+    accountXpubVanilla: account_xpub_vanilla,
+    accountXpubColored: account_xpub_colored,
+    masterFingerprint: master_fingerprint,
     xpriv,
   };
 }
@@ -248,7 +248,7 @@ async function buildKeysOutputFromSeed(seed: Uint8Array | Buffer, bitcoinNetwork
 /**
  * Build complete keys output object from xpriv
  */
-async function buildKeysOutputFromXpriv(xpriv: string, bitcoinNetwork: string | number): Promise<GeneratedKeys> {
+async function buildKeysOutputFromXpriv(xpriv: string): Promise<GeneratedKeys> {
   try {
     // Detect network from xpriv prefix first
     // tprv/tpub = testnet, xprv/xpub = mainnet
@@ -302,7 +302,6 @@ export async function generateKeys(bitcoinNetwork: string | number = 'regtest'):
     }
     // Log the actual error for debugging
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
     throw new CryptoError(`Failed to generate mnemonic: ${errorMessage}`, error as Error);
   }
 }
@@ -476,17 +475,14 @@ export async function getXpubFromXpriv(xpriv: string, bitcoinNetwork?: string | 
  * ```
  */
 export async function deriveKeysFromXpriv(
-  bitcoinNetwork: string | number = 'regtest',
   xpriv: string
 ): Promise<GeneratedKeys> {
   if (!xpriv || typeof xpriv !== 'string') {
     throw new ValidationError('xpriv must be a non-empty string', 'xpriv');
   }
   
-  const normalizedNetwork = normalizeNetwork(bitcoinNetwork);
-  
   try {
-    return await buildKeysOutputFromXpriv(xpriv, normalizedNetwork);
+    return await buildKeysOutputFromXpriv(xpriv);
   } catch (error) {
     if (error instanceof ValidationError) {
       throw error;

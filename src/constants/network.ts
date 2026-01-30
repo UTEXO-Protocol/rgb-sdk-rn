@@ -38,6 +38,10 @@ export const BIP32_VERSIONS = {
     public: 0x043587cf,
     private: 0x04358394,
   },
+  testnet4: {
+    public: 0x043587cf,
+    private: 0x04358394,
+  },
   signet: {
     public: 0x043587cf,
     private: 0x04358394,

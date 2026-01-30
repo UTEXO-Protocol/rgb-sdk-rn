@@ -95,7 +95,7 @@ export class CryptoError extends SDKError {
  * Configuration errors (missing or invalid configuration)
  */
 export class ConfigurationError extends SDKError {
-  constructor(message: string, field?: string) {
+  constructor(message: string) {
     super(message, 'CONFIGURATION_ERROR');
     this.name = 'ConfigurationError';
     Object.setPrototypeOf(this, ConfigurationError.prototype);

@@ -1,5 +1,5 @@
-import { sha256 as nobleSha256 } from '@noble/hashes/sha2';
-import { ripemd160 as nobleRipemd160 } from '@noble/hashes/legacy';
+import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js';
+import { ripemd160 as nobleRipemd160 } from '@noble/hashes/legacy.js';
 
 export async function sha256(data: Uint8Array | Buffer): Promise<Uint8Array> {
   if (!data) {

@@ -8,7 +8,7 @@
 /**
  * Bitcoin network type
  */
-export type Network = 'mainnet' | 'testnet' | 'signet' | 'regtest';
+export type Network = 'mainnet' | 'testnet' |'testnet4' | 'signet' | 'regtest';
 
 /**
  * PSBT type (create_utxo or send)

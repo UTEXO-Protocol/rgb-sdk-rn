@@ -4,12 +4,20 @@
  * This module contains HTTP client and RGB API client classes
  */
 
-// Re-export RGB client class explicitly
-export { RGBClient } from './rgb-client';
+export type { RGBHTTPClientParams } from '../types/rgb-model';
 
-// Export HTTP client factory
-export { createClient } from './http-client';
+/**
+ * Factory function to create an RGBClient instance
+ * Provides backward compatibility with the old API
+ */
 
-// Backward compatibility - export ThunderLink as alias to RGBClient
-export { RGBClient as ThunderLink } from './rgb-client';
+export interface CreateClientParams {
+  xpubVan: string;
+  xpubCol: string;
+  masterFingerprint: string;
+  dataDir: string;
+  network: string;
+  transportEndpoint?: string;
+  indexerUrl?: string;
+}
 

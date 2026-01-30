@@ -1,8 +1,9 @@
 import * as bip39Scure from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
+// @ts-ignore - wordlist import path issue with TypeScript module resolution
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 import * as secp256k1 from '@noble/secp256k1';
 import { HDKey } from '@scure/bip32';
-import type { Network, NetworkVersions, BIP32Interface, BIP32Factory } from './types';
+import type { NetworkVersions, BIP32Interface, BIP32Factory } from './types';
 
 export const bip39 = {
   mnemonicToSeedSync: (mnemonic: string): Buffer => {

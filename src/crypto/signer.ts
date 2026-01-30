@@ -196,7 +196,6 @@ export async function signPsbt(
   mnemonic: string,
   psbtBase64: string,
   network: Network = 'testnet',
-  options: SignPsbtOptions = {}
 ): Promise<string> {
   try {
     validateMnemonic(mnemonic, 'mnemonic');
@@ -297,9 +296,8 @@ export async function signPsbtSync(
   mnemonic: string,
   psbtBase64: string,
   network: Network = 'testnet',
-  options: SignPsbtOptions = {}
 ): Promise<string> {
-  return signPsbt(mnemonic, psbtBase64, network, options);
+  return signPsbt(mnemonic, psbtBase64, network);
 }
 
 /**
@@ -307,11 +305,8 @@ export async function signPsbtSync(
  * Note: This requires converting seed to mnemonic, which is not always possible.
  * Prefer using signPsbt with mnemonic directly.
  */
-export async function signPsbtFromSeed(
-  seed: string | Uint8Array,
-  psbtBase64: string,
-  network: Network = 'testnet',
-  options: SignPsbtOptions = {}
+// @ts-ignore
+export async function signPsbtFromSeed(seed: string | Uint8Array,psbtBase64: string, network: Network = 'testnet', options: SignPsbtOptions = {}
 ): Promise<string> {
   throw new CryptoError(
     'signPsbtFromSeed is not supported. Please use signPsbt with a mnemonic phrase instead.'

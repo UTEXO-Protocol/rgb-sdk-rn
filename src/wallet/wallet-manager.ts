@@ -194,7 +194,9 @@ export class WalletManager implements IWalletManager {
     );
 
     this.indexerUrl =
-      defaultIndexerUrls[this.network] || defaultIndexerUrls['regtest'];
+      params.indexerUrl ||
+      defaultIndexerUrls[this.network] ||
+      defaultIndexerUrls['regtest'];
   }
 
   public async initialize(): Promise<void> {

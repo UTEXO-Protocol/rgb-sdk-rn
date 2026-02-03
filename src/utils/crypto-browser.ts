@@ -9,7 +9,9 @@ export async function sha256(data: Uint8Array | Buffer): Promise<Uint8Array> {
   return new Uint8Array(nobleSha256(dataArray));
 }
 
-export async function ripemd160(data: Uint8Array | Buffer): Promise<Uint8Array> {
+export async function ripemd160(
+  data: Uint8Array | Buffer
+): Promise<Uint8Array> {
   if (!data) {
     throw new Error('ripemd160: data is undefined or null');
   }
@@ -17,10 +19,16 @@ export async function ripemd160(data: Uint8Array | Buffer): Promise<Uint8Array> 
   return new Uint8Array(nobleRipemd160(dataArray));
 }
 
-export async function sha256Sync(data: Uint8Array | Buffer): Promise<Uint8Array> {
+export async function sha256Sync(
+  data: Uint8Array | Buffer
+): Promise<Uint8Array> {
   return sha256(data);
 }
 
-export const ripemd160Sync: (data: Uint8Array | Buffer) => Promise<Uint8Array> = async (data: Uint8Array | Buffer): Promise<Uint8Array> => {
+export const ripemd160Sync: (
+  data: Uint8Array | Buffer
+) => Promise<Uint8Array> = async (
+  data: Uint8Array | Buffer
+): Promise<Uint8Array> => {
   return ripemd160(data);
 };

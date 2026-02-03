@@ -1,24 +1,39 @@
 // Main wallet exports
-export { createWallet, WalletManager, createWalletManager } from './wallet/index';
+export {
+  createWallet,
+  WalletManager,
+  createWalletManager,
+} from './wallet/index';
 export type { WalletInitParams } from './wallet/index';
-
 
 // Type exports
 export * from './types/rgb-model';
-export type { Network, PsbtType, SignPsbtOptions, NetworkVersions, Descriptors } from './crypto';
+export type {
+  Network,
+  PsbtType,
+  SignPsbtOptions,
+  NetworkVersions,
+  Descriptors,
+} from './crypto';
 export type { GeneratedKeys, AccountXpubs } from './crypto';
 
 // Function exports
-export { signPsbt, signPsbtSync, signPsbtFromSeed, signMessage, verifyMessage } from './crypto';
-export { 
-  generateKeys, 
-  deriveKeysFromMnemonic, 
+export {
+  signPsbt,
+  signPsbtSync,
+  signPsbtFromSeed,
+  signMessage,
+  verifyMessage,
+} from './crypto';
+export {
+  generateKeys,
+  deriveKeysFromMnemonic,
   deriveKeysFromSeed,
-  restoreKeys, 
+  restoreKeys,
   accountXpubsFromMnemonic,
   getXprivFromMnemonic,
   getXpubFromXpriv,
-  deriveKeysFromXpriv
+  deriveKeysFromXpriv,
 } from './crypto';
 
 // Error exports

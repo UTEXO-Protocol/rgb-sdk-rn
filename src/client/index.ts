@@ -1,6 +1,6 @@
 /**
  * Client module exports
- * 
+ *
  * This module contains HTTP client and RGB API client classes
  */
 
@@ -20,4 +20,3 @@ export interface CreateClientParams {
   transportEndpoint?: string;
   indexerUrl?: string;
 }
-

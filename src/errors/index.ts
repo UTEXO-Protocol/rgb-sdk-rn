@@ -22,7 +22,7 @@ export class SDKError extends Error {
     this.statusCode = statusCode;
     this.cause = cause;
     Object.setPrototypeOf(this, SDKError.prototype);
-    
+
     // Maintains proper stack trace for where error was thrown (V8 only)
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, SDKError);
@@ -101,4 +101,3 @@ export class ConfigurationError extends SDKError {
     Object.setPrototypeOf(this, ConfigurationError.prototype);
   }
 }
-

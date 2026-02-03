@@ -217,11 +217,7 @@ export type Transfer = {
   createdAt: number;
   updatedAt: number;
   kind: 'Issuance' | 'ReceiveBlind' | 'ReceiveWitness' | 'Send' | 'Inflation';
-  status:
-    | 'WaitingCounterparty'
-    | 'WaitingConfirmations'
-    | 'Settled'
-    | 'Failed';
+  status: 'WaitingCounterparty' | 'WaitingConfirmations' | 'Settled' | 'Failed';
   txid?: string;
   recipientId?: string;
   requestedAssignment?: Assignment;
@@ -410,4 +406,3 @@ export const RgbLibErrors = {
   WatchOnly: 'WatchOnly' as const,
   WrongPassword: 'WrongPassword' as const,
 } as const;
-

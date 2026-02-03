@@ -3,7 +3,7 @@ export type RGBHTTPClientParams = {
   xpubCol: string;
   masterFingerprint: string;
   rgbEndpoint: string;
-}
+};
 
 export type BitcoinNetwork =
   | 'mainnet'
@@ -13,9 +13,9 @@ export type BitcoinNetwork =
   | 'signet';
 
 export interface FailTransfersRequest {
-  batchTransferIdx?: number
-  noAssetOnly?: boolean
-  skipSync?: boolean
+  batchTransferIdx?: number;
+  noAssetOnly?: boolean;
+  skipSync?: boolean;
 }
 
 export interface WalletBackupResponse {
@@ -39,7 +39,7 @@ export interface WitnessData {
 }
 export interface InvoiceRequest {
   amount: number;
-  assetId: string;
+  assetId?: string;
   minConfirmations?: number;
   durationSeconds?: number;
 }
@@ -49,7 +49,12 @@ export interface Recipient {
   amount: number;
   transportEndpoints: string[];
 }
-export interface IssueAssetNiaRequestModel { ticker: string; name: string; amounts: number[]; precision: number }
+export interface IssueAssetNiaRequestModel {
+  ticker: string;
+  name: string;
+  amounts: number[];
+  precision: number;
+}
 
 export interface IssueAssetIfaRequestModel {
   ticker: string;
@@ -58,7 +63,7 @@ export interface IssueAssetIfaRequestModel {
   amounts: number[];
   inflationAmounts: number[];
   replaceRightsNum: number;
-  rejectListUrl: string|null;
+  rejectListUrl: string | null;
 }
 export interface SendAssetBeginRequestModel {
   invoice: string;
@@ -67,8 +72,8 @@ export interface SendAssetBeginRequestModel {
   amount?: number;
   // recipientMap: Record<string, Recipient[]>;
   // donation?: boolean;            // default: false
-  feeRate?: number;             // default: 1
-  minConfirmations?: number;    // default: 1
+  feeRate?: number; // default: 1
+  minConfirmations?: number; // default: 1
 }
 
 export interface SendAssetEndRequestModel {
@@ -147,7 +152,12 @@ export interface Transaction {
   fee: number;
   confirmationTime?: BlockTime;
 }
-export type TransferKind = 'Issuance' | 'ReceiveBlind' | 'ReceiveWitness' | 'Send' | 'Inflation';
+export type TransferKind =
+  | 'Issuance'
+  | 'ReceiveBlind'
+  | 'ReceiveWitness'
+  | 'Send'
+  | 'Inflation';
 
 export type Outpoint = {
   txid: string;
@@ -177,7 +187,11 @@ export interface Transfer {
   consignmentPath?: string;
 }
 
-export type TransferStatus = 'WaitingCounterparty' | 'WaitingConfirmations' | 'Settled' | 'Failed';
+export type TransferStatus =
+  | 'WaitingCounterparty'
+  | 'WaitingConfirmations'
+  | 'Settled'
+  | 'Failed';
 export interface Unspent {
   utxo: Utxo;
   rgbAllocations: RgbAllocation[];
@@ -200,23 +214,22 @@ export interface RgbAllocation {
 }
 
 export interface Balance {
-  settled: number
-  future: number,
-  spendable: number
+  settled: number;
+  future: number;
+  spendable: number;
 }
 
 export interface BtcBalance {
-  vanilla: Balance,
-  colored: Balance
+  vanilla: Balance;
+  colored: Balance;
 }
 export interface InvoiceReceiveData {
-  invoice: string
-  recipientId: string
-  expirationTimestamp: number|null
-  batchTransferIdx: number
+  invoice: string;
+  recipientId: string;
+  expirationTimestamp: number | null;
+  batchTransferIdx: number;
 }
 export interface AssetNIA {
-
   /**
    * @type {string}
    * @memberof AssetNIA
@@ -309,7 +322,6 @@ export interface AssetIfa {
 }
 
 export interface Media {
-
   /**
    * @type {string}
    * @memberof Media
@@ -328,13 +340,13 @@ export interface Media {
 export enum AssetIface {
   RGB20 = 'RGB20',
   RGB21 = 'RGB21',
-  RGB25 = 'RGB25'
+  RGB25 = 'RGB25',
 }
 
 export enum AssetSchema {
   Nia = 'Nia',
   Uda = 'Uda',
-  Cfa = 'Cfa'
+  Cfa = 'Cfa',
 }
 
 export type ListAssets = {
@@ -397,7 +409,6 @@ export type AssetCFA = {
 };
 
 export interface IssueAssetNIAResponse {
-
   /**
    * @type {AssetNIA}
    * @memberof IssueAssetNIAResponse
@@ -406,13 +417,12 @@ export interface IssueAssetNIAResponse {
 }
 
 /**
- * 
+ *
  *
  * @export
  * @interface AssetBalance
  */
 export interface AssetBalance {
-
   /**
    * @type {number}
    * @memberof AssetBalance

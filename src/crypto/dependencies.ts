@@ -30,17 +30,32 @@ export function xOnlyPointFromPoint(point: Uint8Array | Buffer): Uint8Array {
   throw new Error(`Invalid public key length: ${pointArray.length}`);
 }
 
-export function signSchnorr(message: Uint8Array | Buffer, privateKey: Uint8Array | Buffer, auxRand?: Uint8Array | Buffer): Uint8Array {
+export function signSchnorr(
+  message: Uint8Array | Buffer,
+  privateKey: Uint8Array | Buffer,
+  auxRand?: Uint8Array | Buffer
+): Uint8Array {
   const msg = message instanceof Buffer ? new Uint8Array(message) : message;
-  const priv = privateKey instanceof Buffer ? new Uint8Array(privateKey) : privateKey;
-  const aux = auxRand ? (auxRand instanceof Buffer ? new Uint8Array(auxRand) : auxRand) : undefined;
+  const priv =
+    privateKey instanceof Buffer ? new Uint8Array(privateKey) : privateKey;
+  const aux = auxRand
+    ? auxRand instanceof Buffer
+      ? new Uint8Array(auxRand)
+      : auxRand
+    : undefined;
   return secp256k1.schnorr.sign(msg, priv, aux);
 }
 
-export function verifySchnorr(message: Uint8Array | Buffer, publicKey: Uint8Array | Buffer, signature: Uint8Array | Buffer): boolean {
+export function verifySchnorr(
+  message: Uint8Array | Buffer,
+  publicKey: Uint8Array | Buffer,
+  signature: Uint8Array | Buffer
+): boolean {
   const msg = message instanceof Buffer ? new Uint8Array(message) : message;
-  const pub = publicKey instanceof Buffer ? new Uint8Array(publicKey) : publicKey;
-  const sig = signature instanceof Buffer ? new Uint8Array(signature) : signature;
+  const pub =
+    publicKey instanceof Buffer ? new Uint8Array(publicKey) : publicKey;
+  const sig =
+    signature instanceof Buffer ? new Uint8Array(signature) : signature;
   return secp256k1.schnorr.verify(sig, msg, pub);
 }
 
@@ -48,8 +63,11 @@ function createBIP32Node(hdkey: HDKey): BIP32Interface {
   if (!hdkey.publicKey) {
     throw new Error('HDKey publicKey is null');
   }
-  const pubKey = hdkey.publicKey instanceof Uint8Array ? hdkey.publicKey : new Uint8Array(hdkey.publicKey);
-  
+  const pubKey =
+    hdkey.publicKey instanceof Uint8Array
+      ? hdkey.publicKey
+      : new Uint8Array(hdkey.publicKey);
+
   return {
     derivePath: (path: string) => {
       const derived = hdkey.derive(path);
@@ -60,7 +78,9 @@ function createBIP32Node(hdkey: HDKey): BIP32Interface {
     neutered: () => {
       const publicKey = hdkey.publicExtendedKey;
       if (!publicKey) {
-        throw new Error('Cannot create neutered key: no public extended key available');
+        throw new Error(
+          'Cannot create neutered key: no public extended key available'
+        );
       }
       const neuteredKey = hdkey.versions
         ? HDKey.fromExtendedKey(publicKey, hdkey.versions)

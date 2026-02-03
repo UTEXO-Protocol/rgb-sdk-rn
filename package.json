@@ -17,9 +17,16 @@
     "lib",
     "android",
     "ios",
+    "cpp",
+    "scripts",
     "*.podspec",
-    "!android/build",
     "!ios/build",
+    "!ios/rgb_libFFI.xcframework",
+    "!android/build",
+    "!android/gradle",
+    "!android/gradlew",
+    "!android/gradlew.bat",
+    "!android/local.properties",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -34,6 +41,8 @@
     "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/NativeRgb.ts && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgb",
     "build": "bob build",
     "build:watch": "tsc -w",
+    "prettier": "prettier --write \"**/*.{js,ts,tsx}\"",
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "version:patch": "npm version patch && git push && git push --tags && npm publish --access public",
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public"
@@ -61,11 +70,18 @@
     "react-native": "*"
   },
   "devDependencies": {
+    "@eslint/js": "^9.35.0",
     "@types/node": "^22.17.2",
     "@types/react": "^19.2.0",
+    "eslint": "^9.35.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "react-native-builder-bob": "^0.40.17",
     "typescript": "^5.9.2",
-    "del-cli": "^6.0.0"
+    "del-cli": "^6.0.0",
+    "prettier": "^3.0.0"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
@@ -102,5 +118,12 @@
     "android": {
       "javaPackageName": "com.rgbsdkrn"
     }
+  },
+  "prettier": {
+    "quoteProps": "consistent",
+    "singleQuote": true,
+    "tabWidth": 2,
+    "trailingComma": "es5",
+    "useTabs": false
   }
 }

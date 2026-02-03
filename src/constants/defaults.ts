@@ -21,4 +21,3 @@ export const DEFAULT_MAX_RETRIES = 3;
  * Default log level
  */
 export const DEFAULT_LOG_LEVEL = 3; // ERROR level
-

@@ -1,11 +1,11 @@
 
 # SDK Overview
 
-This is the **React Native SDK** for RGB client applications. It provides a complete set of TypeScript/React Native bindings for interacting with the **RGB Node** and managing RGB-based transfers.
+This is the **React Native SDK** for RGB client applications. It provides a complete set of TypeScript/React Native bindings for managing RGB-based transfers using **local rgb-lib** (native bindings).
 
 > **Note**: This is the React Native version of the [original RGB SDK for Node.js](https://github.com/RGB-OS/rgb-sdk). If you're building a Node.js application, use the original SDK instead.
 
-> **RGB Node**: This SDK requires an RGB Node instance to function. For more information about RGB Node, including setup instructions, public endpoints and API documentation, see the [RGB Node repository](https://github.com/RGB-OS/RGB-Node/tree/public).
+> **Local RGB Library**: This SDK uses native RGB library bindings (`rgb-lib`) that run locally in your React Native application. No external RGB Node server is required. The SDK connects to Bitcoin indexers (Electrum servers) for blockchain data and uses transport endpoints for RGB protocol communication.
 
 ---
 
@@ -24,7 +24,8 @@ With this SDK, developers can:
 
 | Method | Description |
 |--------|-------------|
-| `registerWallet()` | Register wallet with the RGB Node |
+| `initialize()` | Initialize wallet and connect to indexer |
+| `goOnline(indexerUrl, skipConsistencyCheck?)` | Connect wallet to an indexer service |
 | `getBtcBalance()` | Get on-chain BTC balance |
 | `getAddress()` | Get a derived deposit address |
 | `getXpub()` | Get wallet's extended public keys (xpub_van, xpub_col) |
@@ -55,9 +56,8 @@ With this SDK, developers can:
 | `estimateFeeRate(blocks)` | Get fee estimation for target block confirmation |
 | `estimateFee(psbtBase64)` | Estimate fee for a PSBT |
 | `decodeRGBInvoice({ invoice })` | Decode RGB invoice to transfer parameters |
-| `createBackup(password)` | Create an encrypted wallet backup on the RGB node |
-| `downloadBackup(backupId?)` | Download the generated backup binary |
-| `restoreFromBackup({ backup, password, ... })` | Restore wallet state from a backup file |
+| `createBackup(password, backupPath)` | Create an encrypted wallet backup file |
+| `restoreFromBackup({ backupFilePath, password, dataDir })` | Restore wallet state from a backup file |
 
 ### Standalone Functions (not WalletManager methods)
 
@@ -73,19 +73,22 @@ With this SDK, developers can:
 
 ## 🧩 Notes for Custom Integration
 
-- All communication with the RGB Node is handled via HTTP API calls encapsulated in the `RGBClient` class.
+- All RGB operations are handled **locally** using native `rgb-lib` bindings. No external RGB Node server is required.
+- The SDK connects to Bitcoin indexers (Electrum servers) for blockchain data synchronization.
 - The `signPsbt` method is async and demonstrates how to integrate a signing flow using `bdk-rn`. This can be replaced with your own HSM or hardware wallet integration if needed.
 - By using this SDK, developers have full control over:
   - Transfer orchestration
   - UTXO selection
   - Invoice lifecycle
   - Signing policy
+  - Indexer and transport endpoint configuration
 
 This pattern enables advanced use cases, such as:
 
 - Integrating with third-party identity/auth layers
 - Applying custom fee logic or batching
 - Implementing compliance and audit tracking
+- Self-hosting indexer and transport services
 
 ---
 
@@ -93,10 +96,12 @@ This pattern enables advanced use cases, such as:
 
 ### Prerequisites
 
-Before using this SDK, you'll need an RGB Node instance running. You can:
+This SDK uses local RGB library bindings and requires:
 
-- Use the public RGB Node endpoints (testnet/mainnet) - see [RGB Node repository](https://github.com/RGB-OS/RGB-Node/tree/public) for details
-- Self-host your own RGB Node instance - see [RGB Node repository](https://github.com/RGB-OS/RGB-Node/tree/public) for setup instructions
+- **Bitcoin Indexer**: The SDK connects to Electrum servers for blockchain data. Default indexer URLs are provided for each network, but you can configure custom ones.
+- **Transport Endpoint**: For RGB protocol communication (default: `rpcs://proxy.iriswallet.com/0.2/json-rpc`)
+
+No external RGB Node server is required - all RGB operations run locally in your application.
 
 ### Installation
 
@@ -129,17 +134,46 @@ const wallet = new WalletManager({
     master_fingerprint: keys.master_fingerprint,
     mnemonic: keys.mnemonic,
     network: 'regtest',
-    rgb_node_endpoint: 'http://127.0.0.1:8000' // RGB Node endpoint
+    // Optional: customize indexer URL (defaults provided per network)
+    indexerUrl: 'tcp://regtest.thunderstack.org:50001',
+    // Optional: customize transport endpoint
+    transportEndpoint: 'rpcs://proxy.iriswallet.com/0.2/json-rpc'
 });
 
-// 3. Get wallet address
+// 3. Initialize and connect to indexer
+await wallet.initialize();
+
+// 4. Get wallet address
 const address = await wallet.getAddress();
 console.log('Wallet address:', address);
 
-// 4. Check balance
+// 5. Check balance
 const balance = await wallet.getBtcBalance();
 console.log('BTC Balance:', balance);
 ```
+
+---
+
+## Configuration
+
+### Default Indexer URLs
+
+The SDK provides default Electrum indexer URLs for each network:
+
+- **mainnet**: `ssl://electrum.iriswallet.com:50003`
+- **testnet**: `ssl://electrum.iriswallet.com:50013`
+- **testnet4**: `ssl://electrum.iriswallet.com:50053`
+- **signet**: `tcp://46.224.75.237:50001`
+- **regtest**: `tcp://regtest.thunderstack.org:50001`
+
+You can override these by providing a custom `indexerUrl` when creating a `WalletManager` instance.
+
+### Default Transport Endpoint
+
+The default transport endpoint for RGB protocol communication is:
+- `rpcs://proxy.iriswallet.com/0.2/json-rpc`
+
+You can override this by providing a custom `transportEndpoint` when creating a `WalletManager` instance.
 
 ---
 
@@ -160,11 +194,14 @@ const wallet = new WalletManager({
     master_fingerprint: keys.master_fingerprint,
     mnemonic: keys.mnemonic,
     network: 'regtest', // 'mainnet', 'testnet', 'signet', or 'regtest'
-    rgb_node_endpoint: 'http://127.0.0.1:8000' // RGB Node endpoint
+    // Optional: customize indexer URL
+    indexerUrl: 'tcp://regtest.thunderstack.org:50001',
+    // Optional: customize transport endpoint
+    transportEndpoint: 'rpcs://proxy.iriswallet.com/0.2/json-rpc'
 });
 
-// Register wallet with RGB Node
-await wallet.registerWallet();
+// Initialize and connect to indexer
+await wallet.initialize();
 
 // Alternative: Derive keys from existing mnemonic
 const { deriveKeysFromMnemonic } = require('rgb-sdk-rn');
@@ -175,8 +212,9 @@ const restoredWallet = new WalletManager({
     master_fingerprint: restoredKeys.master_fingerprint,
     mnemonic: restoredKeys.mnemonic,
     network: 'testnet',
-    rgb_node_endpoint: 'http://127.0.0.1:8000'
+    // Uses default testnet indexer: 'ssl://electrum.iriswallet.com:50013'
 });
+await restoredWallet.initialize();
 
 // Alternative: Using factory function
 const { createWalletManager } = require('rgb-sdk-rn');
@@ -186,8 +224,8 @@ const wallet2 = createWalletManager({
     master_fingerprint: keys.master_fingerprint,
     mnemonic: keys.mnemonic,
     network: 'regtest',
-    rgb_node_endpoint: 'http://127.0.0.1:8000'
 });
+await wallet2.initialize();
 ```
 
 ### UTXO Management
@@ -367,11 +405,11 @@ async function demo() {
         master_fingerprint: keys.master_fingerprint,
         mnemonic: keys.mnemonic,
         network: 'regtest',
-        rgb_node_endpoint: 'http://127.0.0.1:8000'
+        indexerUrl: 'tcp://regtest.thunderstack.org:50001'
     });
 
-    // 2. Register wallet
-    await wallet.registerWallet();
+    // 2. Initialize and connect to indexer
+    await wallet.initialize();
 
     // 3. Get address and balance
     const address = await wallet.getAddress();
@@ -435,8 +473,9 @@ const wallet = new WalletManager({
   master_fingerprint: keys.master_fingerprint,
   seed: seedBytes, // Uint8Array seed
   network: 'testnet',
-  rgb_node_endpoint: 'http://127.0.0.1:8000'
+  indexerUrl: 'ssl://electrum.iriswallet.com:50013'
 });
+await wallet.initialize();
 const signature = await wallet.signMessage('Hello RGB!');
 const isValid = await wallet.verifyMessage('Hello RGB!', signature);
 

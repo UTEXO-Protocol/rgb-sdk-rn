@@ -3,9 +3,17 @@
 
 This is the **React Native SDK** for RGB client applications. It provides a complete set of TypeScript/React Native bindings for managing RGB-based transfers using **local rgb-lib** (native bindings).
 
-> **Note**: This is the React Native version of the [original RGB SDK for Node.js](https://github.com/RGB-OS/rgb-sdk). If you're building a Node.js application, use the original SDK instead.
+> **Note**: This is the React Native version of the [original RGB SDK for Node.js](https://github.com/UTEXO-Protocol/rgb-sdk). If you're building a Node.js application, use the original SDK instead.
 
-> **Local RGB Library**: This SDK uses native RGB library bindings (`rgb-lib`) that run locally in your React Native application. No external RGB Node server is required. The SDK connects to Bitcoin indexers (Electrum servers) for blockchain data and uses transport endpoints for RGB protocol communication.
+
+⚠️ **Security Notice**  
+If you're migrating from the legacy `rgb-sdk-rn` (which relied on a remote RGB Node server), be aware that wallet metadata such as xpubs may have been exposed and this cannot be undone.
+
+If you're upgrading from `rgb-sdk-rn` to `@utexo/rgb-sdk-rn`, see the **[Migration Guide](./MIGRATION.md)** for step-by-step instructions on moving your wallet state to local storage.
+
+For full details on security implications and recommended actions, please read **[SECURITY.md](./SECURITY.md)**.
+
+> **RGB Protocol**: This SDK uses the [`rgb-lib`](https://github.com/RGB-Tools/rgb-lib) binding library to interact with the RGB protocol. All operations are performed locally, providing full control over wallet data and operations.
 
 ---
 
@@ -131,7 +139,7 @@ allprojects {
 
 ### React Native Setup
 
-This SDK is designed for React Native applications and uses native modules (via `bdk-rn`). For setup instructions with Expo, see [EXPO_SETUP.md](./EXPO_SETUP.md).
+This SDK is designed for React Native applications and uses native modules (via `bdk-rn`).
 
 **Important Notes**:
 - This is the **React Native version** of the [RGB SDK](https://github.com/RGB-OS/rgb-sdk). For Node.js applications, use the original SDK.
@@ -499,7 +507,7 @@ const signature = await wallet.signMessage('Hello RGB!');
 const isValid = await wallet.verifyMessage('Hello RGB!', signature);
 
 // Option 2: Using standalone functions
-const { signMessage, verifyMessage } = require('r@utexo/rgb-sdk-rn');
+const { signMessage, verifyMessage } = require('@utexo/rgb-sdk-rn');
 const seedHex = process.env.WALLET_SEED_HEX; // 64-byte hex string
 const { signature, accountXpub } = await signMessage({
   message: 'Hello RGB!',

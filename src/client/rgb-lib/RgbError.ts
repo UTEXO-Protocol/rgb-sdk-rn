@@ -82,4 +82,3 @@ export class RgbError extends Error {
     return new Error(String(error));
   }
 }
-

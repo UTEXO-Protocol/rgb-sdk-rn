@@ -23,9 +23,9 @@ export function normalizeSeedBuffer(seed: BufferLike): Buffer | Uint8Array {
   if (!seed) {
     throw new CryptoError('Failed to generate seed - seed is undefined');
   }
-  
+
   let seedBuffer: Buffer | Uint8Array;
-  
+
   if (seed instanceof Uint8Array) {
     seedBuffer = seed;
   } else if (seed instanceof ArrayBuffer) {
@@ -33,30 +33,41 @@ export function normalizeSeedBuffer(seed: BufferLike): Buffer | Uint8Array {
   } else if (seed && typeof seed === 'object') {
     if ('buffer' in seed && seed.buffer) {
       const bufferValue = seed.buffer;
-      
+
       if (bufferValue instanceof ArrayBuffer) {
         // React Native: always use Uint8Array (Buffer is polyfill)
         const byteOffset = seed.byteOffset || 0;
-        const byteLength = seed.byteLength || (seed as { length?: number }).length || bufferValue.byteLength;
+        const byteLength =
+          seed.byteLength ||
+          (seed as { length?: number }).length ||
+          bufferValue.byteLength;
         seedBuffer = new Uint8Array(bufferValue, byteOffset, byteLength);
       } else {
         try {
           seedBuffer = new Uint8Array(seed as ArrayLike<number>);
         } catch (error) {
-          throw new CryptoError(`Failed to convert seed to Uint8Array (buffer property invalid): ${error instanceof Error ? error.message : String(error)}`);
+          throw new CryptoError(
+            `Failed to convert seed to Uint8Array (buffer property invalid): ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
         }
       }
     } else {
       try {
         seedBuffer = new Uint8Array(seed as ArrayLike<number>);
       } catch (error) {
-        throw new CryptoError(`Failed to convert seed to Uint8Array: ${error instanceof Error ? error.message : String(error)}`);
+        throw new CryptoError(
+          `Failed to convert seed to Uint8Array: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
       }
     }
   } else {
     throw new CryptoError(`Invalid seed type: ${typeof seed}`);
   }
-  
+
   return seedBuffer;
 }
 
@@ -68,8 +79,9 @@ export function toNetworkName(bitcoinNetwork: string | number): Network {
   return 'testnet';
 }
 
-export function getNetworkVersions(bitcoinNetwork: string | number): NetworkVersions {
+export function getNetworkVersions(
+  bitcoinNetwork: string | number
+): NetworkVersions {
   const net = toNetworkName(bitcoinNetwork);
   return getNetworkVersionsFromConstants(net);
 }
-

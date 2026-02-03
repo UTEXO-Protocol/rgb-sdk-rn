@@ -1,12 +1,12 @@
 /**
  * IWalletManager - Unified interface for WalletManager implementations
- * 
+ *
  * This interface defines the contract that all WalletManager implementations must follow
  * for cross-platform compatibility.
- * 
+ *
  * All methods are async to support native module requirements.
  * Synchronous implementations should wrap operations in Promise.resolve().
- * 
+ *
  * Type Standards:
  * - All enum-like types use PascalCase: 'RgbSend', 'WaitingCounterparty', 'Nia', etc.
  * - Network identifiers use lowercase: 'mainnet', 'testnet', 'regtest', 'signet', 'testnet4'
@@ -48,7 +48,7 @@ import type { EstimateFeeResult, Network } from '../crypto';
 
 /**
  * Wallet initialization parameters
- * 
+ *
  * @param network - Network identifier: 'mainnet' | 'testnet' | 'testnet4' | 'regtest' | 'signet' (lowercase)
  *                   or network number (0 for mainnet, 1 for testnet, etc.)
  */
@@ -67,7 +67,7 @@ export interface WalletInitParams {
 
 /**
  * Unified WalletManager interface for cross-platform compatibility
- * 
+ *
  * This interface ensures all implementations provide the same API surface,
  * allowing clients to switch between implementations based on environment.
  */
@@ -79,10 +79,10 @@ export interface IWalletManager {
   /**
    * Initialize the wallet and establish online connection
    * Must be called before performing operations that require network access.
-   * 
+   *
    * @returns Promise that resolves when initialization is complete
    * @throws {WalletError} if initialization fails
-   * 
+   *
    * NOTE: Some implementations require this method to be called explicitly,
    *       while others may initialize automatically in the constructor.
    */
@@ -91,7 +91,7 @@ export interface IWalletManager {
   /**
    * Connect the wallet to an online indexer service for syncing and transaction operations.
    * Must be called before performing operations that require network connectivity.
-   * 
+   *
    * @param indexerUrl - The URL of the RGB indexer service to connect to
    * @param skipConsistencyCheck - If true, skips the consistency check with the indexer (default: false)
    * @returns Promise that resolves when the wallet is successfully connected online
@@ -115,7 +115,7 @@ export interface IWalletManager {
    * Dispose of sensitive wallet data
    * Clears mnemonic and seed from memory, closes connections
    * Idempotent - safe to call multiple times
-   * 
+   *
    * @returns Promise that resolves when disposal is complete
    */
   dispose(): Promise<void>;
@@ -133,10 +133,10 @@ export interface IWalletManager {
   /**
    * Register wallet and get initial address and balance
    * This is typically called once after wallet creation
-   * 
+   *
    * @returns Promise resolving to address and BTC balance
    */
-//   registerWallet(): Promise<{ address: string; btcBalance: BtcBalance }>;
+  //   registerWallet(): Promise<{ address: string; btcBalance: BtcBalance }>;
 
   /**
    * Get current BTC balance
@@ -177,7 +177,7 @@ export interface IWalletManager {
   /**
    * Complete UTXO creation flow: begin → sign → end
    * Convenience method that combines createUtxosBegin, signing, and createUtxosEnd
-   * 
+   *
    * @param params - UTXO creation parameters
    * @returns Promise resolving to number of UTXOs created
    */
@@ -237,12 +237,15 @@ export interface IWalletManager {
   /**
    * Complete inflation flow: begin → sign → end
    * Convenience method that combines inflateBegin, signing, and inflateEnd
-   * 
+   *
    * @param params - Inflation parameters
    * @param mnemonic - Optional mnemonic for signing (uses wallet's mnemonic if not provided)
    * @returns Promise resolving to operation result
    */
-  inflate(params: InflateAssetIfaRequestModel, mnemonic?: string): Promise<OperationResult>;
+  inflate(
+    params: InflateAssetIfaRequestModel,
+    mnemonic?: string
+  ): Promise<OperationResult>;
 
   // ============================================
   // Sending Assets
@@ -265,12 +268,15 @@ export interface IWalletManager {
   /**
    * Complete send flow: begin → sign → end
    * Convenience method that combines sendBegin, signing, and sendEnd
-   * 
+   *
    * @param invoiceTransfer - Send parameters including invoice
    * @param mnemonic - Optional mnemonic for signing (uses wallet's mnemonic if not provided)
    * @returns Promise resolving to send result with txid
    */
-  send(invoiceTransfer: SendAssetBeginRequestModel, mnemonic?: string): Promise<SendResult>;
+  send(
+    invoiceTransfer: SendAssetBeginRequestModel,
+    mnemonic?: string
+  ): Promise<SendResult>;
 
   // ============================================
   // Sending BTC
@@ -293,7 +299,7 @@ export interface IWalletManager {
   /**
    * Complete BTC send flow: begin → sign → end
    * Convenience method that combines sendBtcBegin, signing, and sendBtcEnd
-   * 
+   *
    * @param params - Send BTC parameters
    * @returns Promise resolving to transaction ID
    */
@@ -306,7 +312,7 @@ export interface IWalletManager {
   /**
    * Generate blind receive invoice
    * Creates an invoice for receiving assets without revealing the amount
-   * 
+   *
    * @param params - Invoice generation parameters including assignment type
    *                 Assignment types: 'Fungible' | 'NonFungible' | 'InflationRight' | 'ReplaceRight' | 'Any'
    * @returns Promise resolving to invoice data including invoice string
@@ -316,7 +322,7 @@ export interface IWalletManager {
   /**
    * Generate witness receive invoice
    * Creates an invoice for receiving assets with amount visible
-   * 
+   *
    * @param params - Invoice generation parameters including assignment type
    *                 Assignment types: 'Fungible' | 'NonFungible' | 'InflationRight' | 'ReplaceRight' | 'Any'
    * @returns Promise resolving to invoice data including invoice string
@@ -326,7 +332,7 @@ export interface IWalletManager {
   /**
    * Decode RGB invoice
    * Extracts information from an RGB invoice string
-   * 
+   *
    * @param params - Invoice string to decode
    * @returns Promise resolving to decoded invoice data including recipientId, assetSchema, assignment, etc.
    */
@@ -364,7 +370,7 @@ export interface IWalletManager {
   /**
    * Refresh wallet state
    * Syncs wallet with the network and updates internal state
-   * 
+   *
    * @returns Promise that resolves when refresh is complete
    */
   refreshWallet(): Promise<void>;
@@ -372,7 +378,7 @@ export interface IWalletManager {
   /**
    * Sync wallet with network
    * Performs a full synchronization with the indexer
-   * 
+   *
    * @returns Promise that resolves when sync is complete
    */
   syncWallet(): Promise<void>;
@@ -404,7 +410,10 @@ export interface IWalletManager {
    * @param params - Backup parameters including path and password
    * @returns Promise resolving to backup response
    */
-  createBackup(params: { backupPath: string; password: string }): Promise<WalletBackupResponse>;
+  createBackup(params: {
+    backupPath: string;
+    password: string;
+  }): Promise<WalletBackupResponse>;
 
   // ============================================
   // Cryptographic Operations
@@ -432,6 +441,9 @@ export interface IWalletManager {
    * @param accountXpub - Optional account xpub (uses wallet's xpubVan if not provided)
    * @returns Promise resolving to boolean indicating if signature is valid
    */
-  verifyMessage(message: string, signature: string, accountXpub?: string): Promise<boolean>;
+  verifyMessage(
+    message: string,
+    signature: string,
+    accountXpub?: string
+  ): Promise<boolean>;
 }
-

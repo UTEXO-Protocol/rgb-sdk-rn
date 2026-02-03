@@ -27,17 +27,28 @@ import type {
   AssetNIA,
   AssetIFA,
   Transaction,
-  Transfer
+  Transfer,
 } from '../types/rgb-model';
 
-import { signPsbt, signPsbtFromSeed, signMessage as signSchnorrMessage, verifyMessage as verifySchnorrMessage, estimatePsbt } from '../crypto';
+import {
+  signPsbt,
+  signPsbtFromSeed,
+  signMessage as signSchnorrMessage,
+  verifyMessage as verifySchnorrMessage,
+  estimatePsbt,
+} from '../crypto';
 import type { EstimateFeeResult, Network } from '../crypto';
 // import { generateKeys } from '../crypto';
 import { normalizeNetwork } from '../utils/validation';
 import { ValidationError, WalletError } from '../errors';
 // import { restoreWallet, RGBLibClient } from '../client/rgb-lib-client';
 import { Wallet } from '../client/rgb-lib/Wallet';
-import { BitcoinNetwork, decodeInvoice, generateKeys, restoreBackup } from '../client/rgb-lib';
+import {
+  BitcoinNetwork,
+  decodeInvoice,
+  generateKeys,
+  restoreBackup,
+} from '../client/rgb-lib';
 import type { IWalletManager } from './IWalletManager';
 
 /**
@@ -46,12 +57,10 @@ import type { IWalletManager } from './IWalletManager';
  * @param params - Restore parameters including backup file path, password, and restore directory
  * @returns Wallet restore response
  */
-export const restoreFromBackup = async (params: RestoreWalletRequestModel): Promise<WalletRestoreResponse> => {
-  const {
-    backupFilePath,
-    password,
-    dataDir,
-  } = params;
+export const restoreFromBackup = async (
+  params: RestoreWalletRequestModel
+): Promise<WalletRestoreResponse> => {
+  const { backupFilePath, password, dataDir } = params;
 
   if (!backupFilePath) {
     throw new ValidationError('backup file is required', 'backup');
@@ -63,10 +72,7 @@ export const restoreFromBackup = async (params: RestoreWalletRequestModel): Prom
     throw new ValidationError('restore directory is required', 'restoreDir');
   }
 
-  await restoreBackup(
-    backupFilePath,
-    password
-  );
+  await restoreBackup(backupFilePath, password);
   return {
     message: 'Wallet restored successfully',
   };
@@ -82,10 +88,9 @@ export const createWallet = async (network: string = 'regtest') => {
   const networkt = normalizeNetwork(network ?? 'regtest');
   console.log('networkt', networkt);
   return await generateKeys(BitcoinNetwork.REGTEST);
-}
+};
 
 export type WalletInitParams = {
-
   xpubVan: string;
   xpubCol: string;
   mnemonic?: string;
@@ -96,16 +101,16 @@ export type WalletInitParams = {
   transportEndpoint?: string;
   indexerUrl?: string;
   dataDir?: string;
-}
+};
 
 /**
  * Wallet Manager - High-level wallet interface combining RGB API client and cryptographic operations
- * 
+ *
  * This class provides a unified interface for:
  * - RGB operations (via RGBLibClient - local rgb-lib)
  * - PSBT signing operations
  * - Wallet state management
- * 
+ *
  * @example
  * ```typescript
  * const keys = generateKeys('testnet');
@@ -118,18 +123,18 @@ export type WalletInitParams = {
  *   transportEndpoint: 'rpcs://proxy.iriswallet.com/0.2/json-rpc',
  *   indexerUrl: 'ssl://electrum.iriswallet.com:50013'
  * });
- * 
+ *
  * const balance = await wallet.getBtcBalance();
  * ```
  */
 const DEFAULT_TRANSPORT_ENDPOINT = 'rpcs://proxy.iriswallet.com/0.2/json-rpc';
 
 const defaultIndexerUrls: Record<Network, string> = {
-  'mainnet': 'ssl://electrum.iriswallet.com:50003',
-  'testnet': 'ssl://electrum.iriswallet.com:50013',
-  'testnet4': 'ssl://electrum.iriswallet.com:50053',
-  'signet': 'tcp://46.224.75.237:50001',
-  'regtest': 'tcp://regtest.thunderstack.org:50001',
+  mainnet: 'ssl://electrum.iriswallet.com:50003',
+  testnet: 'ssl://electrum.iriswallet.com:50013',
+  testnet4: 'ssl://electrum.iriswallet.com:50053',
+  signet: 'tcp://46.224.75.237:50001',
+  regtest: 'tcp://regtest.thunderstack.org:50001',
 };
 export class WalletManager implements IWalletManager {
   private readonly client: Wallet;
@@ -153,11 +158,13 @@ export class WalletManager implements IWalletManager {
       throw new ValidationError('xpubCol is required', 'xpubCol');
     }
     if (!params.masterFingerprint) {
-      throw new ValidationError('masterFingerprint is required', 'masterFingerprint');
+      throw new ValidationError(
+        'masterFingerprint is required',
+        'masterFingerprint'
+      );
     }
 
     this.network = normalizeNetwork(params.network ?? 'regtest');
-
 
     this.xpubVan = params.xpubVan;
     this.xpubCol = params.xpubCol;
@@ -168,7 +175,8 @@ export class WalletManager implements IWalletManager {
     // Use provided dataDir or create a simple default path
     // In React Native, the native modules handle actual file system paths
     // this.dataDir = params.dataDir ?? `rgb-wallet/${this.masterFingerprint}`;
-    this.transportEndpoint = params.transportEndpoint || DEFAULT_TRANSPORT_ENDPOINT;
+    this.transportEndpoint =
+      params.transportEndpoint || DEFAULT_TRANSPORT_ENDPOINT;
     this.client = new Wallet(
       {
         mnemonic: params.mnemonic!,
@@ -185,14 +193,18 @@ export class WalletManager implements IWalletManager {
       }
     );
 
-    this.indexerUrl = defaultIndexerUrls[this.network] || defaultIndexerUrls['regtest'];
+    this.indexerUrl =
+      defaultIndexerUrls[this.network] || defaultIndexerUrls['regtest'];
   }
 
   public async initialize(): Promise<void> {
     await this.client.goOnline(this.indexerUrl, false);
   }
 
-  public async goOnline(indexerUrl: string, skipConsistencyCheck: boolean = false): Promise<void> {
+  public async goOnline(
+    indexerUrl: string,
+    skipConsistencyCheck: boolean = false
+  ): Promise<void> {
     await this.client.goOnline(indexerUrl, skipConsistencyCheck);
   }
 
@@ -202,7 +214,7 @@ export class WalletManager implements IWalletManager {
   public getXpub(): { xpubVan: string; xpubCol: string } {
     return {
       xpubVan: this.xpubVan,
-      xpubCol: this.xpubCol
+      xpubCol: this.xpubCol,
     };
   }
 
@@ -277,24 +289,38 @@ export class WalletManager implements IWalletManager {
     return await this.client.getAssetBalance(asset_id);
   }
 
-  public async createUtxosBegin(params: CreateUtxosBeginRequestModel): Promise<string> {
-    return await this.client.createUtxosBegin(params.upTo ?? true, params.num ?? null, params.size ?? null, params.feeRate ?? 1, false);
+  public async createUtxosBegin(
+    params: CreateUtxosBeginRequestModel
+  ): Promise<string> {
+    return await this.client.createUtxosBegin(
+      params.upTo ?? true,
+      params.num ?? null,
+      params.size ?? null,
+      params.feeRate ?? 1,
+      false
+    );
   }
 
-  public async createUtxosEnd(params: CreateUtxosEndRequestModel): Promise<number> {
+  public async createUtxosEnd(
+    params: CreateUtxosEndRequestModel
+  ): Promise<number> {
     return await this.client.createUtxosEnd(params.signedPsbt, false);
   }
 
   public async sendBegin(params: SendAssetBeginRequestModel): Promise<string> {
-
     if (!params.assetId) {
-      throw new ValidationError('asset_id is required for send operation', 'asset_id');
+      throw new ValidationError(
+        'asset_id is required for send operation',
+        'asset_id'
+      );
     }
     let witnessData = null;
     if (params.witnessData && params.witnessData.amountSat) {
       witnessData = {
         amountSat: params.witnessData.amountSat,
-        blinding: params.witnessData.blinding ? Number(params.witnessData.blinding) : null,
+        blinding: params.witnessData.blinding
+          ? Number(params.witnessData.blinding)
+          : null,
       };
     }
     const invoiceData = await decodeInvoice(params.invoice);
@@ -303,30 +329,50 @@ export class WalletManager implements IWalletManager {
     const transportEndpoints = invoiceData.transportEndpoints;
     const donation = false;
     const recipientMap: Record<string, any[]> = {
-      [params.assetId]: [{
-        recipientId: recipientId,
-        witnessData: witnessData,
-        assignment: assignment,
-        transportEndpoints: transportEndpoints,
-      }],
+      [params.assetId]: [
+        {
+          recipientId: recipientId,
+          witnessData: witnessData,
+          assignment: assignment,
+          transportEndpoints: transportEndpoints,
+        },
+      ],
     };
 
-    return await this.client.sendBegin(recipientMap, donation, params.feeRate ?? 1, params.minConfirmations ?? 1);
+    return await this.client.sendBegin(
+      recipientMap,
+      donation,
+      params.feeRate ?? 1,
+      params.minConfirmations ?? 1
+    );
   }
 
   public async sendEnd(params: SendAssetEndRequestModel): Promise<SendResult> {
-    return await this.client.sendEnd(params.signedPsbt, params.skipSync ?? false);
+    return await this.client.sendEnd(
+      params.signedPsbt,
+      params.skipSync ?? false
+    );
   }
 
   public async sendBtcBegin(params: SendBtcBeginRequestModel): Promise<string> {
-    return await this.client.sendBtcBegin(params.address, params.amount, params.feeRate ?? 1, params.skipSync ?? false);
+    return await this.client.sendBtcBegin(
+      params.address,
+      params.amount,
+      params.feeRate ?? 1,
+      params.skipSync ?? false
+    );
   }
 
   public async sendBtcEnd(params: SendBtcEndRequestModel): Promise<string> {
-    return await this.client.sendBtcEnd(params.signedPsbt, params.skipSync ?? false);
+    return await this.client.sendBtcEnd(
+      params.signedPsbt,
+      params.skipSync ?? false
+    );
   }
 
-  public async estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
+  public async estimateFeeRate(
+    blocks: number
+  ): Promise<GetFeeEstimationResponse> {
     if (!Number.isFinite(blocks)) {
       throw new ValidationError('blocks must be a finite number', 'blocks');
     }
@@ -348,38 +394,79 @@ export class WalletManager implements IWalletManager {
     return await this.sendBtcEnd({ signedPsbt: signed });
   }
 
-  public async blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
+  public async blindReceive(
+    params: InvoiceRequest
+  ): Promise<InvoiceReceiveData> {
     const assignment = {
       type: 'Fungible' as AssignmentType,
       amount: params.amount,
     };
     const transportEndpoints: string[] = [this.transportEndpoint];
-    return await this.client.blindReceive(params.assetId,assignment, params.durationSeconds??2000, transportEndpoints, params.minConfirmations??1);
+    return await this.client.blindReceive(
+      params.assetId ?? null,
+      assignment,
+      params.durationSeconds ?? 2000,
+      transportEndpoints,
+      params.minConfirmations ?? 1
+    );
   }
 
-  public async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
+  public async witnessReceive(
+    params: InvoiceRequest
+  ): Promise<InvoiceReceiveData> {
     const assignment = {
       type: 'Fungible' as AssignmentType,
       amount: params.amount,
     };
     const transportEndpoints: string[] = [this.transportEndpoint];
-    return await this.client.witnessReceive(params.assetId,assignment, params.durationSeconds??2000, transportEndpoints, params.minConfirmations??1);
+    return await this.client.witnessReceive(
+      params.assetId ?? null,
+      assignment,
+      params.durationSeconds ?? 2000,
+      transportEndpoints,
+      params.minConfirmations ?? 1
+    );
   }
 
-  public async issueAssetNia(params: IssueAssetNiaRequestModel): Promise<AssetNIA> {
-
-    return await this.client.issueAssetNia(params.ticker, params.name, params.precision, params.amounts);
+  public async issueAssetNia(
+    params: IssueAssetNiaRequestModel
+  ): Promise<AssetNIA> {
+    return await this.client.issueAssetNia(
+      params.ticker,
+      params.name,
+      params.precision,
+      params.amounts
+    );
   }
 
-  public async issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<AssetIFA> {
-    return await this.client.issueAssetIfa(params.ticker, params.name, params.precision, params.amounts, params.inflationAmounts, params.replaceRightsNum, params.rejectListUrl);
+  public async issueAssetIfa(
+    params: IssueAssetIfaRequestModel
+  ): Promise<AssetIFA> {
+    return await this.client.issueAssetIfa(
+      params.ticker,
+      params.name,
+      params.precision,
+      params.amounts,
+      params.inflationAmounts,
+      params.replaceRightsNum,
+      params.rejectListUrl
+    );
   }
 
-  public async inflateBegin(params: InflateAssetIfaRequestModel): Promise<string> {
-    return await this.client.inflateBegin(params.assetId, params.inflationAmounts, params.feeRate??1, params.minConfirmations??1);
+  public async inflateBegin(
+    params: InflateAssetIfaRequestModel
+  ): Promise<string> {
+    return await this.client.inflateBegin(
+      params.assetId,
+      params.inflationAmounts,
+      params.feeRate ?? 1,
+      params.minConfirmations ?? 1
+    );
   }
 
-  public async inflateEnd(params: InflateEndRequestModel): Promise<OperationResult> {
+  public async inflateEnd(
+    params: InflateEndRequestModel
+  ): Promise<OperationResult> {
     return await this.client.inflateEnd(params.signedPsbt);
   }
 
@@ -388,12 +475,15 @@ export class WalletManager implements IWalletManager {
    * @param params - Inflate parameters
    * @param mnemonic - Optional mnemonic for signing
    */
-  public async inflate(params: InflateAssetIfaRequestModel, mnemonic?: string): Promise<OperationResult> {
+  public async inflate(
+    params: InflateAssetIfaRequestModel,
+    mnemonic?: string
+  ): Promise<OperationResult> {
     this.ensureNotDisposed();
     const psbt = await this.inflateBegin(params);
     const signedPsbt = await this.signPsbt(psbt, mnemonic);
     return await this.inflateEnd({
-      signedPsbt
+      signedPsbt,
     });
   }
 
@@ -428,20 +518,23 @@ export class WalletManager implements IWalletManager {
     );
   }
 
-  public async decodeRGBInvoice(
-    params: { invoice: string }
-  ): Promise<InvoiceData> {
+  public async decodeRGBInvoice(params: {
+    invoice: string;
+  }): Promise<InvoiceData> {
     const result = await decodeInvoice(params.invoice);
     // Convert Interfaces.InvoiceData to rgb-model.InvoiceData
     return result as InvoiceData;
   }
 
-  public async createBackup(params: { backupPath: string, password: string }): Promise<WalletBackupResponse> {
-      this.client.backup(params.backupPath,params.password);
-      return {
-        message: 'Backup created successfully',
-        backupPath: params.backupPath,
-      };
+  public async createBackup(params: {
+    backupPath: string;
+    password: string;
+  }): Promise<WalletBackupResponse> {
+    this.client.backup(params.backupPath, params.password);
+    return {
+      message: 'Backup created successfully',
+      backupPath: params.backupPath,
+    };
   }
 
   /**
@@ -460,7 +553,9 @@ export class WalletManager implements IWalletManager {
       return await signPsbtFromSeed(this.seed, psbt, this.network);
     }
 
-    throw new WalletError('mnemonic is required. Provide it as parameter or initialize wallet with mnemonic.');
+    throw new WalletError(
+      'mnemonic is required. Provide it as parameter or initialize wallet with mnemonic.'
+    );
   }
 
   /**
@@ -468,7 +563,10 @@ export class WalletManager implements IWalletManager {
    * @param invoiceTransfer - Transfer invoice parameters
    * @param mnemonic - Optional mnemonic for signing
    */
-  public async send(invoiceTransfer: SendAssetBeginRequestModel, mnemonic?: string): Promise<SendResult> {
+  public async send(
+    invoiceTransfer: SendAssetBeginRequestModel,
+    mnemonic?: string
+  ): Promise<SendResult> {
     this.ensureNotDisposed();
     const psbt = await this.sendBegin(invoiceTransfer);
     const signedPsbt = await this.signPsbt(psbt, mnemonic);
@@ -476,7 +574,17 @@ export class WalletManager implements IWalletManager {
     return await this.sendEnd({ signedPsbt });
   }
 
-  public async createUtxos({ upTo, num, size, feeRate }: { upTo?: boolean, num?: number, size?: number, feeRate?: number }): Promise<number> {
+  public async createUtxos({
+    upTo,
+    num,
+    size,
+    feeRate,
+  }: {
+    upTo?: boolean;
+    num?: number;
+    size?: number;
+    feeRate?: number;
+  }): Promise<number> {
     this.ensureNotDisposed();
     const psbt = await this.createUtxosBegin({ upTo, num, size, feeRate });
     const signedPsbt = await this.signPsbt(psbt);
@@ -494,7 +602,9 @@ export class WalletManager implements IWalletManager {
     }
 
     if (!this.seed) {
-      throw new WalletError('Wallet seed is required for message signing. Initialize the wallet with a seed.');
+      throw new WalletError(
+        'Wallet seed is required for message signing. Initialize the wallet with a seed.'
+      );
     }
 
     return signSchnorrMessage({
@@ -504,7 +614,10 @@ export class WalletManager implements IWalletManager {
     });
   }
 
-  public async verifyMessage(message: string, signature: string): Promise<boolean> {
+  public async verifyMessage(
+    message: string,
+    signature: string
+  ): Promise<boolean> {
     if (!message) {
       throw new ValidationError('message is required', 'message');
     }
@@ -519,13 +632,12 @@ export class WalletManager implements IWalletManager {
       network: this.network,
     });
   }
-
 }
 
 /**
  * Factory function to create a WalletManager instance
  * Provides a cleaner API than direct constructor
- * 
+ *
  * @example
  * ```typescript
  * const keys = generateKeys('testnet');
@@ -543,4 +655,3 @@ export class WalletManager implements IWalletManager {
 export function createWalletManager(params: WalletInitParams): WalletManager {
   return new WalletManager(params);
 }
-

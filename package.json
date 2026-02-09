@@ -1,6 +1,6 @@
 {
   "name": "@utexo/rgb-sdk-rn",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "React Native SDK for Bitcoin RGB Protocol",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -20,6 +20,7 @@
     "cpp",
     "scripts",
     "*.podspec",
+    "*.tgz",
     "!ios/build",
     "!ios/rgb_libFFI.xcframework",
     "!android/build",
@@ -91,7 +92,7 @@
     "@scure/bip39": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
     "axios": "^1.8.4",
-    "bdk-rn": "https://github.com/bitcoindevkit/bdk-rn/releases/download/v2.2.0-alpha.1/bdk-rn-2.2.0-alpha.1.tgz"
+    "bdk-rn": "file:bdk-rn-2.2.0-next.tgz"
   },
   "react-native-builder-bob": {
     "source": "src",

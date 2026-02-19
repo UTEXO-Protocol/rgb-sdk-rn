@@ -91,7 +91,7 @@
     "@scure/bip39": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
     "axios": "^1.8.4",
-    "bdk-rn": "https://github.com/bitcoindevkit/bdk-rn/releases/download/v2.2.0-alpha.1/bdk-rn-2.2.0-alpha.1.tgz"
+    "bdk-rn": "https://github.com/UTEXO-Protocol/bdk-rn/releases/download/v2.2.0-Alpha.1/bdk-rn-2.2.0-Alpha.1.tgz"
   },
   "react-native-builder-bob": {
     "source": "src",

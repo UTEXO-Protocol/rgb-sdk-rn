@@ -8,15 +8,11 @@ on:
   # Manual trigger
   workflow_dispatch:
     inputs:
-      rgb_lib_version:
-        description: 'rgb-lib version to use (e.g., v0.3.0-beta.5)'
+      version:
+        description: 'Version to publish (e.g., 1.0.0-beta.4)'
         required: true
         type: string
 
-  # Tag-based release
-  push:
-    tags:
-      - 'v*.*.*'
 
 jobs:
   build:
@@ -27,17 +23,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get version info
+      - name: Get version
         id: version
         run: |
           if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
-            echo "rgb_lib_version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
-            echo "is_rgb_lib_trigger=true" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "rgb_lib_version=${{ inputs.rgb_lib_version }}" >> $GITHUB_OUTPUT
-            echo "is_rgb_lib_trigger=true" >> $GITHUB_OUTPUT
+            echo "version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
           else
-            echo "is_rgb_lib_trigger=false" >> $GITHUB_OUTPUT
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
           fi
         shell: bash
 
@@ -46,6 +38,10 @@ jobs:
         with:
           node-version: 20
           registry-url: 'https://registry.npmjs.org/'
+
+      - name: Set package version
+        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
+        shell: bash
 
       - name: Install dependencies
         run: npm install
@@ -59,35 +55,27 @@ jobs:
           token: ${{ secrets.NPM_TOKEN }}
           access: public
 
-      - name: Get package version
-        id: pkg_version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=v$VERSION" >> $GITHUB_OUTPUT
-
       - name: Create Release
-        if: github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.pkg_version.outputs.version }}
-          name: Release ${{ steps.pkg_version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
           body: |
-            ## rgb-sdk-rn ${{ steps.pkg_version.outputs.version }}
+            ## rgb-sdk-rn ${{ steps.version.outputs.version }}
             
             React Native SDK for RGB Protocol.
             
-            Built with rgb-lib ${{ steps.version.outputs.rgb_lib_version }}
-            
             ### Installation
             ```bash
-            npm install @utexo/rgb-sdk-rn
+            npm install @utexo/rgb-sdk-rn@${{ steps.version.outputs.version }}
             ```
             
             ### Supported Platforms
             - iOS
             - Android
           draft: false
-          prerelease: ${{ contains(steps.pkg_version.outputs.version, 'beta') || contains(steps.pkg_version.outputs.version, 'alpha') }}
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 

@@ -66,6 +66,19 @@ With this SDK, developers can:
 | `decodeRGBInvoice({ invoice })` | Decode RGB invoice to transfer parameters |
 | `createBackup(password, backupPath)` | Create an encrypted wallet backup file |
 | `restoreFromBackup({ backupFilePath, password, dataDir })` | Restore wallet state from a backup file |
+| **Lightning Network** | |
+| `createLightningInvoice({ asset })` | Create Lightning invoice for receiving BTC or asset payments |
+| `getLightningReceiveRequest(id)` | Get status of Lightning invoice by request ID |
+| `getLightningSendRequest(id)` | Get status of Lightning payment by request ID |
+| `getLightningSendFeeEstimate({ invoice, assetId? })` | Estimate routing fee for Lightning invoice |
+| `payLightningInvoiceBegin({ lnInvoice, maxFee? })` | Begin Lightning invoice payment (returns unsigned PSBT) |
+| `payLightningInvoiceEnd({ signedPsbt, lnInvoice })` | Complete Lightning invoice payment with signed PSBT |
+| `payLightningInvoice({ lnInvoice, maxFee? }, mnemonic?)` | Pay Lightning invoice (complete flow: begin → sign → end) |
+| **Withdrawals to Bitcoin L1** | |
+| `withdrawBegin({ address_or_rgbinvoice, amount_sats, fee_rate?, asset? })` | Begin withdrawal to Bitcoin L1 (returns unsigned PSBT) |
+| `withdrawEnd({ signed_psbt })` | Complete withdrawal with signed PSBT |
+| `withdraw({ address_or_rgbinvoice, amount_sats, fee_rate?, asset? }, mnemonic?)` | Withdraw to Bitcoin L1 (complete flow: begin → sign → end) |
+| `getWithdrawalStatus(withdrawalId)` | Get withdrawal status by ID |
 
 ### Standalone Functions (not WalletManager methods)
 
@@ -97,6 +110,43 @@ This pattern enables advanced use cases, such as:
 - Applying custom fee logic or batching
 - Implementing compliance and audit tracking
 - Self-hosting indexer and transport services
+
+---
+
+## 🌉 UTEXO Bridge Integration
+
+**Lightning Network** and **withdrawal** features require the UTEXO Bridge API for cross-network transfers between Bitcoin L1, Lightning Network, and UTEXO layer.
+
+### Bridge Configuration
+
+- **Default endpoint**: `http://localhost:8081/`
+- **Configure URL**:
+  ```typescript
+  import { bridgeAPI } from '@utexo/rgb-sdk-rn';
+  
+  bridgeAPI.setBaseUrl('https://bridge.example.com');
+  ```
+
+### Requirements
+
+Lightning and withdrawal methods depend on:
+- UTEXO Bridge API service running and accessible
+- Proper network configuration (mainnet, Lightning, UTEXO layer mappings)
+- Supported asset mappings across networks
+
+### Bridge-Dependent Methods
+
+The following methods require UTEXO Bridge API:
+- `createLightningInvoice()` - Create Lightning invoices
+- `payLightningInvoice()` - Pay Lightning invoices
+- `withdraw()` - Withdraw to Bitcoin L1
+- `getLightningReceiveRequest()` - Track Lightning receives
+- `getLightningSendRequest()` - Track Lightning sends
+- `getWithdrawalStatus()` - Track withdrawal status
+
+### Local-Only Methods
+
+All other RGB operations (asset issuance, transfers, UTXO management) work without the bridge and run entirely locally using native `rgb-lib` bindings.
 
 ---
 

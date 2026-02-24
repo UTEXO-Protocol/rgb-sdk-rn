@@ -101,3 +101,47 @@ export class ConfigurationError extends SDKError {
     Object.setPrototypeOf(this, ConfigurationError.prototype);
   }
 }
+
+/**
+ * Bad request errors (400) - Invalid request parameters or data
+ */
+export class BadRequestError extends SDKError {
+  constructor(message: string, cause?: Error) {
+    super(message, 'BAD_REQUEST', 400, cause);
+    this.name = 'BadRequestError';
+    Object.setPrototypeOf(this, BadRequestError.prototype);
+  }
+}
+
+/**
+ * Not found errors (404) - Resource not found
+ */
+export class NotFoundError extends SDKError {
+  constructor(message: string, cause?: Error) {
+    super(message, 'NOT_FOUND', 404, cause);
+    this.name = 'NotFoundError';
+    Object.setPrototypeOf(this, NotFoundError.prototype);
+  }
+}
+
+/**
+ * Conflict errors (409) - Resource conflict (e.g., wallet state already exists)
+ */
+export class ConflictError extends SDKError {
+  constructor(message: string, cause?: Error) {
+    super(message, 'CONFLICT', 409, cause);
+    this.name = 'ConflictError';
+    Object.setPrototypeOf(this, ConflictError.prototype);
+  }
+}
+
+/**
+ * RGB Node errors (500, 502, 503, 504) - RGB Node server errors
+ */
+export class RgbNodeError extends SDKError {
+  constructor(message: string, statusCode: number, cause?: Error) {
+    super(message, 'RGB_NODE_ERROR', statusCode, cause);
+    this.name = 'RgbNodeError';
+    Object.setPrototypeOf(this, RgbNodeError.prototype);
+  }
+}

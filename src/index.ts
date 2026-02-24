@@ -1,8 +1,10 @@
 // Main wallet exports
 export {
+  wallet,
   createWallet,
   WalletManager,
   createWalletManager,
+  restoreFromBackup,
 } from './wallet/index';
 export type { WalletInitParams } from './wallet/index';
 
@@ -29,6 +31,7 @@ export {
   generateKeys,
   deriveKeysFromMnemonic,
   deriveKeysFromSeed,
+  deriveKeysFromMnemonicOrSeed,
   restoreKeys,
   accountXpubsFromMnemonic,
   getXprivFromMnemonic,
@@ -44,6 +47,10 @@ export {
   WalletError,
   CryptoError,
   ConfigurationError,
+  BadRequestError,
+  NotFoundError,
+  ConflictError,
+  RgbNodeError,
 } from './errors';
 
 // Utility exports
@@ -64,3 +71,28 @@ export {
 
 // Constants exports
 export * from './constants';
+
+// Bridge utilities (for advanced users - Lightning and cross-network transfers)
+export { bridgeAPI } from './client/bridge';
+export type {
+  NetworkAddress,
+  BridgeInSignatureRequest,
+  BridgeInSignatureResponse,
+  TransferByMainnetInvoiceResponse,
+} from './client/bridge';
+
+// Unit conversion utilities
+export { toUnitsNumber, fromUnitsNumber } from './utils/units';
+
+// UTEXO module (Lightning + on-chain bridge transfers)
+export { UTEXOWallet, UTEXOProtocol, LightningProtocol, OnchainProtocol } from './utexo';
+export type { ConfigOptions, IUTEXOProtocol, ILightningProtocol, IOnchainProtocol } from './utexo';
+export type {
+  OnchainReceiveRequestModel,
+  OnchainReceiveResponse,
+  OnchainSendRequestModel,
+  OnchainSendEndRequestModel,
+  OnchainSendResponse,
+  GetOnchainSendResponse,
+  ListLightningPaymentsResponse,
+} from './types/rgb-model';

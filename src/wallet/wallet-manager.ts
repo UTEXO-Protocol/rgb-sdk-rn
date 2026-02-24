@@ -28,6 +28,15 @@ import type {
   AssetIFA,
   Transaction,
   Transfer,
+  CreateLightningInvoiceRequestModel,
+  LightningReceiveRequest,
+  LightningSendRequest,
+  GetLightningSendFeeEstimateRequestModel,
+  PayLightningInvoiceRequestModel,
+  PayLightningInvoiceEndRequestModel,
+  WithdrawBeginRequestModel,
+  WithdrawEndRequestModel,
+  WithdrawalStatus,
 } from '../types/rgb-model';
 
 import {
@@ -50,6 +59,13 @@ import {
   restoreBackup,
 } from '../client/rgb-lib';
 import type { IWalletManager } from './IWalletManager';
+import { bridgeAPI } from '../client/bridge';
+import {
+  utexoNetworkIdMap,
+  getDestinationAsset,
+  type UtxoNetworkId,
+} from '../constants/utexo-network';
+import { toUnitsNumber, fromUnitsNumber } from '../utils/units';
 
 /**
  * Restore wallet from backup
@@ -201,6 +217,18 @@ export class WalletManager implements IWalletManager {
 
   public async initialize(): Promise<void> {
     await this.client.goOnline(this.indexerUrl, false);
+  }
+
+  /**
+   * Register wallet and get initial address and BTC balance.
+   * Equivalent to calling getAddress() + getBtcBalance() in a single step.
+   */
+  public async registerWallet(): Promise<{ address: string; btcBalance: BtcBalance }> {
+    const [address, btcBalance] = await Promise.all([
+      this.getAddress(),
+      this.getBtcBalance(),
+    ]);
+    return { address, btcBalance };
   }
 
   public async goOnline(
@@ -634,7 +662,490 @@ export class WalletManager implements IWalletManager {
       network: this.network,
     });
   }
+
+  /**
+   * ====================================================================
+   * Lightning Network Methods
+   * ====================================================================
+   */
+
+  /**
+   * Create a Lightning invoice for receiving payments
+   * @param params - Invoice parameters with asset and amount
+   * @returns Lightning receive request with invoice
+   */
+  public async createLightningInvoice(
+    params: CreateLightningInvoiceRequestModel
+  ): Promise<LightningReceiveRequest> {
+    this.ensureNotDisposed();
+
+    const asset = params.asset;
+    if (!asset) {
+      throw new ValidationError('Asset is required', 'asset');
+    }
+
+    if (!asset.assetId) {
+      throw new ValidationError('Asset ID is required', 'assetId');
+    }
+    if (!asset.amount) {
+      throw new ValidationError('Amount is required', 'amount');
+    }
+
+    const destinationAsset = getDestinationAsset(
+      'mainnet' as UtxoNetworkId,
+      'utexo' as UtxoNetworkId,
+      asset.assetId
+    );
+    if (!destinationAsset) {
+      throw new ValidationError(
+        'Destination asset is not supported',
+        'assetId'
+      );
+    }
+
+    const destinationInvoice = await this.witnessReceive({
+      assetId: '', // invoice can receive any asset
+      amount: asset.amount,
+    });
+
+    const bridgeTransfer = await bridgeAPI.getBridgeInSignature({
+      sender: {
+        address: 'rgb-address',
+        networkName: utexoNetworkIdMap.mainnetLightning.networkName,
+        networkId: utexoNetworkIdMap.mainnetLightning.networkId,
+      },
+      tokenId: destinationAsset.tokenId,
+      amount: asset.amount.toString(),
+      destination: {
+        address: destinationInvoice.invoice,
+        networkName: utexoNetworkIdMap.utexo.networkName,
+        networkId: utexoNetworkIdMap.utexo.networkId,
+      },
+      additionalAddresses: [],
+    });
+
+    const hexInvoice = bridgeTransfer.signature;
+    const UTXO_PATH_INDEX = 2;
+    const hex = hexInvoice.startsWith('0x')
+      ? hexInvoice.slice(UTXO_PATH_INDEX)
+      : hexInvoice;
+    const decodedLnInvoice = Buffer.from(hex, 'hex').toString('utf-8');
+
+    return {
+      lnInvoice: decodedLnInvoice,
+    };
+  }
+
+  /**
+   * Get Lightning receive request status
+   * @param id - Request ID
+   * @returns Lightning receive request details
+   */
+  public async getLightningReceiveRequest(
+    _id: string
+  ): Promise<LightningReceiveRequest> {
+    this.ensureNotDisposed();
+    // TODO: Implement bridge API call to get receive request status
+    throw new Error(
+      'getLightningReceiveRequest not yet implemented - requires bridge API endpoint'
+    );
+  }
+
+  /**
+   * Get Lightning send request status
+   * @param id - Request ID
+   * @returns Lightning send request details
+   */
+  public async getLightningSendRequest(
+    _id: string
+  ): Promise<LightningSendRequest> {
+    this.ensureNotDisposed();
+    // TODO: Implement bridge API call to get send request status
+    throw new Error(
+      'getLightningSendRequest not yet implemented - requires bridge API endpoint'
+    );
+  }
+
+  /**
+   * Estimate fee for paying a Lightning invoice
+   * @param params - Invoice and optional asset ID
+   * @returns Fee estimate
+   */
+  public async getLightningSendFeeEstimate(
+    _params: GetLightningSendFeeEstimateRequestModel
+  ): Promise<{ fee: number }> {
+    this.ensureNotDisposed();
+    // TODO: Implement Lightning fee estimation via bridge API
+    throw new Error(
+      'getLightningSendFeeEstimate not yet implemented - requires bridge API endpoint'
+    );
+  }
+
+  /**
+   * Begin paying a Lightning invoice
+   * @param params - Lightning invoice payment parameters
+   * @returns Unsigned PSBT
+   */
+  public async payLightningInvoiceBegin(
+    params: PayLightningInvoiceRequestModel
+  ): Promise<string> {
+    this.ensureNotDisposed();
+
+    const bridgeTransfer = await bridgeAPI.getTransferByMainnetInvoice(
+      params.lnInvoice,
+      utexoNetworkIdMap.mainnetLightning.networkId
+    );
+
+    if (!bridgeTransfer) {
+      // External invoice - create bridge-out transfer
+      if (!params.assetId) {
+        throw new ValidationError(
+          'Asset ID is required for external invoice',
+          'assetId'
+        );
+      }
+      const assetId = params.assetId;
+      const destinationAsset = getDestinationAsset(
+        'utexo' as UtxoNetworkId,
+        'mainnetLightning' as UtxoNetworkId,
+        assetId ?? null
+      );
+      if (!destinationAsset) {
+        throw new ValidationError(
+          'Destination asset is not supported',
+          'assetId'
+        );
+      }
+
+      if (!params.amount) {
+        throw new ValidationError(
+          'Amount is required for external invoice',
+          'amount'
+        );
+      }
+
+      const amount = params.amount;
+
+      const bridgeOutTransfer = await bridgeAPI.getBridgeInSignature({
+        sender: {
+          address: 'rgb-address',
+          networkName: utexoNetworkIdMap.utexo.networkName,
+          networkId: utexoNetworkIdMap.utexo.networkId,
+        },
+        tokenId: destinationAsset.tokenId,
+        amount: amount.toString(),
+        destination: {
+          address: params.lnInvoice,
+          networkName: utexoNetworkIdMap.mainnetLightning.networkName,
+          networkId: utexoNetworkIdMap.mainnetLightning.networkId,
+        },
+        additionalAddresses: [],
+      });
+
+      const hexInvoice = bridgeOutTransfer.signature;
+      const UTXO_PATH_INDEX = 2;
+      const hex = hexInvoice.startsWith('0x')
+        ? hexInvoice.slice(UTXO_PATH_INDEX)
+        : hexInvoice;
+      const decodedInvoice = Buffer.from(hex, 'hex').toString('utf-8');
+      const isWitness = decodedInvoice.includes('wvout:');
+
+      const psbt = await this.sendBegin({
+        invoice: decodedInvoice,
+        amount: Number(bridgeOutTransfer.amount || bridgeOutTransfer.recipientAmount),
+        assetId: destinationAsset.assetId,
+        donation: true,
+        ...(isWitness && {
+          witnessData: {
+            amountSat: 1000,
+            blinding: 0,
+          },
+        }),
+      });
+
+      return psbt;
+    }
+
+    const bridgeAmount = bridgeTransfer.recipientAmount;
+    const utexoInvoice = bridgeTransfer.recipient.address;
+
+    const invoiceData = await this.decodeRGBInvoice({ invoice: utexoInvoice });
+    const destinationAsset = utexoNetworkIdMap.utexo.getAssetById(
+      bridgeTransfer.recipientToken.id
+    );
+    if (!destinationAsset) {
+      throw new ValidationError(
+        'Destination asset is not supported',
+        'assetId'
+      );
+    }
+    const amount = toUnitsNumber(bridgeAmount, destinationAsset.precision);
+
+    const isWitness = invoiceData.recipientId.includes('wvout:');
+
+    const psbt = await this.sendBegin({
+      invoice: utexoInvoice,
+      amount: amount,
+      assetId: destinationAsset.assetId,
+      donation: true,
+      ...(isWitness && {
+        witnessData: {
+          amountSat: 1000,
+          blinding: 0,
+        },
+      }),
+    });
+
+    return psbt;
+  }
+
+  /**
+   * Complete paying a Lightning invoice with signed PSBT
+   * @param params - Signed PSBT and invoice
+   * @returns Lightning send result
+   */
+  public async payLightningInvoiceEnd(
+    params: PayLightningInvoiceEndRequestModel
+  ): Promise<LightningSendRequest> {
+    this.ensureNotDisposed();
+    const sendResult = await this.sendEnd({ signedPsbt: params.signedPsbt });
+    // TODO: Finalize bridge transfer (complete/cancel/status) via BridgeClient
+
+    return {
+      txid: sendResult.txid,
+      status: 'completed',
+      consignmentEndpoint: sendResult.consignmentEndpoint,
+    };
+  }
+
+  /**
+   * Pay a Lightning invoice (complete flow: begin → sign → end)
+   * @param params - Lightning invoice payment parameters
+   * @param mnemonic - Optional mnemonic for signing
+   * @returns Lightning send result
+   */
+  public async payLightningInvoice(
+    params: PayLightningInvoiceRequestModel,
+    mnemonic?: string
+  ): Promise<LightningSendRequest> {
+    this.ensureNotDisposed();
+    const psbt = await this.payLightningInvoiceBegin(params);
+    const signedPsbt = await this.signPsbt(psbt, mnemonic);
+    return await this.payLightningInvoiceEnd({
+      signedPsbt: signedPsbt,
+      lnInvoice: params.lnInvoice,
+    });
+  }
+
+  /**
+   * ====================================================================
+   * Withdrawal Methods (Bitcoin L1)
+   * ====================================================================
+   */
+
+  /**
+   * Begin withdrawal to Bitcoin L1
+   * @param params - Withdrawal parameters
+   * @returns Unsigned PSBT
+   */
+  public async withdrawBegin(
+    params: WithdrawBeginRequestModel
+  ): Promise<string> {
+    this.ensureNotDisposed();
+
+    const bridgeTransfer = await bridgeAPI.getTransferByMainnetInvoice(
+      params.address_or_rgbinvoice,
+      utexoNetworkIdMap.mainnet.networkId
+    );
+
+    if (!bridgeTransfer) {
+      // External invoice - create bridge-out transfer
+      const invoiceData = await this.decodeRGBInvoice({
+        invoice: params.address_or_rgbinvoice,
+      });
+      if (!params.asset && !invoiceData.assetId) {
+        throw new ValidationError(
+          'Asset ID is required for external invoice',
+          'asset'
+        );
+      }
+      const assetId = params.asset ?? invoiceData.assetId;
+      const destinationAsset = getDestinationAsset(
+        'utexo' as UtxoNetworkId,
+        'mainnet' as UtxoNetworkId,
+        assetId ?? null
+      );
+      if (!destinationAsset) {
+        throw new ValidationError(
+          'Destination asset is not supported',
+          'assetId'
+        );
+      }
+
+      let amount: number;
+      if (params.amount_sats) {
+        amount = params.amount_sats;
+      } else if (invoiceData.assignment.amount) {
+        amount = fromUnitsNumber(
+          invoiceData.assignment.amount,
+          destinationAsset.precision
+        );
+      } else {
+        throw new ValidationError('Amount is required', 'amount');
+      }
+
+      const bridgeOutTransfer = await bridgeAPI.getBridgeInSignature({
+        sender: {
+          address: 'rgb-address',
+          networkName: utexoNetworkIdMap.utexo.networkName,
+          networkId: utexoNetworkIdMap.utexo.networkId,
+        },
+        tokenId: destinationAsset.tokenId,
+        amount: amount.toString(),
+        destination: {
+          address: params.address_or_rgbinvoice,
+          networkName: utexoNetworkIdMap.mainnet.networkName,
+          networkId: utexoNetworkIdMap.mainnet.networkId,
+        },
+        additionalAddresses: [],
+      });
+
+      const hexInvoice = bridgeOutTransfer.signature;
+      const UTXO_PATH_INDEX = 2;
+      const hex = hexInvoice.startsWith('0x')
+        ? hexInvoice.slice(UTXO_PATH_INDEX)
+        : hexInvoice;
+      const decodedInvoice = Buffer.from(hex, 'hex').toString('utf-8');
+      const isWitness = decodedInvoice.includes('wvout:');
+
+      const psbt = await this.sendBegin({
+        invoice: decodedInvoice,
+        amount: Number(bridgeOutTransfer.amount || bridgeOutTransfer.recipientAmount),
+        assetId: destinationAsset.assetId,
+        donation: true,
+        ...(isWitness && {
+          witnessData: {
+            amountSat: 1000,
+            blinding: 0,
+          },
+        }),
+      });
+
+      return psbt;
+    }
+
+    const utexoInvoice = bridgeTransfer.recipient.address;
+    const invoiceData = await this.decodeRGBInvoice({ invoice: utexoInvoice });
+    const bridgeAmount = bridgeTransfer.recipientAmount;
+    const destinationAsset = utexoNetworkIdMap.utexo.getAssetById(
+      bridgeTransfer.recipientToken.id
+    );
+    if (!destinationAsset) {
+      throw new ValidationError(
+        'Destination asset is not supported',
+        'assetId'
+      );
+    }
+
+    const amount = toUnitsNumber(bridgeAmount, destinationAsset.precision);
+
+    const isWitness = invoiceData.recipientId.includes('wvout:');
+
+    const assetBalance = await this.getAssetBalance(destinationAsset.assetId);
+
+    if (!assetBalance || !assetBalance.spendable) {
+      throw new ValidationError('Asset balance is not found', 'assetBalance');
+    }
+    if (assetBalance.spendable < amount) {
+      throw new ValidationError(
+        `Insufficient balance ${assetBalance.spendable} < ${amount}`,
+        'amount'
+      );
+    }
+
+    const psbt = await this.sendBegin({
+      invoice: utexoInvoice,
+      amount: amount,
+      assetId: destinationAsset.assetId,
+      donation: true,
+      ...(isWitness && {
+        witnessData: {
+          amountSat: 1000,
+          blinding: 0,
+        },
+      }),
+    });
+
+    return psbt;
+  }
+
+  /**
+   * Complete withdrawal with signed PSBT
+   * @param params - Signed PSBT
+   * @returns Transaction result
+   */
+  public async withdrawEnd(
+    params: WithdrawEndRequestModel
+  ): Promise<SendResult> {
+    this.ensureNotDisposed();
+    const sendResult = await this.sendEnd({ signedPsbt: params.signed_psbt });
+    // TODO: Finalize bridge transfer via BridgeClient
+
+    return sendResult;
+  }
+
+  /**
+   * Withdraw to Bitcoin L1 (complete flow: begin → sign → end)
+   * @param params - Withdrawal parameters
+   * @param mnemonic - Optional mnemonic for signing
+   * @returns Transaction result
+   */
+  public async withdraw(
+    params: WithdrawBeginRequestModel,
+    mnemonic?: string
+  ): Promise<SendResult> {
+    this.ensureNotDisposed();
+    const psbt = await this.withdrawBegin(params);
+    const signedPsbt = await this.signPsbt(psbt, mnemonic);
+    return await this.withdrawEnd({ signed_psbt: signedPsbt });
+  }
+
+  /**
+   * Get withdrawal status
+   * @param withdrawalId - Withdrawal ID
+   * @returns Withdrawal status
+   */
+  public async getWithdrawalStatus(
+    _withdrawalId: string
+  ): Promise<WithdrawalStatus> {
+    this.ensureNotDisposed();
+    // TODO: Implement bridge API call to get withdrawal status
+    throw new Error(
+      'getWithdrawalStatus not yet implemented - requires bridge API endpoint'
+    );
+  }
 }
+
+/**
+ * Legacy singleton wallet instance for backward compatibility.
+ * @deprecated Use `new WalletManager(params)` or `createWalletManager(params)` instead.
+ *
+ * Accessing any property on this proxy before calling `createWalletManager` will throw.
+ */
+let _wallet: WalletManager | null = null;
+
+export const wallet = new Proxy({} as WalletManager, {
+  get(_target, prop) {
+    if (!_wallet) {
+      throw new WalletError(
+        'The legacy singleton wallet instance is not initialised. ' +
+          'Please use `new WalletManager(params)` or `createWalletManager(params)` instead.'
+      );
+    }
+    const value = (_wallet as any)[prop];
+    return typeof value === 'function' ? value.bind(_wallet) : value;
+  },
+});
 
 /**
  * Factory function to create a WalletManager instance

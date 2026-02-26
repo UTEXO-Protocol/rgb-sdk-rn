@@ -74,11 +74,6 @@ With this SDK, developers can:
 | `payLightningInvoiceBegin({ lnInvoice, maxFee? })` | Begin Lightning invoice payment (returns unsigned PSBT) |
 | `payLightningInvoiceEnd({ signedPsbt, lnInvoice })` | Complete Lightning invoice payment with signed PSBT |
 | `payLightningInvoice({ lnInvoice, maxFee? }, mnemonic?)` | Pay Lightning invoice (complete flow: begin → sign → end) |
-| **Withdrawals to Bitcoin L1** | |
-| `withdrawBegin({ address_or_rgbinvoice, amount_sats, fee_rate?, asset? })` | Begin withdrawal to Bitcoin L1 (returns unsigned PSBT) |
-| `withdrawEnd({ signed_psbt })` | Complete withdrawal with signed PSBT |
-| `withdraw({ address_or_rgbinvoice, amount_sats, fee_rate?, asset? }, mnemonic?)` | Withdraw to Bitcoin L1 (complete flow: begin → sign → end) |
-| `getWithdrawalStatus(withdrawalId)` | Get withdrawal status by ID |
 
 ### Standalone Functions (not WalletManager methods)
 
@@ -115,7 +110,7 @@ This pattern enables advanced use cases, such as:
 
 ## 🌉 UTEXO Bridge Integration
 
-**Lightning Network** and **withdrawal** features require the UTEXO Bridge API for cross-network transfers between Bitcoin L1, Lightning Network, and UTEXO layer.
+**Lightning Network** features require the UTEXO Bridge API for cross-network transfers between Bitcoin L1, Lightning Network, and UTEXO layer.
 
 ### Bridge Configuration
 
@@ -129,7 +124,7 @@ This pattern enables advanced use cases, such as:
 
 ### Requirements
 
-Lightning and withdrawal methods depend on:
+Lightning methods depend on:
 - UTEXO Bridge API service running and accessible
 - Proper network configuration (mainnet, Lightning, UTEXO layer mappings)
 - Supported asset mappings across networks
@@ -139,10 +134,8 @@ Lightning and withdrawal methods depend on:
 The following methods require UTEXO Bridge API:
 - `createLightningInvoice()` - Create Lightning invoices
 - `payLightningInvoice()` - Pay Lightning invoices
-- `withdraw()` - Withdraw to Bitcoin L1
 - `getLightningReceiveRequest()` - Track Lightning receives
 - `getLightningSendRequest()` - Track Lightning sends
-- `getWithdrawalStatus()` - Track withdrawal status
 
 ### Local-Only Methods
 

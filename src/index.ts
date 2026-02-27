@@ -49,8 +49,6 @@ export {
   ConfigurationError,
   BadRequestError,
   NotFoundError,
-  ConflictError,
-  RgbNodeError,
 } from './errors';
 
 // Utility exports

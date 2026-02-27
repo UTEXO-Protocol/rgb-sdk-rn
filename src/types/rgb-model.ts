@@ -83,7 +83,6 @@ export interface SendAssetEndRequestModel {
 export interface SendResult {
   txid: string;
   batchTransferIdx: number;
-  consignmentEndpoint?: string;
 }
 
 export interface OperationResult {

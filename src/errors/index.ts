@@ -124,24 +124,3 @@ export class NotFoundError extends SDKError {
   }
 }
 
-/**
- * Conflict errors (409) - Resource conflict (e.g., wallet state already exists)
- */
-export class ConflictError extends SDKError {
-  constructor(message: string, cause?: Error) {
-    super(message, 'CONFLICT', 409, cause);
-    this.name = 'ConflictError';
-    Object.setPrototypeOf(this, ConflictError.prototype);
-  }
-}
-
-/**
- * RGB Node errors (500, 502, 503, 504) - RGB Node server errors
- */
-export class RgbNodeError extends SDKError {
-  constructor(message: string, statusCode: number, cause?: Error) {
-    super(message, 'RGB_NODE_ERROR', statusCode, cause);
-    this.name = 'RgbNodeError';
-    Object.setPrototypeOf(this, RgbNodeError.prototype);
-  }
-}

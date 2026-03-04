@@ -1,6 +1,6 @@
 {
   "name": "@utexo/rgb-sdk-rn",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.4",
   "description": "React Native SDK for Bitcoin RGB Protocol",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -36,7 +36,7 @@
     "dev": "tsc -w",
     "clean": "del-cli android/build ios/build lib",
     "prepare": "bob build",
-    "postinstall": "node scripts/download-rgb-lib-ios.js",
+    "postinstall": "node scripts/download-rgb-lib-ios.js && cd node_modules/uniffi-bindgen-react-native && npx tsc --project tsconfig.json",
     "typecheck": "tsc",
     "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/NativeRgb.ts && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgb",
     "build": "bob build",
@@ -91,7 +91,7 @@
     "@scure/bip39": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
     "axios": "^1.8.4",
-    "bdk-rn": "https://github.com/bitcoindevkit/bdk-rn/releases/download/v2.2.0-alpha.1/bdk-rn-2.2.0-alpha.1.tgz"
+    "bdk-rn": "https://github.com/UTEXO-Protocol/bdk-rn/releases/download/v2.2.0-Alpha.1/bdk-rn-2.2.0-Alpha.1.tgz"
   },
   "react-native-builder-bob": {
     "source": "src",

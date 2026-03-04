@@ -67,6 +67,28 @@ With this SDK, developers can:
 | `createBackup(password, backupPath)` | Create an encrypted wallet backup file |
 | `restoreFromBackup({ backupFilePath, password, dataDir })` | Restore wallet state from a backup file |
 
+### Capabilities of `UTEXOWallet`
+
+`UTEXOWallet` extends `WalletManager` with UTEXO Bridge support for cross-network transfers. It implements both `IWalletManager` (all methods above) and `IUTEXOProtocol` (Lightning + Onchain methods below).
+
+| Method | Description |
+|--------|-------------|
+| **Lightning Network** | |
+| `createLightningInvoice({ asset })` | Create Lightning invoice for receiving BTC or asset payments |
+| `getLightningReceiveRequest(lnInvoice)` | Get status of a Lightning receive invoice |
+| `getLightningSendRequest(lnInvoice)` | Get status of a Lightning send payment |
+| `getLightningSendFeeEstimate({ invoice, assetId? })` | Estimate routing fee for Lightning invoice |
+| `payLightningInvoiceBegin({ lnInvoice, amount?, assetId? })` | Begin Lightning invoice payment (returns unsigned PSBT) |
+| `payLightningInvoiceEnd({ signedPsbt, lnInvoice })` | Complete Lightning invoice payment with signed PSBT |
+| `payLightningInvoice({ lnInvoice, amount?, assetId? }, mnemonic?)` | Pay Lightning invoice (complete flow: begin → sign → end) |
+| **Onchain (Bridge Transfers)** | |
+| `onchainReceive({ assetId, amount })` | Generate a mainnet invoice to receive assets via bridge into UTEXO |
+| `onchainSendBegin({ invoice, assetId?, amount? })` | Begin on-chain send from UTEXO to mainnet (returns unsigned PSBT) |
+| `onchainSendEnd({ signedPsbt, invoice })` | Complete on-chain send with signed PSBT |
+| `onchainSend({ invoice, assetId?, amount? }, mnemonic?)` | Send on-chain (complete flow: begin → sign → end) |
+| `getOnchainSendStatus(invoice)` | Get status of an on-chain send by its mainnet invoice |
+| `listOnchainTransfers(assetId?)` | List on-chain transfers for an asset (or all assets) |
+
 ### Standalone Functions (not WalletManager methods)
 
 | Function | Description |
@@ -97,6 +119,49 @@ This pattern enables advanced use cases, such as:
 - Applying custom fee logic or batching
 - Implementing compliance and audit tracking
 - Self-hosting indexer and transport services
+
+---
+
+## 🌉 UTEXO Bridge Integration
+
+**Lightning Network** and **Onchain bridge** features (available via `UTEXOWallet`) require the UTEXO Bridge API for cross-network transfers between Bitcoin L1, Lightning Network, and UTEXO layer.
+
+### Bridge Configuration
+
+- **Default endpoint**: `http://localhost:8081/`
+- **Configure URL**:
+  ```typescript
+  import { bridgeAPI } from '@utexo/rgb-sdk-rn';
+  
+  bridgeAPI.setBaseUrl('https://bridge.example.com');
+  ```
+
+### Requirements
+
+Lightning and onchain bridge methods depend on:
+- UTEXO Bridge API service running and accessible
+- Proper network configuration (mainnet, Lightning, UTEXO layer mappings)
+- Supported asset mappings across networks
+
+### Bridge-Dependent Methods
+
+The following `UTEXOWallet` methods require UTEXO Bridge API:
+
+**Lightning:**
+- `createLightningInvoice()` - Create Lightning invoices
+- `payLightningInvoice()` / `payLightningInvoiceBegin()` / `payLightningInvoiceEnd()` - Pay Lightning invoices
+- `getLightningReceiveRequest()` - Track Lightning receives
+- `getLightningSendRequest()` - Track Lightning sends
+
+**Onchain (cross-network):**
+- `onchainReceive()` - Receive assets via mainnet-to-UTEXO bridge
+- `onchainSend()` / `onchainSendBegin()` / `onchainSendEnd()` - Send assets via UTEXO-to-mainnet bridge
+- `getOnchainSendStatus()` - Track on-chain send status
+- `listOnchainTransfers()` - List on-chain transfers
+
+### Local-Only Methods
+
+All `WalletManager` methods (asset issuance, transfers, UTXO management, etc.) work without the bridge and run entirely locally using native `rgb-lib` bindings.
 
 ---
 

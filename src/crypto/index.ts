@@ -30,6 +30,7 @@ export {
   generateKeys,
   deriveKeysFromMnemonic,
   deriveKeysFromSeed,
+  deriveKeysFromMnemonicOrSeed,
   restoreKeys,
   accountXpubsFromMnemonic,
   getXprivFromMnemonic,

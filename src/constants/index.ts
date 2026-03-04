@@ -12,3 +12,6 @@ export * from './network';
 
 // Default values
 export * from './defaults';
+
+// UTEXO network constants
+export * from './utexo-network';

@@ -203,6 +203,18 @@ export class WalletManager implements IWalletManager {
     await this.client.goOnline(this.indexerUrl, false);
   }
 
+  /**
+   * Register wallet and get initial address and BTC balance.
+   * Equivalent to calling getAddress() + getBtcBalance() in a single step.
+   */
+  public async registerWallet(): Promise<{ address: string; btcBalance: BtcBalance }> {
+    const [address, btcBalance] = await Promise.all([
+      this.getAddress(),
+      this.getBtcBalance(),
+    ]);
+    return { address, btcBalance };
+  }
+
   public async goOnline(
     indexerUrl: string,
     skipConsistencyCheck: boolean = false
@@ -635,6 +647,27 @@ export class WalletManager implements IWalletManager {
     });
   }
 }
+
+/**
+ * Legacy singleton wallet instance for backward compatibility.
+ * @deprecated Use `new WalletManager(params)` or `createWalletManager(params)` instead.
+ *
+ * Accessing any property on this proxy before calling `createWalletManager` will throw.
+ */
+let _wallet: WalletManager | null = null;
+
+export const wallet = new Proxy({} as WalletManager, {
+  get(_target, prop) {
+    if (!_wallet) {
+      throw new WalletError(
+        'The legacy singleton wallet instance is not initialised. ' +
+          'Please use `new WalletManager(params)` or `createWalletManager(params)` instead.'
+      );
+    }
+    const value = (_wallet as any)[prop];
+    return typeof value === 'function' ? value.bind(_wallet) : value;
+  },
+});
 
 /**
  * Factory function to create a WalletManager instance

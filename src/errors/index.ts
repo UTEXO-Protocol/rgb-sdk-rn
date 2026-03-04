@@ -101,3 +101,26 @@ export class ConfigurationError extends SDKError {
     Object.setPrototypeOf(this, ConfigurationError.prototype);
   }
 }
+
+/**
+ * Bad request errors (400) - Invalid request parameters or data
+ */
+export class BadRequestError extends SDKError {
+  constructor(message: string, cause?: Error) {
+    super(message, 'BAD_REQUEST', 400, cause);
+    this.name = 'BadRequestError';
+    Object.setPrototypeOf(this, BadRequestError.prototype);
+  }
+}
+
+/**
+ * Not found errors (404) - Resource not found
+ */
+export class NotFoundError extends SDKError {
+  constructor(message: string, cause?: Error) {
+    super(message, 'NOT_FOUND', 404, cause);
+    this.name = 'NotFoundError';
+    Object.setPrototypeOf(this, NotFoundError.prototype);
+  }
+}
+

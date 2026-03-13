@@ -28,6 +28,8 @@ import type {
   AssetIFA,
   Transaction,
   Transfer,
+  VssBackupConfigParams,
+  VssBackupInfo,
 } from '../types/rgb-model';
 
 import {
@@ -48,6 +50,7 @@ import {
   decodeInvoice,
   generateKeys,
   restoreBackup,
+  restoreFromVss as nativeRestoreFromVss,
 } from '../client/rgb-lib';
 import type { IWalletManager } from './IWalletManager';
 
@@ -76,6 +79,23 @@ export const restoreFromBackup = async (
   return {
     message: 'Wallet restored successfully',
   };
+};
+
+/**
+ * Restore a wallet from a VSS cloud backup into targetDir.
+ * This should be called before creating a WalletManager instance.
+ * @param config - VSS backup configuration (server URL, store ID, signing key, etc.)
+ * @param targetDir - Directory where the wallet will be restored
+ * @returns Absolute path to the restored wallet directory
+ */
+export const restoreFromVss = async (
+  config: VssBackupConfigParams,
+  targetDir: string
+): Promise<string> => {
+  if (!targetDir) {
+    throw new ValidationError('target directory is required', 'targetDir');
+  }
+  return nativeRestoreFromVss(config, targetDir);
 };
 
 /**
@@ -544,11 +564,48 @@ export class WalletManager implements IWalletManager {
     backupPath: string;
     password: string;
   }): Promise<WalletBackupResponse> {
-    this.client.backup(params.backupPath, params.password);
+    await this.client.backup(params.backupPath, params.password);
     return {
       message: 'Backup created successfully',
       backupPath: params.backupPath,
     };
+  }
+
+  /**
+   * Configures automatic VSS cloud backup for the open wallet.
+   * @param config - VSS backup configuration
+   */
+  public async configureVssBackup(
+    config: VssBackupConfigParams
+  ): Promise<void> {
+    await this.client.configureVssBackup(config);
+  }
+
+  /**
+   * Uploads a VSS cloud backup of the current wallet state.
+   * @param config - VSS backup configuration
+   * @returns Server-side version number after successful upload
+   */
+  public async vssBackup(config: VssBackupConfigParams): Promise<number> {
+    return this.client.vssBackup(config);
+  }
+
+  /**
+   * Queries the VSS server for this wallet's backup status.
+   * @param config - VSS backup configuration
+   * @returns Backup info: backupExists, serverVersion, backupRequired
+   */
+  public async vssBackupInfo(
+    config: VssBackupConfigParams
+  ): Promise<VssBackupInfo> {
+    return this.client.vssBackupInfo(config);
+  }
+
+  /**
+   * Disables automatic VSS backup for the open wallet.
+   */
+  public async disableVssAutoBackup(): Promise<void> {
+    await this.client.disableVssAutoBackup();
   }
 
   /**

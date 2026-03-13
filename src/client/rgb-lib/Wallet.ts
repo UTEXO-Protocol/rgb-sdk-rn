@@ -1,5 +1,9 @@
 import Rgb from './NativeRgb';
 import * as Interfaces from './Interfaces';
+import type {
+  VssBackupConfigParams,
+  VssBackupInfo,
+} from '../../types/rgb-model';
 
 export interface WalletOptions {
   network?: Interfaces.BitcoinNetwork;
@@ -184,6 +188,67 @@ export class Wallet {
   async backupInfo(): Promise<boolean> {
     await this.ensureInitialized();
     return await Rgb.backupInfo(this.getWalletId());
+  }
+
+  /**
+   * Configures automatic VSS cloud backup for this wallet.
+   * After calling this, the wallet will automatically upload a backup after state-changing operations
+   * when autoBackup is enabled in the config.
+   * @param config - VSS backup configuration
+   */
+  async configureVssBackup(config: VssBackupConfigParams): Promise<void> {
+    await this.ensureInitialized();
+    await Rgb.configureVssBackup(this.getWalletId(), {
+      serverUrl: config.serverUrl,
+      storeId: config.storeId,
+      signingKeyHex: config.signingKeyHex,
+      encryptionEnabled: config.encryptionEnabled ?? true,
+      autoBackup: config.autoBackup ?? false,
+      backupMode: config.backupMode ?? 'Async',
+    });
+  }
+
+  /**
+   * Uploads a VSS cloud backup of the current wallet state.
+   * @param config - VSS backup configuration
+   * @returns Server-side version number after successful upload
+   */
+  async vssBackup(config: VssBackupConfigParams): Promise<number> {
+    await this.ensureInitialized();
+    return await Rgb.vssBackup(this.getWalletId(), {
+      serverUrl: config.serverUrl,
+      storeId: config.storeId,
+      signingKeyHex: config.signingKeyHex,
+      encryptionEnabled: config.encryptionEnabled ?? true,
+      autoBackup: config.autoBackup ?? false,
+      backupMode: config.backupMode ?? 'Async',
+    });
+  }
+
+  /**
+   * Queries the VSS server for this wallet's backup status.
+   * @param config - VSS backup configuration
+   * @returns Backup info including whether a backup exists, server version, and if backup is required
+   */
+  async vssBackupInfo(config: VssBackupConfigParams): Promise<VssBackupInfo> {
+    await this.ensureInitialized();
+    return await Rgb.vssBackupInfo(this.getWalletId(), {
+      serverUrl: config.serverUrl,
+      storeId: config.storeId,
+      signingKeyHex: config.signingKeyHex,
+      encryptionEnabled: config.encryptionEnabled ?? true,
+      autoBackup: config.autoBackup ?? false,
+      backupMode: config.backupMode ?? 'Async',
+    });
+  }
+
+  /**
+   * Disables automatic VSS backup for this wallet.
+   * Manual backup via vssBackup() still works after calling this.
+   */
+  async disableVssAutoBackup(): Promise<void> {
+    await this.ensureInitialized();
+    await Rgb.disableVssAutoBackup(this.getWalletId());
   }
 
   /**

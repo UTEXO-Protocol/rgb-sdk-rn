@@ -56,6 +56,8 @@ import type {
   Transfer,
   InvoiceData,
   TransferStatus,
+  VssBackupConfigParams,
+  VssBackupInfo,
 } from '../types/rgb-model';
 
 export interface ConfigOptions {
@@ -340,6 +342,26 @@ export class UTEXOWallet extends UTEXOProtocol implements IWalletManager, IUTEXO
   }): Promise<WalletBackupResponse> {
     this.ensureInitialized();
     return this.utexoRGBWallet!.createBackup(params);
+  }
+
+  async configureVssBackup(config: VssBackupConfigParams): Promise<void> {
+    this.ensureInitialized();
+    return this.utexoRGBWallet!.configureVssBackup(config);
+  }
+
+  async vssBackup(config: VssBackupConfigParams): Promise<number> {
+    this.ensureInitialized();
+    return this.utexoRGBWallet!.vssBackup(config);
+  }
+
+  async vssBackupInfo(config: VssBackupConfigParams): Promise<VssBackupInfo> {
+    this.ensureInitialized();
+    return this.utexoRGBWallet!.vssBackupInfo(config);
+  }
+
+  async disableVssAutoBackup(): Promise<void> {
+    this.ensureInitialized();
+    return this.utexoRGBWallet!.disableVssAutoBackup();
   }
 
   async signPsbt(psbt: string, mnemonic?: string): Promise<string> {

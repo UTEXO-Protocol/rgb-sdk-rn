@@ -23,6 +23,30 @@ export interface WalletBackupResponse {
   backupPath: string;
 }
 
+export type VssBackupMode = 'Async' | 'Blocking';
+
+export interface VssBackupConfigParams {
+  serverUrl: string;
+  storeId: string;
+  /** 64-char hex string representing 32 raw bytes (secp256k1 secret key) */
+  signingKeyHex: string;
+  /** Whether to encrypt data before uploading. Default: true */
+  encryptionEnabled?: boolean;
+  /** Whether to automatically back up after state-changing operations. Default: false */
+  autoBackup?: boolean;
+  /** Whether auto-backup uploads block the caller or run asynchronously. Default: 'Async' */
+  backupMode?: VssBackupMode;
+}
+
+export interface VssBackupInfo {
+  /** Whether a backup exists on the server */
+  backupExists: boolean;
+  /** Server-side version of the backup */
+  serverVersion: number | null;
+  /** Whether the local wallet has changes since last backup */
+  backupRequired: boolean;
+}
+
 export interface WalletRestoreResponse {
   message: string;
 }

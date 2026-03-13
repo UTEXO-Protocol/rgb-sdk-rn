@@ -3,8 +3,8 @@ package com.rgbsdkrn
 import android.util.Log
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.rgbtools.Online
-import org.rgbtools.Wallet
+import com.utexo.Online
+import com.utexo.Wallet
 
 data class WalletSession(
   val wallet: Wallet,

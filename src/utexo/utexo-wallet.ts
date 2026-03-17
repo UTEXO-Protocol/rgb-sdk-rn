@@ -64,6 +64,16 @@ export interface ConfigOptions {
   network?: Network;
 }
 
+function getVssConfigs(config: VssBackupConfigParams): {
+  layer1: VssBackupConfigParams;
+  utexo: VssBackupConfigParams;
+} {
+  return {
+    layer1: { ...config, storeId: `${config.storeId}_layer1` },
+    utexo: { ...config, storeId: `${config.storeId}_utexo` },
+  };
+}
+
 /**
  * UTEXOWallet - Combines standard RGB wallet operations with UTEXO protocol features.
  *
@@ -341,17 +351,22 @@ export class UTEXOWallet extends UTEXOProtocol implements IWalletManager, IUTEXO
     password: string;
   }): Promise<WalletBackupResponse> {
     this.ensureInitialized();
+    await this.layer1RGBWallet!.createBackup(params);
     return this.utexoRGBWallet!.createBackup(params);
   }
 
   async configureVssBackup(config: VssBackupConfigParams): Promise<void> {
     this.ensureInitialized();
-    return this.utexoRGBWallet!.configureVssBackup(config);
+    const { layer1, utexo } = getVssConfigs(config);
+    await this.layer1RGBWallet!.configureVssBackup(layer1);
+    await this.utexoRGBWallet!.configureVssBackup(utexo);
   }
 
   async vssBackup(config: VssBackupConfigParams): Promise<number> {
     this.ensureInitialized();
-    return this.utexoRGBWallet!.vssBackup(config);
+    const { layer1, utexo } = getVssConfigs(config);
+    await this.layer1RGBWallet!.vssBackup(layer1);
+    return this.utexoRGBWallet!.vssBackup(utexo);
   }
 
   async vssBackupInfo(config: VssBackupConfigParams): Promise<VssBackupInfo> {
@@ -361,7 +376,8 @@ export class UTEXOWallet extends UTEXOProtocol implements IWalletManager, IUTEXO
 
   async disableVssAutoBackup(): Promise<void> {
     this.ensureInitialized();
-    return this.utexoRGBWallet!.disableVssAutoBackup();
+    await this.layer1RGBWallet!.disableVssAutoBackup();
+    await this.utexoRGBWallet!.disableVssAutoBackup();
   }
 
   async signPsbt(psbt: string, mnemonic?: string): Promise<string> {

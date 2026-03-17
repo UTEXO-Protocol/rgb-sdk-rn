@@ -1035,7 +1035,7 @@ public class RgbSwiftHelper: NSObject {
     case .testnet4: networkString = "testnet4"
     case .regtest: networkString = "regtest"
     case .signet: networkString = "signet"
-    case .signetCustom: networkString = "signet"
+    case .signetCustom: networkString = "signetCustom"
     }
     
     let dbTypeString: String

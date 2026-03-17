@@ -61,3 +61,34 @@ export async function decodeInvoice(
 ): Promise<Interfaces.InvoiceData> {
   return Rgb.decodeInvoice(invoice) as Promise<Interfaces.InvoiceData>;
 }
+
+/**
+ * Restores a wallet from a VSS cloud backup into targetDir.
+ * This should be called before creating a Wallet instance (no wallet ID needed).
+ * @param config - VSS backup configuration (server URL, store ID, signing key hex, etc.)
+ * @param targetDir - Directory where the wallet data will be restored
+ * @returns Absolute path to the restored wallet directory
+ */
+export async function restoreFromVss(
+  config: {
+    serverUrl: string;
+    storeId: string;
+    signingKeyHex: string;
+    encryptionEnabled?: boolean;
+    autoBackup?: boolean;
+    backupMode?: 'Async' | 'Blocking';
+  },
+  targetDir: string
+): Promise<string> {
+  return Rgb.restoreFromVss(
+    {
+      serverUrl: config.serverUrl,
+      storeId: config.storeId,
+      signingKeyHex: config.signingKeyHex,
+      encryptionEnabled: config.encryptionEnabled ?? true,
+      autoBackup: config.autoBackup ?? false,
+      backupMode: config.backupMode ?? 'Async',
+    },
+    targetDir
+  );
+}

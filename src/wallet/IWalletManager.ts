@@ -43,6 +43,8 @@ import type {
   Transaction,
   Transfer,
   InvoiceData,
+  VssBackupConfigParams,
+  VssBackupInfo,
 } from '../types/rgb-model';
 import type { EstimateFeeResult, Network } from '../crypto';
 
@@ -414,6 +416,31 @@ export interface IWalletManager {
     backupPath: string;
     password: string;
   }): Promise<WalletBackupResponse>;
+
+  /**
+   * Configure automatic VSS cloud backup for the open wallet.
+   * @param config - VSS backup configuration
+   */
+  configureVssBackup(config: VssBackupConfigParams): Promise<void>;
+
+  /**
+   * Upload a VSS cloud backup of the current wallet state.
+   * @param config - VSS backup configuration
+   * @returns Server-side version number after successful upload
+   */
+  vssBackup(config: VssBackupConfigParams): Promise<number>;
+
+  /**
+   * Query the VSS server for this wallet's backup status.
+   * @param config - VSS backup configuration
+   * @returns Backup info: backupExists, serverVersion, backupRequired
+   */
+  vssBackupInfo(config: VssBackupConfigParams): Promise<VssBackupInfo>;
+
+  /**
+   * Disable automatic VSS backup for the open wallet.
+   */
+  disableVssAutoBackup(): Promise<void>;
 
   // ============================================
   // Cryptographic Operations

@@ -5,29 +5,23 @@ export {
   WalletManager,
   createWalletManager,
   restoreFromBackup,
-} from './wallet/index';
-export type { WalletInitParams } from './wallet/index';
+} from './wallet/wallet-manager';
+export type { WalletInitParams } from './wallet/wallet-manager';
 
-// Type exports
-export * from './types/rgb-model';
-export type {
-  Network,
-  PsbtType,
-  SignPsbtOptions,
-  NetworkVersions,
-  Descriptors,
-} from './crypto';
-export type { GeneratedKeys, AccountXpubs } from './crypto';
+// UTEXO module (Lightning + on-chain bridge transfers)
+export { UTEXOWallet } from './utexo/utexo-wallet';
+export type { ConfigOptions } from './utexo/utexo-wallet';
 
-// Function exports
+// Binding and signer (for advanced / testing use)
+export { RNRgbLibBinding } from './binding/RNRgbLibBinding';
+export { RNSigner } from './signer/RNSigner';
+
+// Crypto — PSBT signing (RN-specific, uses bdk-rn)
+export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';
+
+// Re-export everything consumers need from core
 export {
-  signPsbt,
-  signPsbtSync,
-  signPsbtFromSeed,
-  signMessage,
-  verifyMessage,
-} from './crypto';
-export {
+  // Key derivation
   generateKeys,
   deriveKeysFromMnemonic,
   deriveKeysFromSeed,
@@ -37,10 +31,10 @@ export {
   getXprivFromMnemonic,
   getXpubFromXpriv,
   deriveKeysFromXpriv,
-} from './crypto';
-
-// Error exports
-export {
+  // Message signing (pure @scure/*)
+  signMessage,
+  verifyMessage,
+  // Errors
   SDKError,
   NetworkError,
   ValidationError,
@@ -49,12 +43,10 @@ export {
   ConfigurationError,
   BadRequestError,
   NotFoundError,
-} from './errors';
-
-// Utility exports
-export { logger, configureLogging, LogLevel } from './utils/logger';
-// Environment utilities removed - React Native only
-export {
+  // Utils
+  logger,
+  configureLogging,
+  LogLevel,
   validateNetwork,
   normalizeNetwork,
   validateMnemonic,
@@ -63,34 +55,82 @@ export {
   validateHex,
   validateRequired,
   validateString,
-} from './utils/validation';
-// normalizeNetwork is exported from validation.ts above
-// network.ts is kept for backward compatibility but normalizeNetwork from validation.ts is preferred
+  isNetwork,
+  toUnitsNumber,
+  fromUnitsNumber,
+  // UTEXO network config
+  utexoNetworkMap,
+  utexoNetworkIdMap,
+  getDestinationAsset,
+  // Bridge API
+  getBridgeAPI,
+  encodeTransferStatus,
+  TransferStatuses,
+  // Interfaces / base classes
+  UTEXOProtocol,
+  LightningProtocol,
+  OnchainProtocol,
+  UTEXOWalletCore,
+  BaseWalletManager,
+} from '@utexo/rgb-sdk-core';
 
-// Constants exports
-export * from './constants';
-
-// Bridge utilities (for advanced users - Lightning and cross-network transfers)
-export { bridgeAPI } from './client/bridge';
 export type {
+  // Crypto types
+  Network,
+  PsbtType,
+  NetworkVersions,
+  Descriptors,
+  GeneratedKeys,
+  AccountXpubs,
+  // Wallet interfaces
+  IWalletManager,
+  IRgbLibBinding,
+  ISigner,
+  IUTEXOProtocol,
+  ILightningProtocol,
+  IOnchainProtocol,
+  // All model types
+  BtcBalance,
+  Unspent,
+  ListAssets,
+  AssetBalance,
+  AssetNIA,
+  CreateUtxosBeginRequestModel,
+  CreateUtxosEndRequestModel,
+  SendAssetBeginRequestModel,
+  SendAssetEndRequestModel,
+  SendResult,
+  SendBtcBeginRequestModel,
+  SendBtcEndRequestModel,
+  InvoiceRequest,
+  InvoiceReceiveData,
+  InvoiceData,
+  IssueAssetNiaRequestModel,
+  IssueAssetIfaRequestModel,
+  InflateAssetIfaRequestModel,
+  InflateEndRequestModel,
+  OperationResult,
+  Transaction,
+  Transfer,
+  FailTransfersRequest,
+  WalletBackupResponse,
+  TransferStatus,
+  OnchainSendStatus,
+  PublicKeys,
+  CreateLightningInvoiceRequestModel,
+  LightningReceiveRequest,
+  LightningSendRequest,
+  PayLightningInvoiceRequestModel,
+  OnchainSendRequestModel,
+  OnchainSendResponse,
+  OnchainSendEndRequestModel,
+  OnchainReceiveRequestModel,
+  OnchainReceiveResponse,
+  ListLightningPaymentsResponse,
+  GetFeeEstimationResponse,
+  // Bridge types
   NetworkAddress,
   BridgeInSignatureRequest,
   BridgeInSignatureResponse,
   TransferByMainnetInvoiceResponse,
-} from './client/bridge';
-
-// Unit conversion utilities
-export { toUnitsNumber, fromUnitsNumber } from './utils/units';
-
-// UTEXO module (Lightning + on-chain bridge transfers)
-export { UTEXOWallet, UTEXOProtocol, LightningProtocol, OnchainProtocol } from './utexo';
-export type { ConfigOptions, IUTEXOProtocol, ILightningProtocol, IOnchainProtocol } from './utexo';
-export type {
-  OnchainReceiveRequestModel,
-  OnchainReceiveResponse,
-  OnchainSendRequestModel,
-  OnchainSendEndRequestModel,
-  OnchainSendResponse,
-  GetOnchainSendResponse,
-  ListLightningPaymentsResponse,
-} from './types/rgb-model';
+} from '@utexo/rgb-sdk-core';

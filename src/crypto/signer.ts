@@ -423,7 +423,6 @@ export async function signMessage(params: SignMessageParams): Promise<string> {
   }
 
   const normalizedNetwork = normalizeNetwork(params.network ?? 'regtest');
-  const relativePath = DEFAULT_RELATIVE_PATH;
   const accountPath = accountDerivationPath(normalizedNetwork, false);
 
   const messageBytes = ensureMessageInput(message);
@@ -432,8 +431,7 @@ export async function signMessage(params: SignMessageParams): Promise<string> {
   const bip32 = bip32Factory();
 
   const root = bip32.fromSeed(normalizedSeed, versions);
-  const accountNode = root.derivePath(accountPath);
-  const child = accountNode.derivePath(relativePath);
+  const child = root.derivePath(`${accountPath}/${DEFAULT_RELATIVE_PATH}`);
   const privateKey = child.privateKey;
 
   if (!privateKey) {
@@ -466,7 +464,7 @@ export async function verifyMessage(
     throw new ValidationError('Invalid account xpub provided', 'accountXpub');
   }
 
-  const child = accountNode.derivePath(relativePath);
+  const child = accountNode.derivePath(`m/${relativePath}`);
   const pubkeyBuffer =
     child.publicKey instanceof Buffer
       ? child.publicKey

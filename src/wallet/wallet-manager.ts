@@ -28,6 +28,8 @@ import type {
   AssetIFA,
   Transaction,
   Transfer,
+  VssBackupConfigParams,
+  VssBackupInfo,
 } from '../types/rgb-model';
 
 import {
@@ -48,6 +50,7 @@ import {
   decodeInvoice,
   generateKeys,
   restoreBackup,
+  restoreFromVss as nativeRestoreFromVss,
 } from '../client/rgb-lib';
 import type { IWalletManager } from './IWalletManager';
 
@@ -76,6 +79,23 @@ export const restoreFromBackup = async (
   return {
     message: 'Wallet restored successfully',
   };
+};
+
+/**
+ * Restore a wallet from a VSS cloud backup into targetDir.
+ * This should be called before creating a WalletManager instance.
+ * @param config - VSS backup configuration (server URL, store ID, signing key, etc.)
+ * @param targetDir - Directory where the wallet will be restored
+ * @returns Absolute path to the restored wallet directory
+ */
+export const restoreFromVss = async (
+  config: VssBackupConfigParams,
+  targetDir: string
+): Promise<string> => {
+  if (!targetDir) {
+    throw new ValidationError('target directory is required', 'targetDir');
+  }
+  return nativeRestoreFromVss(config, targetDir);
 };
 
 /**
@@ -201,6 +221,18 @@ export class WalletManager implements IWalletManager {
 
   public async initialize(): Promise<void> {
     await this.client.goOnline(this.indexerUrl, false);
+  }
+
+  /**
+   * Register wallet and get initial address and BTC balance.
+   * Equivalent to calling getAddress() + getBtcBalance() in a single step.
+   */
+  public async registerWallet(): Promise<{ address: string; btcBalance: BtcBalance }> {
+    const [address, btcBalance] = await Promise.all([
+      this.getAddress(),
+      this.getBtcBalance(),
+    ]);
+    return { address, btcBalance };
   }
 
   public async goOnline(
@@ -532,11 +564,48 @@ export class WalletManager implements IWalletManager {
     backupPath: string;
     password: string;
   }): Promise<WalletBackupResponse> {
-    this.client.backup(params.backupPath, params.password);
+    await this.client.backup(params.backupPath, params.password);
     return {
       message: 'Backup created successfully',
       backupPath: params.backupPath,
     };
+  }
+
+  /**
+   * Configures automatic VSS cloud backup for the open wallet.
+   * @param config - VSS backup configuration
+   */
+  public async configureVssBackup(
+    config: VssBackupConfigParams
+  ): Promise<void> {
+    await this.client.configureVssBackup(config);
+  }
+
+  /**
+   * Uploads a VSS cloud backup of the current wallet state.
+   * @param config - VSS backup configuration
+   * @returns Server-side version number after successful upload
+   */
+  public async vssBackup(config: VssBackupConfigParams): Promise<number> {
+    return this.client.vssBackup(config);
+  }
+
+  /**
+   * Queries the VSS server for this wallet's backup status.
+   * @param config - VSS backup configuration
+   * @returns Backup info: backupExists, serverVersion, backupRequired
+   */
+  public async vssBackupInfo(
+    config: VssBackupConfigParams
+  ): Promise<VssBackupInfo> {
+    return this.client.vssBackupInfo(config);
+  }
+
+  /**
+   * Disables automatic VSS backup for the open wallet.
+   */
+  public async disableVssAutoBackup(): Promise<void> {
+    await this.client.disableVssAutoBackup();
   }
 
   /**
@@ -635,6 +704,27 @@ export class WalletManager implements IWalletManager {
     });
   }
 }
+
+/**
+ * Legacy singleton wallet instance for backward compatibility.
+ * @deprecated Use `new WalletManager(params)` or `createWalletManager(params)` instead.
+ *
+ * Accessing any property on this proxy before calling `createWalletManager` will throw.
+ */
+let _wallet: WalletManager | null = null;
+
+export const wallet = new Proxy({} as WalletManager, {
+  get(_target, prop) {
+    if (!_wallet) {
+      throw new WalletError(
+        'The legacy singleton wallet instance is not initialised. ' +
+          'Please use `new WalletManager(params)` or `createWalletManager(params)` instead.'
+      );
+    }
+    const value = (_wallet as any)[prop];
+    return typeof value === 'function' ? value.bind(_wallet) : value;
+  },
+});
 
 /**
  * Factory function to create a WalletManager instance

@@ -23,6 +23,30 @@ export interface WalletBackupResponse {
   backupPath: string;
 }
 
+export type VssBackupMode = 'Async' | 'Blocking';
+
+export interface VssBackupConfigParams {
+  serverUrl: string;
+  storeId: string;
+  /** 64-char hex string representing 32 raw bytes (secp256k1 secret key) */
+  signingKeyHex: string;
+  /** Whether to encrypt data before uploading. Default: true */
+  encryptionEnabled?: boolean;
+  /** Whether to automatically back up after state-changing operations. Default: false */
+  autoBackup?: boolean;
+  /** Whether auto-backup uploads block the caller or run asynchronously. Default: 'Async' */
+  backupMode?: VssBackupMode;
+}
+
+export interface VssBackupInfo {
+  /** Whether a backup exists on the server */
+  backupExists: boolean;
+  /** Server-side version of the backup */
+  serverVersion: number | null;
+  /** Whether the local wallet has changes since last backup */
+  backupRequired: boolean;
+}
+
 export interface WalletRestoreResponse {
   message: string;
 }
@@ -70,10 +94,9 @@ export interface SendAssetBeginRequestModel {
   witnessData?: WitnessData;
   assetId?: string;
   amount?: number;
-  // recipientMap: Record<string, Recipient[]>;
-  // donation?: boolean;            // default: false
-  feeRate?: number; // default: 1
-  minConfirmations?: number; // default: 1
+  donation?: boolean;
+  feeRate?: number;
+  minConfirmations?: number;
 }
 
 export interface SendAssetEndRequestModel {
@@ -482,3 +505,208 @@ export type Assignment = {
   type: AssignmentType;
   amount?: number;
 };
+
+/**
+ * UTEXO Protocol Types - Lightning Network and Cross-Network Transfers
+ */
+
+export interface LightningAsset {
+  /**
+   * RGB Asset ID
+   * @type {string}
+   * @memberof LightningAsset
+   */
+  assetId: string;
+
+  /**
+   * Amount in asset units
+   * @type {number}
+   * @memberof LightningAsset
+   */
+  amount: number;
+}
+
+/**
+ * Request model for creating Lightning invoice.
+ *
+ * @export
+ * @interface CreateLightningInvoiceRequestModel
+ */
+export interface CreateLightningInvoiceRequestModel {
+  /**
+   * Amount in satoshis (optional)
+   * @type {number}
+   * @memberof CreateLightningInvoiceRequestModel
+   */
+  amountSats?: number;
+
+  /**
+   * Asset to receive
+   * @type {LightningAsset}
+   * @memberof CreateLightningInvoiceRequestModel
+   */
+  asset: LightningAsset;
+
+  /**
+   * Invoice expiry time in seconds (optional)
+   * @type {number}
+   * @memberof CreateLightningInvoiceRequestModel
+   */
+  expirySeconds?: number;
+}
+
+/**
+ * Lightning receive request response
+ */
+export interface LightningReceiveRequest {
+  /** Lightning Network invoice string */
+  lnInvoice: string;
+  /** Expiration timestamp (optional) */
+  expiresAt?: number;
+  /** Request ID for tracking (optional) */
+  requestId?: string;
+}
+
+/**
+ * Lightning send request response
+ */
+export interface LightningSendRequest {
+  /** Transaction ID */
+  txid: string;
+  /** Transfer status */
+  status?: string;
+  /** Consignment endpoint (optional) */
+  consignmentEndpoint?: string;
+}
+
+/**
+ * Request model for getting Lightning send fee estimate
+ */
+export interface GetLightningSendFeeEstimateRequestModel {
+  /** Lightning invoice to pay */
+  invoice: string;
+  /** Asset ID (optional) */
+  assetId?: string;
+}
+
+/**
+ * Request model for paying Lightning invoice
+ */
+export interface PayLightningInvoiceRequestModel {
+  /** Lightning Network invoice string */
+  lnInvoice: string;
+  /** Amount to pay (optional, if not in invoice) */
+  amount?: number;
+  /** Asset ID to pay with (optional) */
+  assetId?: string;
+  /** Maximum fee in satoshis (optional) */
+  maxFee?: number;
+}
+
+/**
+ * Request model for completing Lightning invoice payment
+ */
+export interface PayLightningInvoiceEndRequestModel {
+  /** Signed PSBT */
+  signedPsbt: string;
+  /** Lightning invoice being paid */
+  lnInvoice: string;
+}
+
+/**
+ * Withdrawal (on-chain send) types
+ */
+
+/**
+ * Request model for withdrawing to Bitcoin L1
+ */
+export interface WithdrawBeginRequestModel {
+  /** Bitcoin address or RGB invoice */
+  address_or_rgbinvoice: string;
+  /** Amount in satoshis */
+  amount_sats: number;
+  /** Fee rate in sat/vB (optional) */
+  fee_rate?: number;
+  /** Asset ID to withdraw (optional, defaults to BTC) */
+  asset?: string;
+}
+
+/**
+ * Request model for completing withdrawal
+ */
+export interface WithdrawEndRequestModel {
+  /** Signed PSBT */
+  signed_psbt: string;
+}
+
+/**
+ * Withdrawal status response
+ */
+export interface WithdrawalStatus {
+  /** Current status */
+  status: 'pending' | 'completed' | 'failed';
+  /** Transaction ID (when completed) */
+  txid?: string;
+  /** Withdrawal ID */
+  withdrawalId?: string;
+  /** Error message (if failed) */
+  error?: string;
+}
+
+/**
+ * Onchain receive/send types (UTEXO bridge cross-network transfers)
+ */
+
+export interface OnchainReceiveRequestModel extends InvoiceRequest {
+  amount: number;
+  assetId: string;
+}
+
+export interface OnchainReceiveResponse {
+  /** Mainnet invoice */
+  invoice: string;
+}
+
+export interface OnchainSendRequestModel {
+  /** Mainnet RGB invoice */
+  invoice: string;
+  assetId?: string;
+  amount?: number;
+}
+
+export interface OnchainSendEndRequestModel {
+  /** Mainnet RGB invoice */
+  invoice: string;
+  signedPsbt: string;
+}
+
+export interface OnchainSendResponse extends SendResult {}
+
+export interface GetOnchainSendResponse {
+  sendId: string;
+  txid?: string;
+  status: string;
+  amount: number;
+  assetId?: string;
+  fee?: number;
+  createdAt: number;
+  completedAt?: number;
+}
+
+export interface ListLightningPaymentsResponse {
+  payments: LightningSendRequest[];
+}
+
+/**
+ * Public keys structure
+ */
+export interface PublicKeys {
+  /** Master extended public key */
+  xpub: string;
+  /** Vanilla (Bitcoin) account xpub */
+  accountXpubVanilla: string;
+  /** Colored (RGB) account xpub */
+  accountXpubColored: string;
+  /** Master key fingerprint */
+  masterFingerprint: string;
+}

@@ -476,6 +476,79 @@ export interface Spec extends TurboModule {
     batchTransferIdx: number;
   }>;
   decodeInvoice(invoice: string): Promise<InvoiceData>;
+
+  // ── VSS Backup methods ──────────────────────────────────────────────────────
+
+  /**
+   * Restores a wallet from a VSS cloud backup into targetDir.
+   * Returns the absolute path of the restored wallet directory.
+   */
+  restoreFromVss(
+    config: {
+      serverUrl: string;
+      storeId: string;
+      signingKeyHex: string;
+      encryptionEnabled: boolean;
+      autoBackup: boolean;
+      backupMode: string;
+    },
+    targetDir: string
+  ): Promise<string>;
+
+  /**
+   * Configures automatic VSS backup for an open wallet.
+   */
+  configureVssBackup(
+    walletId: number,
+    config: {
+      serverUrl: string;
+      storeId: string;
+      signingKeyHex: string;
+      encryptionEnabled: boolean;
+      autoBackup: boolean;
+      backupMode: string;
+    }
+  ): Promise<void>;
+
+  /**
+   * Uploads a VSS backup of the wallet state.
+   * Returns the server-side version number after successful upload.
+   */
+  vssBackup(
+    walletId: number,
+    config: {
+      serverUrl: string;
+      storeId: string;
+      signingKeyHex: string;
+      encryptionEnabled: boolean;
+      autoBackup: boolean;
+      backupMode: string;
+    }
+  ): Promise<number>;
+
+  /**
+   * Queries the VSS server for backup status.
+   */
+  vssBackupInfo(
+    walletId: number,
+    config: {
+      serverUrl: string;
+      storeId: string;
+      signingKeyHex: string;
+      encryptionEnabled: boolean;
+      autoBackup: boolean;
+      backupMode: string;
+    }
+  ): Promise<{
+    backupExists: boolean;
+    serverVersion: number | null;
+    backupRequired: boolean;
+  }>;
+
+  /**
+   * Disables automatic VSS backup for an open wallet.
+   */
+  disableVssAutoBackup(walletId: number): Promise<void>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Rgb');

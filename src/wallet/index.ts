@@ -6,8 +6,11 @@
  */
 
 export {
+  wallet,
   WalletManager,
   createWalletManager,
   createWallet,
+  restoreFromBackup,
+  restoreFromVss,
 } from './wallet-manager';
 export type { WalletInitParams } from './wallet-manager';

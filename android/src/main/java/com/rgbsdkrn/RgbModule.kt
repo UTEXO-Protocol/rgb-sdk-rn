@@ -12,22 +12,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.rgbtools.AssetSchema
-import org.rgbtools.Assignment
-import org.rgbtools.BitcoinNetwork
-import org.rgbtools.DatabaseType
-import org.rgbtools.RefreshFilter
-import org.rgbtools.Recipient
-import org.rgbtools.RefreshTransferStatus
-import org.rgbtools.Wallet
-import org.rgbtools.WalletData
-import org.rgbtools.WitnessData
-import org.rgbtools.generateKeys
-import org.rgbtools.restoreKeys
+import com.utexo.AssetSchema
+import com.utexo.Assignment
+import com.utexo.BitcoinNetwork
+import com.utexo.DatabaseType
+import com.utexo.RefreshFilter
+import com.utexo.Recipient
+import com.utexo.RefreshTransferStatus
+import com.utexo.Wallet
+import com.utexo.WalletData
+import com.utexo.WitnessData
+import com.utexo.generateKeys
+import com.utexo.restoreKeys
+import com.utexo.VssBackupConfig
+import com.utexo.VssBackupClient
+import com.utexo.VssBackupMode
+import com.utexo.restoreFromVss as nativeRestoreFromVss
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.ReadableType
-import org.rgbtools.Token
-import org.rgbtools.Invoice
+import com.utexo.Token
+import com.utexo.Invoice
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -76,11 +80,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
     coroutineScope.launch(Dispatchers.IO) {
       try {
         val network = when (bitcoinNetwork.lowercase()) {
-          "mainnet" -> BitcoinNetwork.MAINNET
-          "testnet" -> BitcoinNetwork.TESTNET
-          "testnet4" -> BitcoinNetwork.TESTNET4
-          "regtest" -> BitcoinNetwork.REGTEST
-          "signet" -> BitcoinNetwork.SIGNET
+          "mainnet" -> BitcoinNetwork.Mainnet
+          "testnet" -> BitcoinNetwork.Testnet
+          "testnet4" -> BitcoinNetwork.Testnet4
+          "regtest" -> BitcoinNetwork.Regtest
+          "signet" -> BitcoinNetwork.Signet
           else -> throw IllegalArgumentException("Unknown BitcoinNetwork: $bitcoinNetwork")
         }
 
@@ -102,11 +106,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
     coroutineScope.launch(Dispatchers.IO) {
       try {
         val network = when (bitcoinNetwork.lowercase()) {
-          "mainnet" -> BitcoinNetwork.MAINNET
-          "testnet" -> BitcoinNetwork.TESTNET
-          "testnet4" -> BitcoinNetwork.TESTNET4
-          "regtest" -> BitcoinNetwork.REGTEST
-          "signet" -> BitcoinNetwork.SIGNET
+          "mainnet" -> BitcoinNetwork.Mainnet
+          "testnet" -> BitcoinNetwork.Testnet
+          "testnet4" -> BitcoinNetwork.Testnet4
+          "regtest" -> BitcoinNetwork.Regtest
+          "signet" -> BitcoinNetwork.Signet
           else -> throw IllegalArgumentException("Unknown BitcoinNetwork: $bitcoinNetwork")
         }
         val keys = restoreKeys(bitcoinNetwork = network, mnemonic = mnemonic)
@@ -128,7 +132,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
       try {
         val rgbDir = AppConstants.rgbDir
           ?: throw IllegalStateException("RGB directory not initialized.")
-        org.rgbtools.restoreBackup(path, password, rgbDir.absolutePath)
+        com.utexo.restoreBackup(path, password, rgbDir.absolutePath)
 
         withContext(Dispatchers.Main) {
           promise.resolve(null)
@@ -187,11 +191,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
 
   private fun getNetwork(network: String): BitcoinNetwork {
     return when (network.lowercase()) {
-      "mainnet" -> BitcoinNetwork.MAINNET
-      "testnet" -> BitcoinNetwork.TESTNET
-      "testnet4" -> BitcoinNetwork.TESTNET4
-      "regtest" -> BitcoinNetwork.REGTEST
-      "signet" -> BitcoinNetwork.SIGNET
+      "mainnet" -> BitcoinNetwork.Mainnet
+      "testnet" -> BitcoinNetwork.Testnet
+      "testnet4" -> BitcoinNetwork.Testnet4
+      "regtest" -> BitcoinNetwork.Regtest
+      "signet" -> BitcoinNetwork.Signet
       else -> throw IllegalArgumentException("Unknown BitcoinNetwork: $network")
     }
   }
@@ -431,14 +435,14 @@ class RgbModule(reactContext: ReactApplicationContext) :
     return map
   }
 
-  private fun outpointToMap(outpoint: org.rgbtools.Outpoint): WritableMap {
+  private fun outpointToMap(outpoint: com.utexo.Outpoint): WritableMap {
     val map = Arguments.createMap()
     map.putString("txid", outpoint.txid)
     map.putDouble("vout", outpoint.vout.toDouble())
     return map
   }
 
-  private fun balanceToMap(balance: org.rgbtools.Balance): WritableMap {
+  private fun balanceToMap(balance: com.utexo.Balance): WritableMap {
     val map = Arguments.createMap()
     map.putDouble("settled", balance.settled.toDouble())
     map.putDouble("future", balance.future.toDouble())
@@ -446,7 +450,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     return map
   }
 
-  private fun assetCfaToMap(asset: org.rgbtools.AssetCfa): WritableMap {
+  private fun assetCfaToMap(asset: com.utexo.AssetCfa): WritableMap {
     val map = Arguments.createMap()
     map.putString("assetId", asset.assetId)
     map.putString("name", asset.name)
@@ -466,7 +470,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     return map
   }
 
-  private fun assetIfaToMap(asset: org.rgbtools.AssetIfa): WritableMap {
+  private fun assetIfaToMap(asset: com.utexo.AssetIfa): WritableMap {
     val map = Arguments.createMap()
     map.putString("assetId", asset.assetId)
     map.putString("ticker", asset.ticker)
@@ -490,7 +494,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     return map
   }
 
-  private fun assetNiaToMap(asset: org.rgbtools.AssetNia): WritableMap {
+  private fun assetNiaToMap(asset: com.utexo.AssetNia): WritableMap {
     val map = Arguments.createMap()
     map.putString("assetId", asset.assetId)
     map.putString("ticker", asset.ticker)
@@ -511,7 +515,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     return map
   }
 
-  private fun assetUdaToMap(asset: org.rgbtools.AssetUda): WritableMap {
+  private fun assetUdaToMap(asset: com.utexo.AssetUda): WritableMap {
     val map = Arguments.createMap()
     map.putString("assetId", asset.assetId)
     map.putString("ticker", asset.ticker)
@@ -553,14 +557,14 @@ class RgbModule(reactContext: ReactApplicationContext) :
     return map
   }
 
-  private fun operationResultToMap(result: org.rgbtools.OperationResult): WritableMap {
+  private fun operationResultToMap(result: com.utexo.OperationResult): WritableMap {
     val map = Arguments.createMap()
     map.putString("txid", result.txid)
     map.putInt("batchTransferIdx", result.batchTransferIdx)
     return map
   }
 
-  private fun receiveDataToMap(data: org.rgbtools.ReceiveData): WritableMap {
+  private fun receiveDataToMap(data: com.utexo.ReceiveData): WritableMap {
     val map = Arguments.createMap()
     map.putString("invoice", data.invoice)
     map.putString("recipientId", data.recipientId)
@@ -1101,11 +1105,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putString("dataDir", walletData.dataDir)
 
         val networkString = when (walletData.bitcoinNetwork) {
-          BitcoinNetwork.MAINNET -> "mainnet"
-          BitcoinNetwork.TESTNET -> "testnet"
-          BitcoinNetwork.TESTNET4 -> "testnet4"
-          BitcoinNetwork.REGTEST -> "regtest"
-          BitcoinNetwork.SIGNET -> "signet"
+          BitcoinNetwork.Mainnet -> "mainnet"
+          BitcoinNetwork.Testnet -> "testnet"
+          BitcoinNetwork.Testnet4 -> "testnet4"
+          BitcoinNetwork.Regtest -> "regtest"
+          BitcoinNetwork.Signet -> "signet"
           else -> {
             throw Exception("Unknown bitcoin network")
           }
@@ -1514,10 +1518,10 @@ class RgbModule(reactContext: ReactApplicationContext) :
         transactions.forEach { tx ->
           val txMap = Arguments.createMap()
           val txTypeString = when (tx.transactionType) {
-            org.rgbtools.TransactionType.RGB_SEND -> "RgbSend"
-            org.rgbtools.TransactionType.DRAIN -> "Drain"
-            org.rgbtools.TransactionType.CREATE_UTXOS -> "CreateUtxos"
-            org.rgbtools.TransactionType.USER -> "User"
+            com.utexo.TransactionType.RGB_SEND -> "RgbSend"
+            com.utexo.TransactionType.DRAIN -> "Drain"
+            com.utexo.TransactionType.CREATE_UTXOS -> "CreateUtxos"
+            com.utexo.TransactionType.USER -> "User"
           }
           txMap.putString("transactionType", txTypeString)
           txMap.putString("txid", tx.txid)
@@ -1563,19 +1567,19 @@ class RgbModule(reactContext: ReactApplicationContext) :
           transferMap.putDouble("updatedAt", transfer.updatedAt.toDouble())
 
           val kindString = when (transfer.kind) {
-            org.rgbtools.TransferKind.ISSUANCE -> "Issuance"
-            org.rgbtools.TransferKind.RECEIVE_BLIND -> "ReceiveBlind"
-            org.rgbtools.TransferKind.RECEIVE_WITNESS -> "ReceiveWitness"
-            org.rgbtools.TransferKind.SEND -> "Send"
-            org.rgbtools.TransferKind.INFLATION -> "Inflation"
+            com.utexo.TransferKind.ISSUANCE -> "Issuance"
+            com.utexo.TransferKind.RECEIVE_BLIND -> "ReceiveBlind"
+            com.utexo.TransferKind.RECEIVE_WITNESS -> "ReceiveWitness"
+            com.utexo.TransferKind.SEND -> "Send"
+            com.utexo.TransferKind.INFLATION -> "Inflation"
           }
           transferMap.putString("kind", kindString)
 
           val statusString = when (transfer.status) {
-            org.rgbtools.TransferStatus.WAITING_COUNTERPARTY -> "WaitingCounterparty"
-            org.rgbtools.TransferStatus.WAITING_CONFIRMATIONS -> "WaitingConfirmations"
-            org.rgbtools.TransferStatus.SETTLED -> "Settled"
-            org.rgbtools.TransferStatus.FAILED -> "Failed"
+            com.utexo.TransferStatus.WAITING_COUNTERPARTY -> "WaitingCounterparty"
+            com.utexo.TransferStatus.WAITING_CONFIRMATIONS -> "WaitingConfirmations"
+            com.utexo.TransferStatus.SETTLED -> "Settled"
+            com.utexo.TransferStatus.FAILED -> "Failed"
           }
           transferMap.putString("status", statusString)
 
@@ -1711,10 +1715,10 @@ class RgbModule(reactContext: ReactApplicationContext) :
           val refreshedMap = Arguments.createMap()
           refreshedTransfer.updatedStatus?.let { status ->
             val statusString = when (status) {
-              org.rgbtools.TransferStatus.WAITING_COUNTERPARTY -> "WaitingCounterparty"
-              org.rgbtools.TransferStatus.WAITING_CONFIRMATIONS -> "WaitingConfirmations"
-              org.rgbtools.TransferStatus.SETTLED -> "Settled"
-              org.rgbtools.TransferStatus.FAILED -> "Failed"
+              com.utexo.TransferStatus.WAITING_COUNTERPARTY -> "WaitingCounterparty"
+              com.utexo.TransferStatus.WAITING_CONFIRMATIONS -> "WaitingConfirmations"
+              com.utexo.TransferStatus.SETTLED -> "Settled"
+              com.utexo.TransferStatus.FAILED -> "Failed"
             }
             refreshedMap.putString("updatedStatus", statusString)
           }
@@ -2063,6 +2067,121 @@ class RgbModule(reactContext: ReactApplicationContext) :
         }
       } catch (e: Exception) {
         Log.e(TAG, "witnessReceive error: ${e.message}", e)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  // ── VSS Backup helpers ──────────────────────────────────────────────────────
+
+  private fun hexToUByteList(hex: String): List<UByte> =
+    hex.chunked(2).map { it.toInt(16).toUByte() }
+
+  private fun buildVssConfig(map: ReadableMap): VssBackupConfig {
+    val mode = when (map.getString("backupMode")?.lowercase()) {
+      "blocking" -> VssBackupMode.BLOCKING
+      else -> VssBackupMode.ASYNC
+    }
+    return VssBackupConfig(
+      serverUrl = map.getString("serverUrl")!!,
+      storeId = map.getString("storeId")!!,
+      signingKey = hexToUByteList(map.getString("signingKeyHex")!!),
+      encryptionEnabled = if (map.hasKey("encryptionEnabled")) map.getBoolean("encryptionEnabled") else true,
+      autoBackup = if (map.hasKey("autoBackup")) map.getBoolean("autoBackup") else false,
+      backupMode = mode
+    )
+  }
+
+  // ── VSS Backup @ReactMethod overrides ──────────────────────────────────────
+
+  override fun restoreFromVss(configMap: ReadableMap, targetDir: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val config = buildVssConfig(configMap)
+        val walletPath = nativeRestoreFromVss(config, targetDir)
+        resolvePromise(promise, walletPath)
+      } catch (e: Exception) {
+        Log.e(TAG, "restoreFromVss error: ${e.message}", e)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun configureVssBackup(walletId: Double, configMap: ReadableMap, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val session = WalletStore.get(walletId.toInt())
+          ?: throw IllegalStateException("Wallet with id $walletId not found")
+        val config = buildVssConfig(configMap)
+        session.wallet.configureVssBackup(config)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        Log.e(TAG, "configureVssBackup error: ${e.message}", e)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun vssBackup(walletId: Double, configMap: ReadableMap, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val session = WalletStore.get(walletId.toInt())
+          ?: throw IllegalStateException("Wallet with id $walletId not found")
+        val config = buildVssConfig(configMap)
+        val client = VssBackupClient(config)
+        val version = session.wallet.vssBackup(client)
+        withContext(Dispatchers.Main) { promise.resolve(version.toDouble()) }
+      } catch (e: Exception) {
+        Log.e(TAG, "vssBackup error: ${e.message}", e)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun vssBackupInfo(walletId: Double, configMap: ReadableMap, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val session = WalletStore.get(walletId.toInt())
+          ?: throw IllegalStateException("Wallet with id $walletId not found")
+        val config = buildVssConfig(configMap)
+        val client = VssBackupClient(config)
+        val info = session.wallet.vssBackupInfo(client)
+        val result = Arguments.createMap().apply {
+          putBoolean("backupExists", info.backupExists)
+          if (info.serverVersion != null) {
+            putDouble("serverVersion", info.serverVersion!!.toDouble())
+          } else {
+            putNull("serverVersion")
+          }
+          putBoolean("backupRequired", info.backupRequired)
+        }
+        withContext(Dispatchers.Main) { promise.resolve(result) }
+      } catch (e: Exception) {
+        Log.e(TAG, "vssBackupInfo error: ${e.message}", e)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun disableVssAutoBackup(walletId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val session = WalletStore.get(walletId.toInt())
+          ?: throw IllegalStateException("Wallet with id $walletId not found")
+        session.wallet.disableVssAutoBackup()
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        Log.e(TAG, "disableVssAutoBackup error: ${e.message}", e)
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }

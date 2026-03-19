@@ -64,8 +64,33 @@ With this SDK, developers can:
 | `estimateFeeRate(blocks)` | Get fee estimation for target block confirmation |
 | `estimateFee(psbtBase64)` | Estimate fee for a PSBT |
 | `decodeRGBInvoice({ invoice })` | Decode RGB invoice to transfer parameters |
-| `createBackup(password, backupPath)` | Create an encrypted wallet backup file |
-| `restoreFromBackup({ backupFilePath, password, dataDir })` | Restore wallet state from a backup file |
+| `createBackup({ backupPath, password })` | Create an encrypted wallet backup file |
+| `configureVssBackup(config)` | Configure automatic VSS cloud backup for the open wallet |
+| `vssBackup(config)` | Upload a VSS cloud backup of the current wallet state |
+| `vssBackupInfo(config)` | Query the VSS server for this wallet's backup status |
+| `disableVssAutoBackup()` | Disable automatic VSS backup for the open wallet |
+
+### Capabilities of `UTEXOWallet`
+
+`UTEXOWallet` extends `WalletManager` with UTEXO Bridge support for cross-network transfers. It implements both `IWalletManager` (all methods above) and `IUTEXOProtocol` (Lightning + Onchain methods below).
+
+| Method | Description |
+|--------|-------------|
+| **Lightning Network** | |
+| `createLightningInvoice({ asset })` | Create Lightning invoice for receiving BTC or asset payments |
+| `getLightningReceiveRequest(lnInvoice)` | Get status of a Lightning receive invoice |
+| `getLightningSendRequest(lnInvoice)` | Get status of a Lightning send payment |
+| `getLightningSendFeeEstimate({ invoice, assetId? })` | Estimate routing fee for Lightning invoice |
+| `payLightningInvoiceBegin({ lnInvoice, amount?, assetId? })` | Begin Lightning invoice payment (returns unsigned PSBT) |
+| `payLightningInvoiceEnd({ signedPsbt, lnInvoice })` | Complete Lightning invoice payment with signed PSBT |
+| `payLightningInvoice({ lnInvoice, amount?, assetId? }, mnemonic?)` | Pay Lightning invoice (complete flow: begin → sign → end) |
+| **Onchain (Bridge Transfers)** | |
+| `onchainReceive({ assetId, amount })` | Generate a mainnet invoice to receive assets via bridge into UTEXO |
+| `onchainSendBegin({ invoice, assetId?, amount? })` | Begin on-chain send from UTEXO to mainnet (returns unsigned PSBT) |
+| `onchainSendEnd({ signedPsbt, invoice })` | Complete on-chain send with signed PSBT |
+| `onchainSend({ invoice, assetId?, amount? }, mnemonic?)` | Send on-chain (complete flow: begin → sign → end) |
+| `getOnchainSendStatus(invoice)` | Get status of an on-chain send by its mainnet invoice |
+| `listOnchainTransfers(assetId?)` | List on-chain transfers for an asset (or all assets) |
 
 ### Standalone Functions (not WalletManager methods)
 
@@ -76,6 +101,8 @@ With this SDK, developers can:
 | `generateKeys(network)` | Generate new wallet keypair (same as createWallet) |
 | `deriveKeysFromMnemonic(network, mnemonic)` | Derive wallet keys (xpub) from existing mnemonic |
 | `deriveKeysFromSeed(network, seed)` | Derive wallet keys (xpub) directly from a BIP39 seed |
+| `restoreFromBackup({ backupFilePath, password, dataDir })` | Restore wallet state from an encrypted backup file |
+| `restoreFromVss(config, targetDir)` | Restore wallet state from VSS cloud backup |
 
 ---
 
@@ -97,6 +124,49 @@ This pattern enables advanced use cases, such as:
 - Applying custom fee logic or batching
 - Implementing compliance and audit tracking
 - Self-hosting indexer and transport services
+
+---
+
+## 🌉 UTEXO Bridge Integration
+
+**Lightning Network** and **Onchain bridge** features (available via `UTEXOWallet`) require the UTEXO Bridge API for cross-network transfers between Bitcoin L1, Lightning Network, and UTEXO layer.
+
+### Bridge Configuration
+
+- **Default endpoint**: `http://localhost:8081/`
+- **Configure URL**:
+  ```typescript
+  import { bridgeAPI } from '@utexo/rgb-sdk-rn';
+  
+  bridgeAPI.setBaseUrl('https://bridge.example.com');
+  ```
+
+### Requirements
+
+Lightning and onchain bridge methods depend on:
+- UTEXO Bridge API service running and accessible
+- Proper network configuration (mainnet, Lightning, UTEXO layer mappings)
+- Supported asset mappings across networks
+
+### Bridge-Dependent Methods
+
+The following `UTEXOWallet` methods require UTEXO Bridge API:
+
+**Lightning:**
+- `createLightningInvoice()` - Create Lightning invoices
+- `payLightningInvoice()` / `payLightningInvoiceBegin()` / `payLightningInvoiceEnd()` - Pay Lightning invoices
+- `getLightningReceiveRequest()` - Track Lightning receives
+- `getLightningSendRequest()` - Track Lightning sends
+
+**Onchain (cross-network):**
+- `onchainReceive()` - Receive assets via mainnet-to-UTEXO bridge
+- `onchainSend()` / `onchainSendBegin()` / `onchainSendEnd()` - Send assets via UTEXO-to-mainnet bridge
+- `getOnchainSendStatus()` - Track on-chain send status
+- `listOnchainTransfers()` - List on-chain transfers
+
+### Local-Only Methods
+
+All `WalletManager` methods (asset issuance, transfers, UTXO management, etc.) work without the bridge and run entirely locally using native `rgb-lib` bindings.
 
 ---
 
@@ -520,6 +590,119 @@ const isValid = await verifyMessage({
   accountXpub,
   network: 'testnet',
 });
+```
+
+### Backup and Restore
+
+> **Backup modes:** The SDK supports **local (file) backups** (encrypted files on disk) and **VSS backups** (state persisted to a remote Versioned Storage Service). The recommended strategy is to use VSS and invoke `vssBackup()` after any state-changing operation (e.g. UTXO creation, asset issuance, transfers) to ensure the latest state is recoverable.
+>
+> **Concurrency constraint:** Do **not** run restores while any wallet instance is online. At most one instance of a given wallet should ever be connected to the indexer/VSS; before calling any restore function, ensure all instances for that wallet are offline.
+
+#### File Backup
+
+```javascript
+import RNFS from 'react-native-fs';
+import { WalletManager, restoreFromBackup } from '@utexo/rgb-sdk-rn';
+
+// Create encrypted backup
+const backupPath = `${RNFS.DocumentDirectoryPath}/my-wallet.bak`;
+const password = 'secure-password';
+const backup = await wallet.createBackup({ backupPath, password });
+console.log('Backup created at:', backup.backupPath);
+
+// Restore from file backup
+const restoreDir = `${RNFS.DocumentDirectoryPath}/restored-wallet/`;
+const restoreResult = await restoreFromBackup({
+    backupFilePath: backupPath,
+    password,
+    dataDir: restoreDir,
+});
+
+// Open restored wallet
+const restoredWallet = new WalletManager({
+    xpubVan: keys.accountXpubVanilla,
+    xpubCol: keys.accountXpubColored,
+    masterFingerprint: keys.masterFingerprint,
+    mnemonic: keys.mnemonic,
+    network: 'testnet',
+    dataDir: restoreDir,
+});
+await restoredWallet.initialize();
+await restoredWallet.syncWallet();
+await restoredWallet.refreshWallet();
+
+// Verify restored state
+const balance = await restoredWallet.getBtcBalance();
+const assets = await restoredWallet.listAssets();
+console.log('Restored balance:', balance);
+console.log('Restored assets:', assets.nia?.length ?? 0, 'NIA');
+```
+
+#### VSS Cloud Backup
+
+```javascript
+import { WalletManager, restoreFromVss } from '@utexo/rgb-sdk-rn';
+
+const vssConfig = {
+    serverUrl: 'https://vss-server.utexo.com/vss',
+    storeId: `wallet_${keys.masterFingerprint}`,
+    signingKeyHex: '<64-char hex string>',     // secp256k1 secret key
+    encryptionEnabled: true,
+    autoBackup: false,
+    backupMode: 'Async',                        // 'Async' | 'Blocking'
+};
+
+// Upload backup to VSS
+const version = await wallet.vssBackup(vssConfig);
+console.log('VSS backup version:', version);
+
+// Check backup status
+const info = await wallet.vssBackupInfo(vssConfig);
+console.log('Backup exists:', info.backupExists);
+console.log('Server version:', info.serverVersion);
+console.log('Backup required:', info.backupRequired);
+
+// Enable auto-backup (uploads after every state-changing operation)
+await wallet.configureVssBackup({ ...vssConfig, autoBackup: true });
+
+// Disable auto-backup
+await wallet.disableVssAutoBackup();
+
+// Restore from VSS
+const vssRestoreDir = `${RNFS.DocumentDirectoryPath}/vss-restore/`;
+const restoredPath = await restoreFromVss(vssConfig, vssRestoreDir);
+
+const restoredWallet = new WalletManager({
+    xpubVan: keys.accountXpubVanilla,
+    xpubCol: keys.accountXpubColored,
+    masterFingerprint: keys.masterFingerprint,
+    mnemonic: keys.mnemonic,
+    network: 'testnet',
+    dataDir: restoredPath,
+});
+await restoredWallet.initialize();
+```
+
+---
+
+## Demo App
+
+A full working demo app is available at **[rgb-sdk-rn-demo](https://github.com/RGB-OS/rgb-sdk-rn-demo)**. It demonstrates the complete SDK functionality in an Expo/React Native application, including:
+
+- **Wallet flow**: Key generation, wallet initialization, UTXO creation, NIA/IFA asset issuance, blind/witness transfers, BTC sends, and backup/restore
+- **UTEXO flow**: Lightning Network payments (`createLightningInvoice`, `payLightningInvoice`) and on-chain bridge transfers (`onchainReceive`, `onchainSend`)
+- **VSS cloud backup flow**: Full lifecycle — upload backup, query status, configure auto-backup, restore from VSS, and verify restored state
+- **Key derivation**: `generateKeys`, `deriveKeysFromMnemonic`, `deriveKeysFromSeed`, `signMessage`/`verifyMessage`
+
+### Running the Demo
+
+```bash
+git clone https://github.com/RGB-OS/rgb-sdk-rn-demo.git
+cd rgb-sdk-rn-demo
+npm install
+npm run prebuild
+cd ios && LANG=en_US.UTF-8 pod install && cd ..
+npm run ios:release    # or npm run android:release
 ```
 
 ---

@@ -1741,6 +1741,198 @@ minConfirmations:(double)minConfirmations
     });
 }
 
+- (void)configureVssBackup:(double)walletId
+                    config:(JS::NativeRgb::SpecConfigureVssBackupConfig &)config
+                   resolve:(RCTPromiseResolveBlock)resolve
+                    reject:(RCTPromiseRejectBlock)reject
+{
+    __weak Rgb *weakSelf = self;
+    RCTPromiseResolveBlock strongResolve = resolve;
+    RCTPromiseRejectBlock strongReject = reject;
+    NSNumber *strongWalletId = @(walletId);
+    NSString *strongServerUrl = [config.serverUrl() copy];
+    NSString *strongStoreId = [config.storeId() copy];
+    NSString *strongSigningKeyHex = [config.signingKeyHex() copy];
+    BOOL strongEncryptionEnabled = config.encryptionEnabled();
+    BOOL strongAutoBackup = config.autoBackup();
+    NSString *strongBackupMode = [config.backupMode() copy];
+
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _configureVssBackup:strongWalletId
+                                                         serverUrl:strongServerUrl
+                                                           storeId:strongStoreId
+                                                     signingKeyHex:strongSigningKeyHex
+                                                 encryptionEnabled:strongEncryptionEnabled
+                                                        autoBackup:strongAutoBackup
+                                                        backupMode:strongBackupMode];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            NSString *errorCode = result[@"errorCode"] ?: @"CONFIGURE_VSS_BACKUP_ERROR";
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (strongReject) {
+                    strongReject(errorCode, errorMessage, nil);
+                }
+            });
+        } else {
+            __strong Rgb *strongSelf = weakSelf;
+            if (strongSelf && strongResolve) {
+                [strongSelf resolvePromise:strongResolve withResult:nil];
+            }
+        }
+    });
+}
+
+- (void)vssBackup:(double)walletId
+           config:(JS::NativeRgb::SpecVssBackupConfig &)config
+          resolve:(RCTPromiseResolveBlock)resolve
+           reject:(RCTPromiseRejectBlock)reject
+{
+    __weak Rgb *weakSelf = self;
+    RCTPromiseResolveBlock strongResolve = resolve;
+    RCTPromiseRejectBlock strongReject = reject;
+    NSNumber *strongWalletId = @(walletId);
+    NSString *strongServerUrl = [config.serverUrl() copy];
+    NSString *strongStoreId = [config.storeId() copy];
+    NSString *strongSigningKeyHex = [config.signingKeyHex() copy];
+    BOOL strongEncryptionEnabled = config.encryptionEnabled();
+    BOOL strongAutoBackup = config.autoBackup();
+    NSString *strongBackupMode = [config.backupMode() copy];
+
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _vssBackup:strongWalletId
+                                               serverUrl:strongServerUrl
+                                                 storeId:strongStoreId
+                                           signingKeyHex:strongSigningKeyHex
+                                       encryptionEnabled:strongEncryptionEnabled
+                                              autoBackup:strongAutoBackup
+                                              backupMode:strongBackupMode];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            NSString *errorCode = result[@"errorCode"] ?: @"VSS_BACKUP_ERROR";
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (strongReject) {
+                    strongReject(errorCode, errorMessage, nil);
+                }
+            });
+        } else {
+            __strong Rgb *strongSelf = weakSelf;
+            if (strongSelf && strongResolve) {
+                [strongSelf resolvePromise:strongResolve withResult:result[@"version"]];
+            }
+        }
+    });
+}
+
+- (void)vssBackupInfo:(double)walletId
+               config:(JS::NativeRgb::SpecVssBackupInfoConfig &)config
+              resolve:(RCTPromiseResolveBlock)resolve
+               reject:(RCTPromiseRejectBlock)reject
+{
+    __weak Rgb *weakSelf = self;
+    RCTPromiseResolveBlock strongResolve = resolve;
+    RCTPromiseRejectBlock strongReject = reject;
+    NSNumber *strongWalletId = @(walletId);
+    NSString *strongServerUrl = [config.serverUrl() copy];
+    NSString *strongStoreId = [config.storeId() copy];
+    NSString *strongSigningKeyHex = [config.signingKeyHex() copy];
+    BOOL strongEncryptionEnabled = config.encryptionEnabled();
+    BOOL strongAutoBackup = config.autoBackup();
+    NSString *strongBackupMode = [config.backupMode() copy];
+
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _vssBackupInfo:strongWalletId
+                                                    serverUrl:strongServerUrl
+                                                      storeId:strongStoreId
+                                                signingKeyHex:strongSigningKeyHex
+                                            encryptionEnabled:strongEncryptionEnabled
+                                                   autoBackup:strongAutoBackup
+                                                   backupMode:strongBackupMode];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            NSString *errorCode = result[@"errorCode"] ?: @"VSS_BACKUP_INFO_ERROR";
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (strongReject) {
+                    strongReject(errorCode, errorMessage, nil);
+                }
+            });
+        } else {
+            __strong Rgb *strongSelf = weakSelf;
+            if (strongSelf && strongResolve) {
+                [strongSelf resolvePromise:strongResolve withResult:result];
+            }
+        }
+    });
+}
+
+- (void)disableVssAutoBackup:(double)walletId
+                     resolve:(RCTPromiseResolveBlock)resolve
+                      reject:(RCTPromiseRejectBlock)reject
+{
+    __weak Rgb *weakSelf = self;
+    RCTPromiseResolveBlock strongResolve = resolve;
+    RCTPromiseRejectBlock strongReject = reject;
+    NSNumber *strongWalletId = @(walletId);
+
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _disableVssAutoBackup:strongWalletId];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            NSString *errorCode = result[@"errorCode"] ?: @"DISABLE_VSS_AUTO_BACKUP_ERROR";
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (strongReject) {
+                    strongReject(errorCode, errorMessage, nil);
+                }
+            });
+        } else {
+            __strong Rgb *strongSelf = weakSelf;
+            if (strongSelf && strongResolve) {
+                [strongSelf resolvePromise:strongResolve withResult:nil];
+            }
+        }
+    });
+}
+
+- (void)restoreFromVss:(JS::NativeRgb::SpecRestoreFromVssConfig &)config
+             targetDir:(NSString *)targetDir
+               resolve:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject
+{
+    __weak Rgb *weakSelf = self;
+    RCTPromiseResolveBlock strongResolve = resolve;
+    RCTPromiseRejectBlock strongReject = reject;
+    NSString *strongServerUrl = [config.serverUrl() copy];
+    NSString *strongStoreId = [config.storeId() copy];
+    NSString *strongSigningKeyHex = [config.signingKeyHex() copy];
+    BOOL strongEncryptionEnabled = config.encryptionEnabled();
+    BOOL strongAutoBackup = config.autoBackup();
+    NSString *strongBackupMode = [config.backupMode() copy];
+    NSString *strongTargetDir = [targetDir copy];
+
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _restoreFromVss:strongServerUrl
+                                                       storeId:strongStoreId
+                                                 signingKeyHex:strongSigningKeyHex
+                                             encryptionEnabled:strongEncryptionEnabled
+                                                    autoBackup:strongAutoBackup
+                                                    backupMode:strongBackupMode
+                                                     targetDir:strongTargetDir];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            NSString *errorCode = result[@"errorCode"] ?: @"RESTORE_FROM_VSS_ERROR";
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (strongReject) {
+                    strongReject(errorCode, errorMessage, nil);
+                }
+            });
+        } else {
+            __strong Rgb *strongSelf = weakSelf;
+            if (strongSelf && strongResolve) {
+                [strongSelf resolvePromise:strongResolve withResult:result[@"path"]];
+            }
+        }
+    });
+}
+
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {

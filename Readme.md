@@ -64,8 +64,11 @@ With this SDK, developers can:
 | `estimateFeeRate(blocks)` | Get fee estimation for target block confirmation |
 | `estimateFee(psbtBase64)` | Estimate fee for a PSBT |
 | `decodeRGBInvoice({ invoice })` | Decode RGB invoice to transfer parameters |
-| `createBackup(password, backupPath)` | Create an encrypted wallet backup file |
-| `restoreFromBackup({ backupFilePath, password, dataDir })` | Restore wallet state from a backup file |
+| `createBackup({ backupPath, password })` | Create an encrypted wallet backup file |
+| `configureVssBackup(config)` | Configure automatic VSS cloud backup for the open wallet |
+| `vssBackup(config)` | Upload a VSS cloud backup of the current wallet state |
+| `vssBackupInfo(config)` | Query the VSS server for this wallet's backup status |
+| `disableVssAutoBackup()` | Disable automatic VSS backup for the open wallet |
 
 ### Capabilities of `UTEXOWallet`
 
@@ -98,6 +101,8 @@ With this SDK, developers can:
 | `generateKeys(network)` | Generate new wallet keypair (same as createWallet) |
 | `deriveKeysFromMnemonic(network, mnemonic)` | Derive wallet keys (xpub) from existing mnemonic |
 | `deriveKeysFromSeed(network, seed)` | Derive wallet keys (xpub) directly from a BIP39 seed |
+| `restoreFromBackup({ backupFilePath, password, dataDir })` | Restore wallet state from an encrypted backup file |
+| `restoreFromVss(config, targetDir)` | Restore wallet state from VSS cloud backup |
 
 ---
 
@@ -587,6 +592,118 @@ const isValid = await verifyMessage({
 });
 ```
 
+### Backup and Restore
+
+> **Backup modes:** The SDK supports **local (file) backups** (encrypted files on disk) and **VSS backups** (state persisted to a remote Versioned Storage Service). The recommended strategy is to use VSS and invoke `vssBackup()` after any state-changing operation (e.g. UTXO creation, asset issuance, transfers) to ensure the latest state is recoverable.
+>
+> **Concurrency constraint:** Do **not** run restores while any wallet instance is online. At most one instance of a given wallet should ever be connected to the indexer/VSS; before calling any restore function, ensure all instances for that wallet are offline.
+
+#### File Backup
+
+```javascript
+import RNFS from 'react-native-fs';
+import { WalletManager, restoreFromBackup } from '@utexo/rgb-sdk-rn';
+
+// Create encrypted backup
+const backupPath = `${RNFS.DocumentDirectoryPath}/my-wallet.bak`;
+const password = 'secure-password';
+const backup = await wallet.createBackup({ backupPath, password });
+console.log('Backup created at:', backup.backupPath);
+
+// Restore from file backup
+const restoreDir = `${RNFS.DocumentDirectoryPath}/restored-wallet/`;
+const restoreResult = await restoreFromBackup({
+    backupFilePath: backupPath,
+    password,
+    dataDir: restoreDir,
+});
+
+// Open restored wallet
+const restoredWallet = new WalletManager({
+    xpubVan: keys.accountXpubVanilla,
+    xpubCol: keys.accountXpubColored,
+    masterFingerprint: keys.masterFingerprint,
+    mnemonic: keys.mnemonic,
+    network: 'testnet',
+    dataDir: restoreDir,
+});
+await restoredWallet.initialize();
+await restoredWallet.syncWallet();
+await restoredWallet.refreshWallet();
+
+// Verify restored state
+const balance = await restoredWallet.getBtcBalance();
+const assets = await restoredWallet.listAssets();
+console.log('Restored balance:', balance);
+console.log('Restored assets:', assets.nia?.length ?? 0, 'NIA');
+```
+
+#### VSS Cloud Backup
+
+```javascript
+import { WalletManager, restoreFromVss } from '@utexo/rgb-sdk-rn';
+
+const vssConfig = {
+    serverUrl: 'https://vss-server.utexo.com/vss',
+    storeId: `wallet_${keys.masterFingerprint}`,
+    signingKeyHex: '<64-char hex string>',     // secp256k1 secret key
+    encryptionEnabled: true,
+    autoBackup: false,
+    backupMode: 'Async',                        // 'Async' | 'Blocking'
+};
+
+// Upload backup to VSS
+const version = await wallet.vssBackup(vssConfig);
+console.log('VSS backup version:', version);
+
+// Check backup status
+const info = await wallet.vssBackupInfo(vssConfig);
+console.log('Backup exists:', info.backupExists);
+console.log('Server version:', info.serverVersion);
+console.log('Backup required:', info.backupRequired);
+
+// Enable auto-backup (uploads after every state-changing operation)
+await wallet.configureVssBackup({ ...vssConfig, autoBackup: true });
+
+// Disable auto-backup
+await wallet.disableVssAutoBackup();
+
+// Restore from VSS
+const vssRestoreDir = `${RNFS.DocumentDirectoryPath}/vss-restore/`;
+const restoredPath = await restoreFromVss(vssConfig, vssRestoreDir);
+
+const restoredWallet = new WalletManager({
+    xpubVan: keys.accountXpubVanilla,
+    xpubCol: keys.accountXpubColored,
+    masterFingerprint: keys.masterFingerprint,
+    mnemonic: keys.mnemonic,
+    network: 'testnet',
+    dataDir: restoredPath,
+});
+await restoredWallet.initialize();
+```
+
 ---
 
+## Demo App
+
+A full working demo app is available at **[rgb-sdk-rn-demo](https://github.com/RGB-OS/rgb-sdk-rn-demo)**. It demonstrates the complete SDK functionality in an Expo/React Native application, including:
+
+- **Wallet flow**: Key generation, wallet initialization, UTXO creation, NIA/IFA asset issuance, blind/witness transfers, BTC sends, and backup/restore
+- **UTEXO flow**: Lightning Network payments (`createLightningInvoice`, `payLightningInvoice`) and on-chain bridge transfers (`onchainReceive`, `onchainSend`)
+- **VSS cloud backup flow**: Full lifecycle — upload backup, query status, configure auto-backup, restore from VSS, and verify restored state
+- **Key derivation**: `generateKeys`, `deriveKeysFromMnemonic`, `deriveKeysFromSeed`, `signMessage`/`verifyMessage`
+
+### Running the Demo
+
+```bash
+git clone https://github.com/RGB-OS/rgb-sdk-rn-demo.git
+cd rgb-sdk-rn-demo
+npm install
+npm run prebuild
+cd ios && LANG=en_US.UTF-8 pod install && cd ..
+npm run ios:release    # or npm run android:release
+```
+
+---
 

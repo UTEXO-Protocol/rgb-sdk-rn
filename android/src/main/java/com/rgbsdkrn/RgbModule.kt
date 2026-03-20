@@ -165,7 +165,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putString("assetId", invoiceData.assetId)
         map.putMap("assignment", assignmentToMap(invoiceData.assignment))
         map.putString("assignmentName", invoiceData.assignmentName)
-        map.putString("network", invoiceData.network.toString())
+        map.putString("network", networkToString(invoiceData.network))
         val transportEndpointsArray = Arguments.createArray()
         invoiceData.transportEndpoints.forEach {
           transportEndpointsArray.pushString(it)
@@ -197,6 +197,17 @@ class RgbModule(reactContext: ReactApplicationContext) :
       "regtest" -> BitcoinNetwork.Regtest
       "signet" -> BitcoinNetwork.Signet
       else -> throw IllegalArgumentException("Unknown BitcoinNetwork: $network")
+    }
+  }
+
+  private fun networkToString(network: BitcoinNetwork): String {
+    return when (network) {
+      BitcoinNetwork.Mainnet -> "mainnet"
+      BitcoinNetwork.Testnet -> "testnet"
+      BitcoinNetwork.Testnet4 -> "testnet4"
+      BitcoinNetwork.Regtest -> "regtest"
+      BitcoinNetwork.Signet -> "signet"
+      else -> "regtest"
     }
   }
 

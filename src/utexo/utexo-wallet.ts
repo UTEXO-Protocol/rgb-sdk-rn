@@ -5,7 +5,7 @@
  * the platform-specific initialize() that creates WalletManager instances
  * backed by the RN TurboModule binding.
  */
-import { UTEXOWalletCore, getVssConfigs, utexoNetworkMap } from '@utexo/rgb-sdk-core';
+import { UTEXOWalletCore, getVssConfigs } from '@utexo/rgb-sdk-core';
 import type { ConfigOptions, VssBackupConfig, VssBackupInfo } from '@utexo/rgb-sdk-core';
 import { WalletManager } from '../wallet/wallet-manager';
 
@@ -13,13 +13,10 @@ export type { ConfigOptions };
 
 export class UTEXOWallet extends UTEXOWalletCore {
   async initialize(): Promise<void> {
-    const layer1Keys = await this.derivePublicKeys(utexoNetworkMap.mainnet);
-    const utexoKeys = await this.derivePublicKeys(utexoNetworkMap.utexo);
+    const layer1Keys = await this.derivePublicKeys(this.networkMap.mainnet);
+    const utexoKeys = await this.derivePublicKeys(this.networkMap.utexo);
 
     const commonParams = {
-      xpubCol: utexoKeys.accountXpubColored,
-      masterFingerprint: utexoKeys.masterFingerprint,
-      network: utexoNetworkMap.utexo,
       ...(this.mnemonicOrSeed instanceof Uint8Array
         ? { seed: this.mnemonicOrSeed }
         : { mnemonic: this.mnemonicOrSeed }),
@@ -27,17 +24,18 @@ export class UTEXOWallet extends UTEXOWalletCore {
 
     this.utexoWallet = new WalletManager({
       xpubVan: utexoKeys.accountXpubVanilla,
+      xpubCol: utexoKeys.accountXpubColored,
+      masterFingerprint: utexoKeys.masterFingerprint,
+      network: this.networkMap.utexo,
       ...commonParams,
     });
 
     this.layer1Wallet = new WalletManager({
       xpubVan: layer1Keys.accountXpubVanilla,
-      xpubCol: layer1Keys.accountXpubVanilla,
+      xpubCol: layer1Keys.accountXpubColored,
       masterFingerprint: layer1Keys.masterFingerprint,
-      network: utexoNetworkMap.mainnet,
-      ...(this.mnemonicOrSeed instanceof Uint8Array
-        ? { seed: this.mnemonicOrSeed }
-        : { mnemonic: this.mnemonicOrSeed }),
+      network: this.networkMap.mainnet,
+      ...commonParams,
     });
   }
   

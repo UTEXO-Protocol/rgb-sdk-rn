@@ -45,32 +45,8 @@ import type {
   RecipientMap,
   AssignmentType,
 } from '@utexo/rgb-sdk-core';
-import type { Keys, BitcoinNetwork as RNBitcoinNetwork } from './Interfaces';
+import type { Keys } from './Interfaces';
 import { DEFAULT_INDEXER_URLS, DEFAULT_TRANSPORT_ENDPOINTS } from '@utexo/rgb-sdk-core';
-
-// ── Standalone functions (mirrors NodeRgbLibBinding exports) ─────────────────
-
-export async function generateKeys(network: RNBitcoinNetwork): Promise<Keys> {
-  return Rgb.generateKeys(network);
-}
-
-export async function restoreKeys(
-  network: RNBitcoinNetwork,
-  mnemonic: string
-): Promise<Keys> {
-  return Rgb.restoreKeys(network, mnemonic);
-}
-
-export async function restoreBackup(
-  path: string,
-  password: string
-): Promise<void> {
-  return Rgb.restoreBackup(path, password);
-}
-
-export async function decodeInvoice(invoice: string): Promise<InvoiceData> {
-  return Rgb.decodeInvoice(invoice) as unknown as InvoiceData;
-}
 
 // ── RNRgbLibBinding ──────────────────────────────────────────────────────────
 
@@ -439,19 +415,64 @@ export class RNRgbLibBinding implements IRgbLibBinding {
     };
   }
 
-  configureVssBackup(_config: VssBackupConfig): void {
-    throw new WalletError('VSS backup is not supported in React Native.');
+  /**
+   * Configures automatic VSS cloud backup for this wallet.
+   * After calling this, the wallet will automatically upload a backup after state-changing operations
+   * when autoBackup is enabled in the config.
+   * @param config - VSS backup configuration
+   */
+  async configureVssBackup(config: VssBackupConfig): Promise<void> {
+    await this.ensureInitialized();
+    await Rgb.configureVssBackup(this.id(), {
+      serverUrl: config.serverUrl,
+      storeId: config.storeId,
+      signingKeyHex: config.signingKey,
+      encryptionEnabled: config.encryptionEnabled ?? true,
+      autoBackup: config.autoBackup ?? false,
+      backupMode: config.backupMode ?? 'Async',
+    });
   }
 
-  disableVssAutoBackup(): void {
-    throw new WalletError('VSS backup is not supported in React Native.');
+  /**
+   * Uploads a VSS cloud backup of the current wallet state.
+   * @param config - VSS backup configuration
+   * @returns Server-side version number after successful upload
+   */
+  async vssBackup(config: VssBackupConfig): Promise<number> {
+    await this.ensureInitialized();
+    return await Rgb.vssBackup(this.id(), {
+      serverUrl: config.serverUrl,
+      storeId: config.storeId,
+      signingKeyHex: config.signingKey,
+      encryptionEnabled: config.encryptionEnabled ?? true,
+      autoBackup: config.autoBackup ?? false,
+      backupMode: config.backupMode ?? 'Async',
+    });
   }
 
-  async vssBackup(_config: VssBackupConfig): Promise<number> {
-    throw new WalletError('VSS backup is not supported in React Native.');
+  /**
+   * Queries the VSS server for this wallet's backup status.
+   * @param config - VSS backup configuration
+   * @returns Backup info including whether a backup exists, server version, and if backup is required
+   */
+  async vssBackupInfo(config: VssBackupConfig): Promise<VssBackupInfo> {
+    await this.ensureInitialized();
+    return await Rgb.vssBackupInfo(this.id(), {
+      serverUrl: config.serverUrl,
+      storeId: config.storeId,
+      signingKeyHex: config.signingKey,
+      encryptionEnabled: config.encryptionEnabled ?? true,
+      autoBackup: config.autoBackup ?? false,
+      backupMode: config.backupMode ?? 'Async',
+    });
   }
 
-  async vssBackupInfo(_config: VssBackupConfig): Promise<VssBackupInfo> {
-    throw new WalletError('VSS backup is not supported in React Native.');
+  /**
+   * Disables automatic VSS backup for this wallet.
+   * Manual backup via vssBackup() still works after calling this.
+   */
+  async disableVssAutoBackup(): Promise<void> {
+    await this.ensureInitialized();
+    await Rgb.disableVssAutoBackup(this.id());
   }
 }

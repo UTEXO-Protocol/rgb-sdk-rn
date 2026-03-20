@@ -1107,6 +1107,144 @@ public func FfiConverterTypeTransportEndpoint_lower(_ value: TransportEndpoint) 
 
 
 
+public protocol VssBackupClientProtocol: AnyObject, Sendable {
+    
+    func deleteBackup() throws 
+    
+    func encryptionEnabled()  -> Bool
+    
+}
+open class VssBackupClient: VssBackupClientProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_rgblibuniffi_fn_clone_vssbackupclient(self.pointer, $0) }
+    }
+public convenience init(config: VssBackupConfig)throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
+    uniffi_rgblibuniffi_fn_constructor_vssbackupclient_new(
+        FfiConverterTypeVssBackupConfig_lower(config),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_rgblibuniffi_fn_free_vssbackupclient(pointer, $0) }
+    }
+
+    
+
+    
+open func deleteBackup()throws   {try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
+    uniffi_rgblibuniffi_fn_method_vssbackupclient_delete_backup(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
+open func encryptionEnabled() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_rgblibuniffi_fn_method_vssbackupclient_encryption_enabled(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVssBackupClient: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = VssBackupClient
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> VssBackupClient {
+        return VssBackupClient(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: VssBackupClient) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VssBackupClient {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: VssBackupClient, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVssBackupClient_lift(_ pointer: UnsafeMutableRawPointer) throws -> VssBackupClient {
+    return try FfiConverterTypeVssBackupClient.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVssBackupClient_lower(_ value: VssBackupClient) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeVssBackupClient.lower(value)
+}
+
+
+
+
+
+
 public protocol WalletProtocol: AnyObject, Sendable {
     
     func backup(backupPath: String, password: String) throws 
@@ -1115,6 +1253,8 @@ public protocol WalletProtocol: AnyObject, Sendable {
     
     func blindReceive(assetId: String?, assignment: Assignment, durationSeconds: UInt32?, transportEndpoints: [String], minConfirmations: UInt8) throws  -> ReceiveData
     
+    func configureVssBackup(config: VssBackupConfig) throws 
+    
     func createUtxos(online: Online, upTo: Bool, num: UInt8?, size: UInt32?, feeRate: UInt64, skipSync: Bool) throws  -> UInt8
     
     func createUtxosBegin(online: Online, upTo: Bool, num: UInt8?, size: UInt32?, feeRate: UInt64, skipSync: Bool) throws  -> String
@@ -1122,6 +1262,8 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func createUtxosEnd(online: Online, signedPsbt: String, skipSync: Bool) throws  -> UInt8
     
     func deleteTransfers(batchTransferIdx: Int32?, noAssetOnly: Bool) throws  -> Bool
+    
+    func disableVssAutoBackup() 
     
     func drainTo(online: Online, address: String, destroyAssets: Bool, feeRate: UInt64) throws  -> String
     
@@ -1190,6 +1332,10 @@ public protocol WalletProtocol: AnyObject, Sendable {
     func signPsbt(unsignedPsbt: String) throws  -> String
     
     func sync(online: Online) throws 
+    
+    func vssBackup(client: VssBackupClient) throws  -> Int64
+    
+    func vssBackupInfo(client: VssBackupClient) throws  -> VssBackupInfo
     
     func witnessReceive(assetId: String?, assignment: Assignment, durationSeconds: UInt32?, transportEndpoints: [String], minConfirmations: UInt8) throws  -> ReceiveData
     
@@ -1281,6 +1427,13 @@ open func blindReceive(assetId: String?, assignment: Assignment, durationSeconds
 })
 }
     
+open func configureVssBackup(config: VssBackupConfig)throws   {try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
+    uniffi_rgblibuniffi_fn_method_wallet_configure_vss_backup(self.uniffiClonePointer(),
+        FfiConverterTypeVssBackupConfig_lower(config),$0
+    )
+}
+}
+    
 open func createUtxos(online: Online, upTo: Bool, num: UInt8?, size: UInt32?, feeRate: UInt64, skipSync: Bool)throws  -> UInt8  {
     return try  FfiConverterUInt8.lift(try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
     uniffi_rgblibuniffi_fn_method_wallet_create_utxos(self.uniffiClonePointer(),
@@ -1324,6 +1477,12 @@ open func deleteTransfers(batchTransferIdx: Int32?, noAssetOnly: Bool)throws  ->
         FfiConverterBool.lower(noAssetOnly),$0
     )
 })
+}
+    
+open func disableVssAutoBackup()  {try! rustCall() {
+    uniffi_rgblibuniffi_fn_method_wallet_disable_vss_auto_backup(self.uniffiClonePointer(),$0
+    )
+}
 }
     
 open func drainTo(online: Online, address: String, destroyAssets: Bool, feeRate: UInt64)throws  -> String  {
@@ -1658,6 +1817,22 @@ open func sync(online: Online)throws   {try rustCallWithError(FfiConverterTypeRg
         FfiConverterTypeOnline_lower(online),$0
     )
 }
+}
+    
+open func vssBackup(client: VssBackupClient)throws  -> Int64  {
+    return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
+    uniffi_rgblibuniffi_fn_method_wallet_vss_backup(self.uniffiClonePointer(),
+        FfiConverterTypeVssBackupClient_lower(client),$0
+    )
+})
+}
+    
+open func vssBackupInfo(client: VssBackupClient)throws  -> VssBackupInfo  {
+    return try  FfiConverterTypeVssBackupInfo_lift(try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
+    uniffi_rgblibuniffi_fn_method_wallet_vss_backup_info(self.uniffiClonePointer(),
+        FfiConverterTypeVssBackupClient_lower(client),$0
+    )
+})
 }
     
 open func witnessReceive(assetId: String?, assignment: Assignment, durationSeconds: UInt32?, transportEndpoints: [String], minConfirmations: UInt8)throws  -> ReceiveData  {
@@ -2155,11 +2330,12 @@ public struct AssetUda {
     public var timestamp: Int64
     public var addedAt: Int64
     public var balance: Balance
+    public var media: Media?
     public var token: TokenLight?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(assetId: String, ticker: String, name: String, details: String?, precision: UInt8, timestamp: Int64, addedAt: Int64, balance: Balance, token: TokenLight?) {
+    public init(assetId: String, ticker: String, name: String, details: String?, precision: UInt8, timestamp: Int64, addedAt: Int64, balance: Balance, media: Media?, token: TokenLight?) {
         self.assetId = assetId
         self.ticker = ticker
         self.name = name
@@ -2168,6 +2344,7 @@ public struct AssetUda {
         self.timestamp = timestamp
         self.addedAt = addedAt
         self.balance = balance
+        self.media = media
         self.token = token
     }
 }
@@ -2203,6 +2380,9 @@ extension AssetUda: Equatable, Hashable {
         if lhs.balance != rhs.balance {
             return false
         }
+        if lhs.media != rhs.media {
+            return false
+        }
         if lhs.token != rhs.token {
             return false
         }
@@ -2218,6 +2398,7 @@ extension AssetUda: Equatable, Hashable {
         hasher.combine(timestamp)
         hasher.combine(addedAt)
         hasher.combine(balance)
+        hasher.combine(media)
         hasher.combine(token)
     }
 }
@@ -2239,6 +2420,7 @@ public struct FfiConverterTypeAssetUDA: FfiConverterRustBuffer {
                 timestamp: FfiConverterInt64.read(from: &buf), 
                 addedAt: FfiConverterInt64.read(from: &buf), 
                 balance: FfiConverterTypeBalance.read(from: &buf), 
+                media: FfiConverterOptionTypeMedia.read(from: &buf), 
                 token: FfiConverterOptionTypeTokenLight.read(from: &buf)
         )
     }
@@ -2252,6 +2434,7 @@ public struct FfiConverterTypeAssetUDA: FfiConverterRustBuffer {
         FfiConverterInt64.write(value.timestamp, into: &buf)
         FfiConverterInt64.write(value.addedAt, into: &buf)
         FfiConverterTypeBalance.write(value.balance, into: &buf)
+        FfiConverterOptionTypeMedia.write(value.media, into: &buf)
         FfiConverterOptionTypeTokenLight.write(value.token, into: &buf)
     }
 }
@@ -4596,6 +4779,186 @@ public func FfiConverterTypeUtxo_lower(_ value: Utxo) -> RustBuffer {
 }
 
 
+public struct VssBackupConfig {
+    public var serverUrl: String
+    public var storeId: String
+    public var signingKey: [UInt8]
+    public var encryptionEnabled: Bool
+    public var autoBackup: Bool
+    public var backupMode: VssBackupMode
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(serverUrl: String, storeId: String, signingKey: [UInt8], encryptionEnabled: Bool, autoBackup: Bool, backupMode: VssBackupMode) {
+        self.serverUrl = serverUrl
+        self.storeId = storeId
+        self.signingKey = signingKey
+        self.encryptionEnabled = encryptionEnabled
+        self.autoBackup = autoBackup
+        self.backupMode = backupMode
+    }
+}
+
+#if compiler(>=6)
+extension VssBackupConfig: Sendable {}
+#endif
+
+
+extension VssBackupConfig: Equatable, Hashable {
+    public static func ==(lhs: VssBackupConfig, rhs: VssBackupConfig) -> Bool {
+        if lhs.serverUrl != rhs.serverUrl {
+            return false
+        }
+        if lhs.storeId != rhs.storeId {
+            return false
+        }
+        if lhs.signingKey != rhs.signingKey {
+            return false
+        }
+        if lhs.encryptionEnabled != rhs.encryptionEnabled {
+            return false
+        }
+        if lhs.autoBackup != rhs.autoBackup {
+            return false
+        }
+        if lhs.backupMode != rhs.backupMode {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(serverUrl)
+        hasher.combine(storeId)
+        hasher.combine(signingKey)
+        hasher.combine(encryptionEnabled)
+        hasher.combine(autoBackup)
+        hasher.combine(backupMode)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVssBackupConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VssBackupConfig {
+        return
+            try VssBackupConfig(
+                serverUrl: FfiConverterString.read(from: &buf), 
+                storeId: FfiConverterString.read(from: &buf), 
+                signingKey: FfiConverterSequenceUInt8.read(from: &buf), 
+                encryptionEnabled: FfiConverterBool.read(from: &buf), 
+                autoBackup: FfiConverterBool.read(from: &buf), 
+                backupMode: FfiConverterTypeVssBackupMode.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VssBackupConfig, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.serverUrl, into: &buf)
+        FfiConverterString.write(value.storeId, into: &buf)
+        FfiConverterSequenceUInt8.write(value.signingKey, into: &buf)
+        FfiConverterBool.write(value.encryptionEnabled, into: &buf)
+        FfiConverterBool.write(value.autoBackup, into: &buf)
+        FfiConverterTypeVssBackupMode.write(value.backupMode, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVssBackupConfig_lift(_ buf: RustBuffer) throws -> VssBackupConfig {
+    return try FfiConverterTypeVssBackupConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVssBackupConfig_lower(_ value: VssBackupConfig) -> RustBuffer {
+    return FfiConverterTypeVssBackupConfig.lower(value)
+}
+
+
+public struct VssBackupInfo {
+    public var backupExists: Bool
+    public var serverVersion: Int64?
+    public var backupRequired: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(backupExists: Bool, serverVersion: Int64?, backupRequired: Bool) {
+        self.backupExists = backupExists
+        self.serverVersion = serverVersion
+        self.backupRequired = backupRequired
+    }
+}
+
+#if compiler(>=6)
+extension VssBackupInfo: Sendable {}
+#endif
+
+
+extension VssBackupInfo: Equatable, Hashable {
+    public static func ==(lhs: VssBackupInfo, rhs: VssBackupInfo) -> Bool {
+        if lhs.backupExists != rhs.backupExists {
+            return false
+        }
+        if lhs.serverVersion != rhs.serverVersion {
+            return false
+        }
+        if lhs.backupRequired != rhs.backupRequired {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(backupExists)
+        hasher.combine(serverVersion)
+        hasher.combine(backupRequired)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVssBackupInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VssBackupInfo {
+        return
+            try VssBackupInfo(
+                backupExists: FfiConverterBool.read(from: &buf), 
+                serverVersion: FfiConverterOptionInt64.read(from: &buf), 
+                backupRequired: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VssBackupInfo, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.backupExists, into: &buf)
+        FfiConverterOptionInt64.write(value.serverVersion, into: &buf)
+        FfiConverterBool.write(value.backupRequired, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVssBackupInfo_lift(_ buf: RustBuffer) throws -> VssBackupInfo {
+    return try FfiConverterTypeVssBackupInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVssBackupInfo_lower(_ value: VssBackupInfo) -> RustBuffer {
+    return FfiConverterTypeVssBackupInfo.lower(value)
+}
+
+
 public struct WalletData {
     public var dataDir: String
     public var bitcoinNetwork: BitcoinNetwork
@@ -4990,6 +5353,8 @@ public enum BitcoinNetwork {
     case testnet4
     case signet
     case regtest
+    case signetCustom(genesisHash: [UInt8]
+    )
 }
 
 
@@ -5016,6 +5381,9 @@ public struct FfiConverterTypeBitcoinNetwork: FfiConverterRustBuffer {
         case 4: return .signet
         
         case 5: return .regtest
+        
+        case 6: return .signetCustom(genesisHash: try FfiConverterSequenceUInt8.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -5044,6 +5412,11 @@ public struct FfiConverterTypeBitcoinNetwork: FfiConverterRustBuffer {
         case .regtest:
             writeInt(&buf, Int32(5))
         
+        
+        case let .signetCustom(genesisHash):
+            writeInt(&buf, Int32(6))
+            FfiConverterSequenceUInt8.write(genesisHash, into: &buf)
+            
         }
     }
 }
@@ -5319,8 +5692,6 @@ public enum RgbLibError: Swift.Error {
     case InvalidAddress(details: String
     )
     case InvalidAmountZero
-    case InvalidAssetId(assetId: String
-    )
     case InvalidAssignment
     case InvalidAttachments(details: String
     )
@@ -5407,6 +5778,13 @@ public enum RgbLibError: Swift.Error {
     case UnsupportedSchema(assetSchema: AssetSchema
     )
     case UnsupportedTransportType
+    case VssAuth(details: String
+    )
+    case VssBackupNotFound
+    case VssError(details: String
+    )
+    case VssVersionConflict(details: String
+    )
     case WalletDirAlreadyExists(path: String
     )
     case WatchOnly
@@ -5483,132 +5861,139 @@ public struct FfiConverterTypeRgbLibError: FfiConverterRustBuffer {
             details: try FfiConverterString.read(from: &buf)
             )
         case 26: return .InvalidAmountZero
-        case 27: return .InvalidAssetId(
-            assetId: try FfiConverterString.read(from: &buf)
-            )
-        case 28: return .InvalidAssignment
-        case 29: return .InvalidAttachments(
+        case 27: return .InvalidAssignment
+        case 28: return .InvalidAttachments(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 30: return .InvalidBitcoinKeys
-        case 31: return .InvalidBitcoinNetwork(
+        case 29: return .InvalidBitcoinKeys
+        case 30: return .InvalidBitcoinNetwork(
             network: try FfiConverterString.read(from: &buf)
             )
-        case 32: return .InvalidColoringInfo(
+        case 31: return .InvalidColoringInfo(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 33: return .InvalidConsignment
-        case 34: return .InvalidDetails(
+        case 32: return .InvalidConsignment
+        case 33: return .InvalidDetails(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 35: return .InvalidElectrum(
+        case 34: return .InvalidElectrum(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 36: return .InvalidEstimationBlocks
-        case 37: return .InvalidFeeRate(
+        case 35: return .InvalidEstimationBlocks
+        case 36: return .InvalidFeeRate(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 38: return .InvalidFilePath(
+        case 37: return .InvalidFilePath(
             filePath: try FfiConverterString.read(from: &buf)
             )
-        case 39: return .InvalidFingerprint
-        case 40: return .InvalidIndexer(
+        case 38: return .InvalidFingerprint
+        case 39: return .InvalidIndexer(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 41: return .InvalidInvoice(
+        case 40: return .InvalidInvoice(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 42: return .InvalidMnemonic(
+        case 41: return .InvalidMnemonic(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 43: return .InvalidName(
+        case 42: return .InvalidName(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 44: return .InvalidPrecision(
+        case 43: return .InvalidPrecision(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 45: return .InvalidProxyProtocol(
+        case 44: return .InvalidProxyProtocol(
             version: try FfiConverterString.read(from: &buf)
             )
-        case 46: return .InvalidPsbt(
+        case 45: return .InvalidPsbt(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 47: return .InvalidPubkey(
+        case 46: return .InvalidPubkey(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 48: return .InvalidRecipientData(
+        case 47: return .InvalidRecipientData(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 49: return .InvalidRecipientId
-        case 50: return .InvalidRecipientNetwork
-        case 51: return .InvalidRejectListUrl(
+        case 48: return .InvalidRecipientId
+        case 49: return .InvalidRecipientNetwork
+        case 50: return .InvalidRejectListUrl(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 52: return .InvalidTicker(
+        case 51: return .InvalidTicker(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 53: return .InvalidTransportEndpoint(
+        case 52: return .InvalidTransportEndpoint(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 54: return .InvalidTransportEndpoints(
+        case 53: return .InvalidTransportEndpoints(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 55: return .InvalidTxid
-        case 56: return .InvalidVanillaKeychain
-        case 57: return .MaxFeeExceeded(
+        case 54: return .InvalidTxid
+        case 55: return .InvalidVanillaKeychain
+        case 56: return .MaxFeeExceeded(
             txid: try FfiConverterString.read(from: &buf)
             )
-        case 58: return .MinFeeNotMet(
+        case 57: return .MinFeeNotMet(
             txid: try FfiConverterString.read(from: &buf)
             )
-        case 59: return .Network(
+        case 58: return .Network(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 60: return .NoConsignment
-        case 61: return .NoInflationAmounts
-        case 62: return .NoIssuanceAmounts
-        case 63: return .NoSupportedSchemas
-        case 64: return .NoValidTransportEndpoint
-        case 65: return .Offline
-        case 66: return .OnlineNeeded
-        case 67: return .OutputBelowDustLimit
-        case 68: return .Proxy(
+        case 59: return .NoConsignment
+        case 60: return .NoInflationAmounts
+        case 61: return .NoIssuanceAmounts
+        case 62: return .NoSupportedSchemas
+        case 63: return .NoValidTransportEndpoint
+        case 64: return .Offline
+        case 65: return .OnlineNeeded
+        case 66: return .OutputBelowDustLimit
+        case 67: return .Proxy(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 69: return .RecipientIdAlreadyUsed
-        case 70: return .RecipientIdDuplicated
-        case 71: return .RejectListService(
+        case 68: return .RecipientIdAlreadyUsed
+        case 69: return .RecipientIdDuplicated
+        case 70: return .RejectListService(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 72: return .RestClientBuild(
+        case 71: return .RestClientBuild(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 73: return .TooHighInflationAmounts
-        case 74: return .TooHighIssuanceAmounts
-        case 75: return .UnknownRgbSchema(
+        case 72: return .TooHighInflationAmounts
+        case 73: return .TooHighIssuanceAmounts
+        case 74: return .UnknownRgbSchema(
             schemaId: try FfiConverterString.read(from: &buf)
             )
-        case 76: return .UnknownTransfer(
+        case 75: return .UnknownTransfer(
             txid: try FfiConverterString.read(from: &buf)
             )
-        case 77: return .UnsupportedBackupVersion(
+        case 76: return .UnsupportedBackupVersion(
             version: try FfiConverterString.read(from: &buf)
             )
-        case 78: return .UnsupportedInflation(
+        case 77: return .UnsupportedInflation(
             assetSchema: try FfiConverterTypeAssetSchema.read(from: &buf)
             )
-        case 79: return .UnsupportedLayer1(
+        case 78: return .UnsupportedLayer1(
             layer1: try FfiConverterString.read(from: &buf)
             )
-        case 80: return .UnsupportedSchema(
+        case 79: return .UnsupportedSchema(
             assetSchema: try FfiConverterTypeAssetSchema.read(from: &buf)
             )
-        case 81: return .UnsupportedTransportType
-        case 82: return .WalletDirAlreadyExists(
+        case 80: return .UnsupportedTransportType
+        case 81: return .VssAuth(
+            details: try FfiConverterString.read(from: &buf)
+            )
+        case 82: return .VssBackupNotFound
+        case 83: return .VssError(
+            details: try FfiConverterString.read(from: &buf)
+            )
+        case 84: return .VssVersionConflict(
+            details: try FfiConverterString.read(from: &buf)
+            )
+        case 85: return .WalletDirAlreadyExists(
             path: try FfiConverterString.read(from: &buf)
             )
-        case 83: return .WatchOnly
-        case 84: return .WrongPassword
+        case 86: return .WatchOnly
+        case 87: return .WrongPassword
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -5741,270 +6126,284 @@ public struct FfiConverterTypeRgbLibError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(26))
         
         
-        case let .InvalidAssetId(assetId):
-            writeInt(&buf, Int32(27))
-            FfiConverterString.write(assetId, into: &buf)
-            
-        
         case .InvalidAssignment:
-            writeInt(&buf, Int32(28))
+            writeInt(&buf, Int32(27))
         
         
         case let .InvalidAttachments(details):
-            writeInt(&buf, Int32(29))
+            writeInt(&buf, Int32(28))
             FfiConverterString.write(details, into: &buf)
             
         
         case .InvalidBitcoinKeys:
-            writeInt(&buf, Int32(30))
+            writeInt(&buf, Int32(29))
         
         
         case let .InvalidBitcoinNetwork(network):
-            writeInt(&buf, Int32(31))
+            writeInt(&buf, Int32(30))
             FfiConverterString.write(network, into: &buf)
             
         
         case let .InvalidColoringInfo(details):
-            writeInt(&buf, Int32(32))
+            writeInt(&buf, Int32(31))
             FfiConverterString.write(details, into: &buf)
             
         
         case .InvalidConsignment:
-            writeInt(&buf, Int32(33))
+            writeInt(&buf, Int32(32))
         
         
         case let .InvalidDetails(details):
-            writeInt(&buf, Int32(34))
+            writeInt(&buf, Int32(33))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidElectrum(details):
-            writeInt(&buf, Int32(35))
+            writeInt(&buf, Int32(34))
             FfiConverterString.write(details, into: &buf)
             
         
         case .InvalidEstimationBlocks:
-            writeInt(&buf, Int32(36))
+            writeInt(&buf, Int32(35))
         
         
         case let .InvalidFeeRate(details):
-            writeInt(&buf, Int32(37))
+            writeInt(&buf, Int32(36))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidFilePath(filePath):
-            writeInt(&buf, Int32(38))
+            writeInt(&buf, Int32(37))
             FfiConverterString.write(filePath, into: &buf)
             
         
         case .InvalidFingerprint:
-            writeInt(&buf, Int32(39))
+            writeInt(&buf, Int32(38))
         
         
         case let .InvalidIndexer(details):
-            writeInt(&buf, Int32(40))
+            writeInt(&buf, Int32(39))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidInvoice(details):
-            writeInt(&buf, Int32(41))
+            writeInt(&buf, Int32(40))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidMnemonic(details):
-            writeInt(&buf, Int32(42))
+            writeInt(&buf, Int32(41))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidName(details):
-            writeInt(&buf, Int32(43))
+            writeInt(&buf, Int32(42))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidPrecision(details):
-            writeInt(&buf, Int32(44))
+            writeInt(&buf, Int32(43))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidProxyProtocol(version):
-            writeInt(&buf, Int32(45))
+            writeInt(&buf, Int32(44))
             FfiConverterString.write(version, into: &buf)
             
         
         case let .InvalidPsbt(details):
-            writeInt(&buf, Int32(46))
+            writeInt(&buf, Int32(45))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidPubkey(details):
-            writeInt(&buf, Int32(47))
+            writeInt(&buf, Int32(46))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidRecipientData(details):
-            writeInt(&buf, Int32(48))
+            writeInt(&buf, Int32(47))
             FfiConverterString.write(details, into: &buf)
             
         
         case .InvalidRecipientId:
-            writeInt(&buf, Int32(49))
+            writeInt(&buf, Int32(48))
         
         
         case .InvalidRecipientNetwork:
-            writeInt(&buf, Int32(50))
+            writeInt(&buf, Int32(49))
         
         
         case let .InvalidRejectListUrl(details):
-            writeInt(&buf, Int32(51))
+            writeInt(&buf, Int32(50))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidTicker(details):
-            writeInt(&buf, Int32(52))
+            writeInt(&buf, Int32(51))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidTransportEndpoint(details):
-            writeInt(&buf, Int32(53))
+            writeInt(&buf, Int32(52))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .InvalidTransportEndpoints(details):
-            writeInt(&buf, Int32(54))
+            writeInt(&buf, Int32(53))
             FfiConverterString.write(details, into: &buf)
             
         
         case .InvalidTxid:
-            writeInt(&buf, Int32(55))
+            writeInt(&buf, Int32(54))
         
         
         case .InvalidVanillaKeychain:
-            writeInt(&buf, Int32(56))
+            writeInt(&buf, Int32(55))
         
         
         case let .MaxFeeExceeded(txid):
-            writeInt(&buf, Int32(57))
+            writeInt(&buf, Int32(56))
             FfiConverterString.write(txid, into: &buf)
             
         
         case let .MinFeeNotMet(txid):
-            writeInt(&buf, Int32(58))
+            writeInt(&buf, Int32(57))
             FfiConverterString.write(txid, into: &buf)
             
         
         case let .Network(details):
-            writeInt(&buf, Int32(59))
+            writeInt(&buf, Int32(58))
             FfiConverterString.write(details, into: &buf)
             
         
         case .NoConsignment:
-            writeInt(&buf, Int32(60))
+            writeInt(&buf, Int32(59))
         
         
         case .NoInflationAmounts:
-            writeInt(&buf, Int32(61))
+            writeInt(&buf, Int32(60))
         
         
         case .NoIssuanceAmounts:
-            writeInt(&buf, Int32(62))
+            writeInt(&buf, Int32(61))
         
         
         case .NoSupportedSchemas:
-            writeInt(&buf, Int32(63))
+            writeInt(&buf, Int32(62))
         
         
         case .NoValidTransportEndpoint:
-            writeInt(&buf, Int32(64))
+            writeInt(&buf, Int32(63))
         
         
         case .Offline:
-            writeInt(&buf, Int32(65))
+            writeInt(&buf, Int32(64))
         
         
         case .OnlineNeeded:
-            writeInt(&buf, Int32(66))
+            writeInt(&buf, Int32(65))
         
         
         case .OutputBelowDustLimit:
-            writeInt(&buf, Int32(67))
+            writeInt(&buf, Int32(66))
         
         
         case let .Proxy(details):
-            writeInt(&buf, Int32(68))
+            writeInt(&buf, Int32(67))
             FfiConverterString.write(details, into: &buf)
             
         
         case .RecipientIdAlreadyUsed:
-            writeInt(&buf, Int32(69))
+            writeInt(&buf, Int32(68))
         
         
         case .RecipientIdDuplicated:
-            writeInt(&buf, Int32(70))
+            writeInt(&buf, Int32(69))
         
         
         case let .RejectListService(details):
-            writeInt(&buf, Int32(71))
+            writeInt(&buf, Int32(70))
             FfiConverterString.write(details, into: &buf)
             
         
         case let .RestClientBuild(details):
-            writeInt(&buf, Int32(72))
+            writeInt(&buf, Int32(71))
             FfiConverterString.write(details, into: &buf)
             
         
         case .TooHighInflationAmounts:
-            writeInt(&buf, Int32(73))
+            writeInt(&buf, Int32(72))
         
         
         case .TooHighIssuanceAmounts:
-            writeInt(&buf, Int32(74))
+            writeInt(&buf, Int32(73))
         
         
         case let .UnknownRgbSchema(schemaId):
-            writeInt(&buf, Int32(75))
+            writeInt(&buf, Int32(74))
             FfiConverterString.write(schemaId, into: &buf)
             
         
         case let .UnknownTransfer(txid):
-            writeInt(&buf, Int32(76))
+            writeInt(&buf, Int32(75))
             FfiConverterString.write(txid, into: &buf)
             
         
         case let .UnsupportedBackupVersion(version):
-            writeInt(&buf, Int32(77))
+            writeInt(&buf, Int32(76))
             FfiConverterString.write(version, into: &buf)
             
         
         case let .UnsupportedInflation(assetSchema):
-            writeInt(&buf, Int32(78))
+            writeInt(&buf, Int32(77))
             FfiConverterTypeAssetSchema.write(assetSchema, into: &buf)
             
         
         case let .UnsupportedLayer1(layer1):
-            writeInt(&buf, Int32(79))
+            writeInt(&buf, Int32(78))
             FfiConverterString.write(layer1, into: &buf)
             
         
         case let .UnsupportedSchema(assetSchema):
-            writeInt(&buf, Int32(80))
+            writeInt(&buf, Int32(79))
             FfiConverterTypeAssetSchema.write(assetSchema, into: &buf)
             
         
         case .UnsupportedTransportType:
-            writeInt(&buf, Int32(81))
+            writeInt(&buf, Int32(80))
         
+        
+        case let .VssAuth(details):
+            writeInt(&buf, Int32(81))
+            FfiConverterString.write(details, into: &buf)
+            
+        
+        case .VssBackupNotFound:
+            writeInt(&buf, Int32(82))
+        
+        
+        case let .VssError(details):
+            writeInt(&buf, Int32(83))
+            FfiConverterString.write(details, into: &buf)
+            
+        
+        case let .VssVersionConflict(details):
+            writeInt(&buf, Int32(84))
+            FfiConverterString.write(details, into: &buf)
+            
         
         case let .WalletDirAlreadyExists(path):
-            writeInt(&buf, Int32(82))
+            writeInt(&buf, Int32(85))
             FfiConverterString.write(path, into: &buf)
             
         
         case .WatchOnly:
-            writeInt(&buf, Int32(83))
+            writeInt(&buf, Int32(86))
         
         
         case .WrongPassword:
-            writeInt(&buf, Int32(84))
+            writeInt(&buf, Int32(87))
         
         }
     }
@@ -6356,6 +6755,76 @@ public func FfiConverterTypeTransportType_lower(_ value: TransportType) -> RustB
 
 
 extension TransportType: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum VssBackupMode {
+    
+    case async
+    case blocking
+}
+
+
+#if compiler(>=6)
+extension VssBackupMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVssBackupMode: FfiConverterRustBuffer {
+    typealias SwiftType = VssBackupMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VssBackupMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .async
+        
+        case 2: return .blocking
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: VssBackupMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .async:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .blocking:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVssBackupMode_lift(_ buf: RustBuffer) throws -> VssBackupMode {
+    return try FfiConverterTypeVssBackupMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVssBackupMode_lower(_ value: VssBackupMode) -> RustBuffer {
+    return FfiConverterTypeVssBackupMode.lower(value)
+}
+
+
+extension VssBackupMode: Equatable, Hashable {}
 
 
 
@@ -7391,8 +7860,8 @@ fileprivate struct FfiConverterDictionaryStringSequenceTypeRecipient: FfiConvert
         return dict
     }
 }
-public func generateKeys(bitcoinNetwork: BitcoinNetwork) -> Keys  {
-    return try!  FfiConverterTypeKeys_lift(try! rustCall() {
+public func generateKeys(bitcoinNetwork: BitcoinNetwork)throws  -> Keys  {
+    return try  FfiConverterTypeKeys_lift(try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
     uniffi_rgblibuniffi_fn_func_generate_keys(
         FfiConverterTypeBitcoinNetwork_lower(bitcoinNetwork),$0
     )
@@ -7405,6 +7874,14 @@ public func restoreBackup(backupPath: String, password: String, dataDir: String)
         FfiConverterString.lower(dataDir),$0
     )
 }
+}
+public func restoreFromVss(config: VssBackupConfig, targetDir: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
+    uniffi_rgblibuniffi_fn_func_restore_from_vss(
+        FfiConverterTypeVssBackupConfig_lower(config),
+        FfiConverterString.lower(targetDir),$0
+    )
+})
 }
 public func restoreKeys(bitcoinNetwork: BitcoinNetwork, mnemonic: String)throws  -> Keys  {
     return try  FfiConverterTypeKeys_lift(try rustCallWithError(FfiConverterTypeRgbLibError_lift) {
@@ -7430,10 +7907,13 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_rgblibuniffi_checksum_func_generate_keys() != 50781) {
+    if (uniffi_rgblibuniffi_checksum_func_generate_keys() != 26233) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rgblibuniffi_checksum_func_restore_backup() != 4743) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rgblibuniffi_checksum_func_restore_from_vss() != 44861) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rgblibuniffi_checksum_func_restore_keys() != 38408) {
@@ -7454,6 +7934,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rgblibuniffi_checksum_method_transportendpoint_transport_type() != 33510) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_rgblibuniffi_checksum_method_vssbackupclient_delete_backup() != 15731) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rgblibuniffi_checksum_method_vssbackupclient_encryption_enabled() != 52929) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_rgblibuniffi_checksum_method_wallet_backup() != 41851) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7461,6 +7947,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rgblibuniffi_checksum_method_wallet_blind_receive() != 51838) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rgblibuniffi_checksum_method_wallet_configure_vss_backup() != 2930) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rgblibuniffi_checksum_method_wallet_create_utxos() != 42058) {
@@ -7473,6 +7962,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rgblibuniffi_checksum_method_wallet_delete_transfers() != 43847) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rgblibuniffi_checksum_method_wallet_disable_vss_auto_backup() != 47001) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rgblibuniffi_checksum_method_wallet_drain_to() != 60164) {
@@ -7577,6 +8069,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_rgblibuniffi_checksum_method_wallet_sync() != 22767) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_rgblibuniffi_checksum_method_wallet_vss_backup() != 20454) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rgblibuniffi_checksum_method_wallet_vss_backup_info() != 29204) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_rgblibuniffi_checksum_method_wallet_witness_receive() != 541) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7590,6 +8088,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rgblibuniffi_checksum_constructor_transportendpoint_new() != 38802) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_rgblibuniffi_checksum_constructor_vssbackupclient_new() != 26908) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_rgblibuniffi_checksum_constructor_wallet_new() != 29566) {

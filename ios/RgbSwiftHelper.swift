@@ -83,14 +83,18 @@ public class RgbSwiftHelper: NSObject {
       fatalError("Unknown BitcoinNetwork: \(bitcoinNetwork)")
     }
     
-    let keys = generateKeys(bitcoinNetwork: network)
-    return [
-      "mnemonic": keys.mnemonic,
-      "xpub": keys.xpub,
-      "accountXpubVanilla": keys.accountXpubVanilla,
-      "accountXpubColored": keys.accountXpubColored,
-      "masterFingerprint": keys.masterFingerprint,
-    ] as NSDictionary
+    do {
+      let keys = try generateKeys(bitcoinNetwork: network)
+      return [
+        "mnemonic": keys.mnemonic,
+        "xpub": keys.xpub,
+        "accountXpubVanilla": keys.accountXpubVanilla,
+        "accountXpubColored": keys.accountXpubColored,
+        "masterFingerprint": keys.masterFingerprint,
+      ] as NSDictionary
+    } catch {
+      return ["error": error.localizedDescription, "errorCode": "GENERATE_KEYS_ERROR"] as NSDictionary
+    }
   }
   
   @objc
@@ -1031,6 +1035,7 @@ public class RgbSwiftHelper: NSObject {
     case .testnet4: networkString = "testnet4"
     case .regtest: networkString = "regtest"
     case .signet: networkString = "signet"
+    case .signetCustom: networkString = "signetCustom"
     }
     
     let dbTypeString: String
@@ -2012,6 +2017,7 @@ public class RgbSwiftHelper: NSObject {
     case .testnet4: return "testnet4"
     case .regtest: return "regtest"
     case .signet: return "signet"
+    case .signetCustom: return "signet"
     }
   }
   
@@ -2051,6 +2057,161 @@ public class RgbSwiftHelper: NSObject {
         "errorCode": getErrorClassName(error)
       ] as NSDictionary
       return errorData
+    }
+  }
+
+  // MARK: - VSS Backup
+
+  private static func hexStringToBytes(_ hex: String) -> [UInt8] {
+    var bytes: [UInt8] = []
+    var remaining = hex
+    while remaining.count >= 2 {
+      let c = String(remaining.prefix(2))
+      remaining = String(remaining.dropFirst(2))
+      if let byte = UInt8(c, radix: 16) {
+        bytes.append(byte)
+      }
+    }
+    return bytes
+  }
+
+  private static func stringToVssBackupMode(_ mode: String) -> VssBackupMode {
+    switch mode.lowercased() {
+    case "blocking": return .blocking
+    default: return .async
+    }
+  }
+
+  @objc(_configureVssBackup:serverUrl:storeId:signingKeyHex:encryptionEnabled:autoBackup:backupMode:)
+  public static func _configureVssBackup(
+    _ walletId: NSNumber,
+    serverUrl: String,
+    storeId: String,
+    signingKeyHex: String,
+    encryptionEnabled: Bool,
+    autoBackup: Bool,
+    backupMode: String
+  ) -> NSDictionary {
+    guard let session = WalletStore.shared.get(id: walletId.intValue) else {
+      return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
+    }
+    do {
+      let config = VssBackupConfig(
+        serverUrl: serverUrl,
+        storeId: storeId,
+        signingKey: hexStringToBytes(signingKeyHex),
+        encryptionEnabled: encryptionEnabled,
+        autoBackup: autoBackup,
+        backupMode: stringToVssBackupMode(backupMode)
+      )
+      try session.wallet.configureVssBackup(config: config)
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_vssBackup:serverUrl:storeId:signingKeyHex:encryptionEnabled:autoBackup:backupMode:)
+  public static func _vssBackup(
+    _ walletId: NSNumber,
+    serverUrl: String,
+    storeId: String,
+    signingKeyHex: String,
+    encryptionEnabled: Bool,
+    autoBackup: Bool,
+    backupMode: String
+  ) -> NSDictionary {
+    guard let session = WalletStore.shared.get(id: walletId.intValue) else {
+      return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
+    }
+    do {
+      let config = VssBackupConfig(
+        serverUrl: serverUrl,
+        storeId: storeId,
+        signingKey: hexStringToBytes(signingKeyHex),
+        encryptionEnabled: encryptionEnabled,
+        autoBackup: autoBackup,
+        backupMode: stringToVssBackupMode(backupMode)
+      )
+      let client = try VssBackupClient(config: config)
+      let version = try session.wallet.vssBackup(client: client)
+      return ["version": NSNumber(value: version)] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_vssBackupInfo:serverUrl:storeId:signingKeyHex:encryptionEnabled:autoBackup:backupMode:)
+  public static func _vssBackupInfo(
+    _ walletId: NSNumber,
+    serverUrl: String,
+    storeId: String,
+    signingKeyHex: String,
+    encryptionEnabled: Bool,
+    autoBackup: Bool,
+    backupMode: String
+  ) -> NSDictionary {
+    guard let session = WalletStore.shared.get(id: walletId.intValue) else {
+      return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
+    }
+    do {
+      let config = VssBackupConfig(
+        serverUrl: serverUrl,
+        storeId: storeId,
+        signingKey: hexStringToBytes(signingKeyHex),
+        encryptionEnabled: encryptionEnabled,
+        autoBackup: autoBackup,
+        backupMode: stringToVssBackupMode(backupMode)
+      )
+      let client = try VssBackupClient(config: config)
+      let info = try session.wallet.vssBackupInfo(client: client)
+      var result: [String: Any] = [
+        "backupExists": NSNumber(value: info.backupExists),
+        "backupRequired": NSNumber(value: info.backupRequired),
+      ]
+      if let version = info.serverVersion {
+        result["serverVersion"] = NSNumber(value: version)
+      } else {
+        result["serverVersion"] = NSNull()
+      }
+      return result as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_disableVssAutoBackup:)
+  public static func _disableVssAutoBackup(_ walletId: NSNumber) -> NSDictionary {
+    guard let session = WalletStore.shared.get(id: walletId.intValue) else {
+      return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
+    }
+    session.wallet.disableVssAutoBackup()
+    return [:] as NSDictionary
+  }
+
+  @objc(_restoreFromVss:storeId:signingKeyHex:encryptionEnabled:autoBackup:backupMode:targetDir:)
+  public static func _restoreFromVss(
+    _ serverUrl: String,
+    storeId: String,
+    signingKeyHex: String,
+    encryptionEnabled: Bool,
+    autoBackup: Bool,
+    backupMode: String,
+    targetDir: String
+  ) -> NSDictionary {
+    do {
+      let config = VssBackupConfig(
+        serverUrl: serverUrl,
+        storeId: storeId,
+        signingKey: hexStringToBytes(signingKeyHex),
+        encryptionEnabled: encryptionEnabled,
+        autoBackup: autoBackup,
+        backupMode: stringToVssBackupMode(backupMode)
+      )
+      let walletPath = try restoreFromVss(config: config, targetDir: targetDir)
+      return ["path": walletPath] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
   }
 }

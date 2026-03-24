@@ -243,6 +243,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RGB directory not initialized. Call AppConstants.initContext() first.")
 
         val rgbNetwork = getNetwork(network)
+        val networkDir = java.io.File(rgbDir, network.lowercase()).also { it.mkdirs() }
         val schemaList = mutableListOf<AssetSchema>()
         for (i in 0 until supportedSchemas.size()) {
           val schemaStr = supportedSchemas.getString(i)
@@ -250,7 +251,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         }
 
         val walletData = WalletData(
-          dataDir = rgbDir.absolutePath,
+          dataDir = networkDir.absolutePath,
           bitcoinNetwork = rgbNetwork,
           databaseType = DatabaseType.SQLITE,
           maxAllocationsPerUtxo = maxAllocationsPerUtxo.toInt().toUInt(),

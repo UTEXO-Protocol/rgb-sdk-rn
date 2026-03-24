@@ -5,11 +5,28 @@
  * the platform-specific initialize() that creates WalletManager instances
  * backed by the RN TurboModule binding.
  */
-import { UTEXOWalletCore, getVssConfigs } from '@utexo/rgb-sdk-core';
+import { UTEXOWalletCore, getVssConfigs, deriveKeysFromMnemonicOrSeed, utexoNetworkMap } from '@utexo/rgb-sdk-core';
 import type { ConfigOptions, VssBackupConfig, VssBackupInfo } from '@utexo/rgb-sdk-core';
-import { WalletManager } from '../wallet/wallet-manager';
+import { WalletManager, restoreFromVss as walletManagerRestoreFromVss } from '../wallet/wallet-manager';
 
 export type { ConfigOptions };
+
+const DEFAULT_VSS_SERVER_URL = 'https://vss-server.utexo.com/vss';
+
+function buildDefaultVssConfigFromFingerprint(
+  masterFingerprint: string
+): VssBackupConfig {
+  const fpHex = masterFingerprint;
+  const signingKey = fpHex.repeat(Math.ceil(64 / fpHex.length)).slice(0, 64);
+  return {
+    serverUrl: DEFAULT_VSS_SERVER_URL,
+    storeId: `utexo_${masterFingerprint}`,
+    signingKey,
+    encryptionEnabled: true,
+    autoBackup: false,
+    backupMode: 'Async',
+  };
+}
 
 export class UTEXOWallet extends UTEXOWalletCore {
   async initialize(): Promise<void> {
@@ -38,7 +55,7 @@ export class UTEXOWallet extends UTEXOWalletCore {
       ...commonParams,
     });
   }
-  
+
   async configureVssBackup(config: VssBackupConfig): Promise<void> {
     this.ensureInitialized();
     const { layer1, utexo } = getVssConfigs(config);
@@ -62,5 +79,45 @@ export class UTEXOWallet extends UTEXOWalletCore {
     this.ensureInitialized();
     await this.layer1Wallet!.disableVssAutoBackup();
     await this.utexoWallet!.disableVssAutoBackup();
+  }
+
+  // ==========================================
+  // Static helpers
+  // ==========================================
+
+  /**
+   * Restores both the layer1 and UTEXO wallet stores from a VSS cloud backup.
+   *
+   * This must be called **before** creating a new `UTEXOWallet` instance, so that the
+   * native layer can find the restored data when `initialize()` is called.
+   *
+   * @param mnemonicOrSeed - The same mnemonic or seed used when the backup was created
+   * @param targetDir - Local directory where the restored data should be written
+   * @param config - Optional overrides for the VSS config (defaults are derived from the mnemonic)
+   * @returns Paths to the restored layer1 and utexo wallet directories
+   */
+  static async restoreFromVss(
+    mnemonicOrSeed: string | Uint8Array,
+    targetDir: string,
+    config?: Partial<VssBackupConfig>
+  ): Promise<{ layer1Path: string; utexoPath: string }> {
+    const utexoKeys = await deriveKeysFromMnemonicOrSeed(
+      utexoNetworkMap.utexo,
+      mnemonicOrSeed
+    );
+
+    const baseConfig: VssBackupConfig = {
+      ...buildDefaultVssConfigFromFingerprint(utexoKeys.masterFingerprint),
+      ...config,
+    };
+
+    const { layer1, utexo } = getVssConfigs(baseConfig);
+
+    const [layer1Path, utexoPath] = await Promise.all([
+      walletManagerRestoreFromVss(layer1, targetDir),
+      walletManagerRestoreFromVss(utexo, targetDir),
+    ]);
+
+    return { layer1Path, utexoPath };
   }
 }

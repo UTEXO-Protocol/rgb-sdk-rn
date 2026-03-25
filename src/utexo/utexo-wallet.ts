@@ -54,6 +54,11 @@ export class UTEXOWallet extends UTEXOWalletCore {
       network: this.networkMap.mainnet,
       ...commonParams,
     });
+
+    await Promise.all([
+      this.utexoWallet.initialize(),
+      this.layer1Wallet.initialize(),
+    ]);
   }
 
   async configureVssBackup(config: VssBackupConfig): Promise<void> {

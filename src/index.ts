@@ -114,6 +114,8 @@ export type {
   Transaction,
   Transfer,
   FailTransfersRequest,
+  VssBackupConfig,
+  VssBackupInfo,
   WalletBackupResponse,
   TransferStatus,
   OnchainSendStatus,

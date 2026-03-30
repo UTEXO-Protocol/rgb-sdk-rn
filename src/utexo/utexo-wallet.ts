@@ -5,28 +5,13 @@
  * the platform-specific initialize() that creates WalletManager instances
  * backed by the RN TurboModule binding.
  */
-import { UTEXOWalletCore, getVssConfigs, deriveKeysFromMnemonicOrSeed, utexoNetworkMap } from '@utexo/rgb-sdk-core';
-import type { ConfigOptions, VssBackupConfig, VssBackupInfo } from '@utexo/rgb-sdk-core';
+import { UTEXOWalletCore, getVssConfigs, buildVssConfigFromMnemonic, ValidationError } from '@utexo/rgb-sdk-core';
+import type { ConfigOptions, VssBackupConfig } from '@utexo/rgb-sdk-core';
 import { WalletManager, restoreFromVss as walletManagerRestoreFromVss } from '../wallet/wallet-manager';
 
 export type { ConfigOptions };
 
 const DEFAULT_VSS_SERVER_URL = 'https://vss-server.utexo.com/vss';
-
-function buildDefaultVssConfigFromFingerprint(
-  masterFingerprint: string
-): VssBackupConfig {
-  const fpHex = masterFingerprint;
-  const signingKey = fpHex.repeat(Math.ceil(64 / fpHex.length)).slice(0, 64);
-  return {
-    serverUrl: DEFAULT_VSS_SERVER_URL,
-    storeId: `utexo_${masterFingerprint}`,
-    signingKey,
-    encryptionEnabled: true,
-    autoBackup: false,
-    backupMode: 'Async',
-  };
-}
 
 export class UTEXOWallet extends UTEXOWalletCore {
   async initialize(): Promise<void> {
@@ -61,31 +46,6 @@ export class UTEXOWallet extends UTEXOWalletCore {
     ]);
   }
 
-  async configureVssBackup(config: VssBackupConfig): Promise<void> {
-    this.ensureInitialized();
-    const { layer1, utexo } = getVssConfigs(config);
-    await this.layer1Wallet!.configureVssBackup(layer1);
-    await this.utexoWallet!.configureVssBackup(utexo);
-  }
-
-  async vssBackup(config: VssBackupConfig): Promise<number> {
-    this.ensureInitialized();
-    const { layer1, utexo } = getVssConfigs(config);
-    await this.layer1Wallet!.vssBackup(layer1);
-    return this.utexoWallet!.vssBackup(utexo);
-  }
-
-  async vssBackupInfo(config: VssBackupConfig): Promise<VssBackupInfo> {
-    this.ensureInitialized();
-    return this.utexoWallet!.vssBackupInfo(config);
-  }
-
-  async disableVssAutoBackup(): Promise<void> {
-    this.ensureInitialized();
-    await this.layer1Wallet!.disableVssAutoBackup();
-    await this.utexoWallet!.disableVssAutoBackup();
-  }
-
   // ==========================================
   // Static helpers
   // ==========================================
@@ -106,22 +66,38 @@ export class UTEXOWallet extends UTEXOWalletCore {
     targetDir: string,
     config?: Partial<VssBackupConfig>
   ): Promise<{ layer1Path: string; utexoPath: string }> {
-    const utexoKeys = await deriveKeysFromMnemonicOrSeed(
-      utexoNetworkMap.utexo,
-      mnemonicOrSeed
-    );
+    let baseConfig: VssBackupConfig;
 
-    const baseConfig: VssBackupConfig = {
-      ...buildDefaultVssConfigFromFingerprint(utexoKeys.masterFingerprint),
-      ...config,
-    };
+    if (typeof mnemonicOrSeed === 'string') {
+      const serverUrl = config?.serverUrl ?? DEFAULT_VSS_SERVER_URL;
+      baseConfig = {
+        ...await buildVssConfigFromMnemonic(mnemonicOrSeed, serverUrl),
+        ...config,
+      };
+    } else {
+      if (!config?.storeId || !config?.signingKey || !config?.serverUrl) {
+        throw new ValidationError(
+          'A complete VssBackupConfig (serverUrl, storeId, signingKey) must be provided when restoring with a seed',
+          'config'
+        );
+      }
+      baseConfig = config as VssBackupConfig;
+    }
 
     const { layer1, utexo } = getVssConfigs(baseConfig);
 
-    const [layer1Path, utexoPath] = await Promise.all([
-      walletManagerRestoreFromVss(layer1, targetDir),
-      walletManagerRestoreFromVss(utexo, targetDir),
-    ]);
+    // Both wallets share the same master fingerprint (same mnemonic), so
+    // rgb-lib would try to create the same targetDir/<fingerprint>/ subdirectory
+    // for both calls — the second would fail with "already exists". Use separate
+    // layer1/ and utexo/ subdirectories so each restore gets its own namespace.
+    const layer1Path = await walletManagerRestoreFromVss(
+      layer1,
+      `${targetDir}/layer1`
+    );
+    const utexoPath = await walletManagerRestoreFromVss(
+      utexo,
+      `${targetDir}/utexo`
+    );
 
     return { layer1Path, utexoPath };
   }

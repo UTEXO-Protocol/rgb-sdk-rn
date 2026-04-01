@@ -243,6 +243,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RGB directory not initialized. Call AppConstants.initContext() first.")
 
         val rgbNetwork = getNetwork(network)
+        val networkDir = java.io.File(rgbDir, network.lowercase()).also { it.mkdirs() }
         val schemaList = mutableListOf<AssetSchema>()
         for (i in 0 until supportedSchemas.size()) {
           val schemaStr = supportedSchemas.getString(i)
@@ -250,7 +251,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         }
 
         val walletData = WalletData(
-          dataDir = rgbDir.absolutePath,
+          dataDir = networkDir.absolutePath,
           bitcoinNetwork = rgbNetwork,
           databaseType = DatabaseType.SQLITE,
           maxAllocationsPerUtxo = maxAllocationsPerUtxo.toInt().toUInt(),
@@ -261,7 +262,26 @@ class RgbModule(reactContext: ReactApplicationContext) :
           vanillaKeychain = vanillaKeychain.toInt().toUByte(),
           supportedSchemas = schemaList
         )
-        val wallet = Wallet(walletData)
+        val wallet = try {
+          Wallet(walletData)
+        } catch (e: Exception) {
+          val msg = e.message.orEmpty()
+          val isCorruptedStoreError =
+            msg.contains("bincode error while reading entry", ignoreCase = true) ||
+            msg.contains("failed to fill whole buffer", ignoreCase = true)
+
+          if (!isCorruptedStoreError) {
+            throw e
+          }
+
+          Log.w(
+            TAG,
+            "initializeWallet detected corrupted wallet store in ${networkDir.absolutePath}; clearing and retrying once"
+          )
+          networkDir.deleteRecursively()
+          networkDir.mkdirs()
+          Wallet(walletData)
+        }
         val walletId = WalletStore.create(wallet)
         withContext(Dispatchers.Main) {
           promise.resolve(walletId)

@@ -210,7 +210,9 @@ public class RgbSwiftHelper: NSObject {
         return ["error": "RGB directory not initialized. Call AppConstants.initContext() first."] as NSDictionary
       }
       
-      let dataDirPath = rgbDir.path
+      let networkDir = rgbDir.appendingPathComponent(network.lowercased())
+      try FileManager.default.createDirectory(at: networkDir, withIntermediateDirectories: true, attributes: nil)
+      let dataDirPath = networkDir.path
       
       let bitcoinNetwork = getNetwork(network)
       var schemaList: [AssetSchema] = []

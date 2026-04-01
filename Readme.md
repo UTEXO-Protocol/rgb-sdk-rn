@@ -30,11 +30,7 @@ With this SDK, developers can:
 
 ## ⚙️ Capabilities of `rgb-sdk-rn` (via `UTEXOWallet`)
 
-<<<<<<< HEAD
 The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or seed) and optional `{ network, dataDir, vssServerUrl }`, then call `await wallet.initialize()` before use. It manages **two** underlying RGB wallets (Bitcoin L1 / “layer1” and the UTEXO layer) and combines standard RGB operations with the extra `UTEXOWallet` APIs in the table below—including **Lightning** and **onchain** APIs that use the [UTEXO Gateway](#utexo-gateway-lightning--onchain)—matching the Node.js [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) API shape.
-=======
-The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or seed) and optional `{ network, dataDir, vssServerUrl }`, then call `await wallet.initialize()` before use. It manages **two** underlying RGB wallets (Bitcoin L1 / “layer1” and the UTEXO layer) and combines standard RGB operations with UTEXO features (Lightning, on-chain bridge), matching the Node.js [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) API shape.
->>>>>>> main
 
 **Network preset:** `options.network` must be **`'mainnet'`** or **`'testnet'`** only (`UtxoNetworkPreset` in `@utexo/rgb-sdk-core`). There is no `regtest` / `signet` preset for `UTEXOWallet`. If you omit options, **`network` defaults to `'mainnet'`** (same as `new UTEXOWallet(mnemonic)` with no second argument). For **regtest**, **signet**, or **testnet4** RGB development, use **`WalletManager`** with the usual `network` string for rgb-lib.
 
@@ -69,7 +65,6 @@ The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or 
 | `configureVssBackup(config)` | Auto VSS after state-changing operations (configures both stores) |
 | `disableVssAutoBackup()` | Disable auto VSS on both stores |
 | `UTEXOWallet.restoreFromVss(mnemonicOrSeed, targetDir, config?)` | **Static:** restore **both** stores from VSS before constructing a new `UTEXOWallet` |
-<<<<<<< HEAD
 | **Lightning** | *Requires UTEXO gateway — [below](#utexo-gateway-lightning--onchain)* |
 | `createLightningInvoice({ asset })` | Create a Lightning invoice for receiving (asset or BTC) |
 | `getLightningReceiveRequest(lnInvoice)` | Look up status of a Lightning receive by invoice |
@@ -90,14 +85,6 @@ The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or 
 ### `WalletManager` (low-level, single RGB wallet)
 
 Use **`WalletManager`** when you only need one RGB wallet instance (one network) and not the extra Lightning and onchain methods on **`UTEXOWallet`**. It exposes the same RGB/PSBT/VSS **per wallet** methods, but VSS and backups apply to **that** instance only—not the full layer1 + UTEXO pair. Prefer **`UTEXOWallet`** for production UTEXO apps and for VSS/file backup that must cover both stores.
-=======
-| *On-chain bridge* | `onchainReceive`, `onchainSend` / `Begin` / `End`, `getOnchainSendStatus`, `listOnchainTransfers` |
-| *Lightning* | `createLightningInvoice`, `payLightningInvoice` / `Begin` / `End`, `getLightningSendRequest`, `getLightningReceiveRequest`, `listLightningPayments`, etc. |
-
-### `WalletManager` (low-level, single RGB wallet)
-
-Use **`WalletManager`** when you only need one RGB wallet instance (one network) without UTEXO Bridge features. It exposes the same RGB/PSBT/VSS **per wallet** methods, but VSS and backups apply to **that** instance only—not the full layer1 + UTEXO pair. Prefer **`UTEXOWallet`** for production UTEXO apps and for VSS/file backup that must cover both stores.
->>>>>>> main
 
 ### Standalone helpers
 

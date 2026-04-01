@@ -63,6 +63,8 @@ export {
   utexoNetworkMap,
   utexoNetworkIdMap,
   getDestinationAsset,
+  DEFAULT_TRANSPORT_ENDPOINTS,
+  DEFAULT_INDEXER_URLS,
   // Bridge API
   getBridgeAPI,
   encodeTransferStatus,
@@ -114,6 +116,8 @@ export type {
   Transaction,
   Transfer,
   FailTransfersRequest,
+  VssBackupConfig,
+  VssBackupInfo,
   WalletBackupResponse,
   TransferStatus,
   OnchainSendStatus,

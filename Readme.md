@@ -30,7 +30,7 @@ With this SDK, developers can:
 
 ## ⚙️ Capabilities of `rgb-sdk-rn` (via `UTEXOWallet`)
 
-The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or seed) and optional `{ network, dataDir, vssServerUrl }`, then call `await wallet.initialize()` before use. It manages **two** underlying RGB wallets (Bitcoin L1 / “layer1” and the UTEXO layer) and combines standard RGB operations with UTEXO features (Lightning, on-chain bridge), matching the Node.js [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) API shape.
+The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or seed) and optional `{ network, dataDir, vssServerUrl }`, then call `await wallet.initialize()` before use. It manages **two** underlying RGB wallets (Bitcoin L1 / “layer1” and the UTEXO layer) and combines standard RGB operations with the extra `UTEXOWallet` APIs in the table below—including **Lightning** and **onchain** APIs that use the [UTEXO Gateway](#utexo-gateway-lightning--onchain)—matching the Node.js [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) API shape.
 
 **Network preset:** `options.network` must be **`'mainnet'`** or **`'testnet'`** only (`UtxoNetworkPreset` in `@utexo/rgb-sdk-core`). There is no `regtest` / `signet` preset for `UTEXOWallet`. If you omit options, **`network` defaults to `'mainnet'`** (same as `new UTEXOWallet(mnemonic)` with no second argument). For **regtest**, **signet**, or **testnet4** RGB development, use **`WalletManager`** with the usual `network` string for rgb-lib.
 
@@ -65,12 +65,26 @@ The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or 
 | `configureVssBackup(config)` | Auto VSS after state-changing operations (configures both stores) |
 | `disableVssAutoBackup()` | Disable auto VSS on both stores |
 | `UTEXOWallet.restoreFromVss(mnemonicOrSeed, targetDir, config?)` | **Static:** restore **both** stores from VSS before constructing a new `UTEXOWallet` |
-| *On-chain bridge* | `onchainReceive`, `onchainSend` / `Begin` / `End`, `getOnchainSendStatus`, `listOnchainTransfers` |
-| *Lightning* | `createLightningInvoice`, `payLightningInvoice` / `Begin` / `End`, `getLightningSendRequest`, `getLightningReceiveRequest`, `listLightningPayments`, etc. |
+| **Lightning** | *Requires UTEXO gateway — [below](#utexo-gateway-lightning--onchain)* |
+| `createLightningInvoice({ asset })` | Create a Lightning invoice for receiving (asset or BTC) |
+| `getLightningReceiveRequest(lnInvoice)` | Look up status of a Lightning receive by invoice |
+| `getLightningSendRequest(lnInvoice)` | Look up status of a Lightning send by invoice |
+| `getLightningSendFeeEstimate({ invoice, assetId? })` | Estimate routing fee for a Lightning invoice |
+| `payLightningInvoiceBegin({ lnInvoice, amount?, assetId? })` | Start paying a Lightning invoice (returns unsigned PSBT) |
+| `payLightningInvoiceEnd({ signedPsbt, lnInvoice })` | Finish payment with signed PSBT |
+| `payLightningInvoice({ lnInvoice, amount?, assetId? }, mnemonic?)` | Full flow: begin → sign → end |
+| `listLightningPayments()` | List Lightning payments |
+| **Onchain** | *Requires UTEXO gateway — [below](#utexo-gateway-lightning--onchain)* |
+| `onchainReceive({ assetId, amount })` | Create a mainnet-side invoice to receive into UTEXO via the bridge |
+| `onchainSendBegin({ invoice, assetId?, amount? })` | Start send from UTEXO toward mainnet (returns unsigned PSBT) |
+| `onchainSendEnd({ signedPsbt, invoice })` | Complete send with signed PSBT |
+| `onchainSend({ invoice, assetId?, amount? }, mnemonic?)` | Full flow: begin → sign → end |
+| `getOnchainSendStatus(invoice)` | Status of an onchain send by its mainnet invoice |
+| `listOnchainTransfers(assetId?)` | List onchain transfers (optional filter by asset) |
 
 ### `WalletManager` (low-level, single RGB wallet)
 
-Use **`WalletManager`** when you only need one RGB wallet instance (one network) without UTEXO Bridge features. It exposes the same RGB/PSBT/VSS **per wallet** methods, but VSS and backups apply to **that** instance only—not the full layer1 + UTEXO pair. Prefer **`UTEXOWallet`** for production UTEXO apps and for VSS/file backup that must cover both stores.
+Use **`WalletManager`** when you only need one RGB wallet instance (one network) and not the extra Lightning and onchain methods on **`UTEXOWallet`**. It exposes the same RGB/PSBT/VSS **per wallet** methods, but VSS and backups apply to **that** instance only—not the full layer1 + UTEXO pair. Prefer **`UTEXOWallet`** for production UTEXO apps and for VSS/file backup that must cover both stores.
 
 ### Standalone helpers
 
@@ -87,7 +101,7 @@ Use **`WalletManager`** when you only need one RGB wallet instance (one network)
 
 - All RGB operations are handled **locally** using native `rgb-lib` bindings. No external RGB Node server is required.
 - The SDK connects to Bitcoin indexers (Electrum servers) for blockchain data synchronization.
-- Use **`UTEXOWallet`** for the same high-level model as [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) (Node): one mnemonic, two coordinated RGB wallets, VSS/backup across both, plus optional Lightning and on-chain bridge when the UTEXO Bridge API is configured.
+- Use **`UTEXOWallet`** for the same high-level model as [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) (Node): one mnemonic, two coordinated RGB wallets, and VSS/backup across both. Lightning and onchain helpers use the [UTEXO Gateway](#utexo-gateway-lightning--onchain) when you call those APIs.
 - The `signPsbt` method is async and demonstrates how to integrate a signing flow using `bdk-rn`. This can be replaced with your own HSM or hardware wallet integration if needed.
 - By using this SDK, developers have full control over:
   - Transfer orchestration
@@ -105,46 +119,30 @@ This pattern enables advanced use cases, such as:
 
 ---
 
-## 🌉 UTEXO Bridge Integration
+## UTEXO Gateway (Lightning & onchain)
 
-**Lightning Network** and **Onchain bridge** features (available via `UTEXOWallet`) require the UTEXO Bridge API for cross-network transfers between Bitcoin L1, Lightning Network, and UTEXO layer.
+Some **`UTEXOWallet`** APIs are not purely local rgb-lib calls: they use the **UTEXO gateway HTTP API** (REST routes under `/v1/utexo/bridge` on the gateway host). The methods below are the ones that depend on it (same entries as the **Lightning** and **Onchain** rows in the capabilities table).
 
-### Bridge Configuration
+**Lightning**
 
-- **Default endpoint**: `http://localhost:8081/`
-- **Configure URL**:
-  ```typescript
-  import { bridgeAPI } from '@utexo/rgb-sdk-rn';
-  
-  bridgeAPI.setBaseUrl('https://bridge.example.com');
-  ```
+- `createLightningInvoice`, `getLightningReceiveRequest`, `getLightningSendRequest`, `getLightningSendFeeEstimate`, `payLightningInvoiceBegin`, `payLightningInvoiceEnd`, `payLightningInvoice`, `listLightningPayments`
 
-### Requirements
+**Onchain**
 
-Lightning and onchain bridge methods depend on:
-- UTEXO Bridge API service running and accessible
-- Proper network configuration (mainnet, Lightning, UTEXO layer mappings)
-- Supported asset mappings across networks
+- `onchainReceive`, `onchainSendBegin`, `onchainSendEnd`, `onchainSend`, `getOnchainSendStatus`, `listOnchainTransfers`
 
-### Bridge-Dependent Methods
+**Standard RGB usage** (UTXOs, RGB transfers, sync, backups, VSS) stays on-device via rgb-lib and does **not** require this gateway.
 
-The following `UTEXOWallet` methods require UTEXO Bridge API:
+**Default gateway base URLs** come from `@utexo/rgb-sdk-core` (`DEFAULT_GATEWAY_BASE_URLS`) and match the **`mainnet`** / **`testnet`** preset you pass to `UTEXOWallet`:
 
-**Lightning:**
-- `createLightningInvoice()` - Create Lightning invoices
-- `payLightningInvoice()` / `payLightningInvoiceBegin()` / `payLightningInvoiceEnd()` - Pay Lightning invoices
-- `getLightningReceiveRequest()` - Track Lightning receives
-- `getLightningSendRequest()` - Track Lightning sends
+| Preset | Gateway base URL |
+|--------|-------------------|
+| **mainnet** | `https://gateway.utexo.utexo.com/` |
+| **testnet** | `https://dev.gateway.utexo.tricorn.network/` |
 
-**Onchain (cross-network):**
-- `onchainReceive()` - Receive assets via mainnet-to-UTEXO bridge
-- `onchainSend()` / `onchainSendBegin()` / `onchainSendEnd()` - Send assets via UTEXO-to-mainnet bridge
-- `getOnchainSendStatus()` - Track on-chain send status
-- `listOnchainTransfers()` - List on-chain transfers
+The wallet uses `getBridgeAPI(preset)` internally. For low-level or custom tooling you can import `getBridgeAPI` from `@utexo/rgb-sdk-rn` (same as `@utexo/rgb-sdk-core`). The device must be able to reach the gateway (TLS, firewall, and env-specific allowlists) when you use those methods.
 
-### Local-Only Methods
-
-All RGB operations (asset issuance, transfers, UTXO management, etc.) work without the bridge and run entirely locally using native `rgb-lib` bindings—whether you use `WalletManager` or `UTEXOWallet`.
+Everything else—asset issuance, ordinary RGB transfers, UTXO management, sync, backups, VSS—runs entirely in rgb-lib **locally**, whether you use **`WalletManager`** or **`UTEXOWallet`** (only the Lightning and onchain methods in this section require the gateway).
 
 ---
 
@@ -625,7 +623,7 @@ await restored.initialize();
 A full working demo app is available at **[rgb-sdk-rn-demo](https://github.com/RGB-OS/rgb-sdk-rn-demo)**. It demonstrates the complete SDK functionality in an Expo/React Native application, including:
 
 - **Wallet flow**: Key generation, wallet initialization, UTXO creation, NIA/IFA asset issuance, blind/witness transfers, BTC sends, and backup/restore
-- **UTEXO flow**: Lightning Network payments (`createLightningInvoice`, `payLightningInvoice`) and on-chain bridge transfers (`onchainReceive`, `onchainSend`)
+- **UTEXO / extended flows**: optional Lightning and onchain methods on `UTEXOWallet` (see capabilities table)
 - **VSS cloud backup flow**: Full lifecycle — upload backup, query status, configure auto-backup, restore from VSS, and verify restored state
 - **Key derivation**: `generateKeys`, `deriveKeysFromMnemonic`, `deriveKeysFromSeed`, `signMessage`/`verifyMessage`
 

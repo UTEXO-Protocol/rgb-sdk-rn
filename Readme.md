@@ -159,13 +159,7 @@ Some **`UTEXOWallet`** APIs are not purely local rgb-lib calls: they use the **U
 
 The wallet uses `getBridgeAPI(preset)` internally. For low-level or custom tooling you can import `getBridgeAPI` from `@utexo/rgb-sdk-rn` (same as `@utexo/rgb-sdk-core`). The device must be able to reach the gateway (TLS, firewall, and env-specific allowlists) when you use those methods.
 
-<<<<<<< HEAD
 Everything else—asset issuance, ordinary RGB transfers, UTXO management, sync, backups, VSS—runs entirely in rgb-lib **locally**, whether you use **`WalletManager`** or **`UTEXOWallet`** (only the Lightning and onchain methods in this section require the gateway).
-=======
-### Local-Only Methods
-
-All RGB operations (asset issuance, transfers, UTXO management, etc.) work without the bridge and run entirely locally using native `rgb-lib` bindings—whether you use `WalletManager` or `UTEXOWallet`.
->>>>>>> main
 
 ---
 

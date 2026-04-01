@@ -85,7 +85,7 @@
     "prettier": "^3.0.0"
   },
   "dependencies": {
-    "@utexo/rgb-sdk-core": "file:../rgb-sdk-core",
+    "@utexo/rgb-sdk-core": "1.0.0-beta.1",
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "3.0.0",
     "@scure/base": "^2.0.0",

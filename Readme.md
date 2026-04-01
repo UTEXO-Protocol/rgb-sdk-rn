@@ -114,11 +114,9 @@ Use **`WalletManager`** when you only need one RGB wallet instance (one network)
 
 - All RGB operations are handled **locally** using native `rgb-lib` bindings. No external RGB Node server is required.
 - The SDK connects to Bitcoin indexers (Electrum servers) for blockchain data synchronization.
-<<<<<<< HEAD
+
 - Use **`UTEXOWallet`** for the same high-level model as [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) (Node): one mnemonic, two coordinated RGB wallets, and VSS/backup across both. Lightning and onchain helpers use the [UTEXO Gateway](#utexo-gateway-lightning--onchain) when you call those APIs.
-=======
-- Use **`UTEXOWallet`** for the same high-level model as [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) (Node): one mnemonic, two coordinated RGB wallets, VSS/backup across both, plus optional Lightning and on-chain bridge when the UTEXO Bridge API is configured.
->>>>>>> main
+
 - The `signPsbt` method is async and demonstrates how to integrate a signing flow using `bdk-rn`. This can be replaced with your own HSM or hardware wallet integration if needed.
 - By using this SDK, developers have full control over:
   - Transfer orchestration

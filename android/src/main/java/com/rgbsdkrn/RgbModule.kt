@@ -262,7 +262,26 @@ class RgbModule(reactContext: ReactApplicationContext) :
           vanillaKeychain = vanillaKeychain.toInt().toUByte(),
           supportedSchemas = schemaList
         )
-        val wallet = Wallet(walletData)
+        val wallet = try {
+          Wallet(walletData)
+        } catch (e: Exception) {
+          val msg = e.message.orEmpty()
+          val isCorruptedStoreError =
+            msg.contains("bincode error while reading entry", ignoreCase = true) ||
+            msg.contains("failed to fill whole buffer", ignoreCase = true)
+
+          if (!isCorruptedStoreError) {
+            throw e
+          }
+
+          Log.w(
+            TAG,
+            "initializeWallet detected corrupted wallet store in ${networkDir.absolutePath}; clearing and retrying once"
+          )
+          networkDir.deleteRecursively()
+          networkDir.mkdirs()
+          Wallet(walletData)
+        }
         val walletId = WalletStore.create(wallet)
         withContext(Dispatchers.Main) {
           promise.resolve(walletId)

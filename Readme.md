@@ -30,7 +30,7 @@ With this SDK, developers can:
 
 ## ⚙️ Capabilities of `rgb-sdk-rn` (via `UTEXOWallet`)
 
-The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or seed) and optional `{ network, dataDir, vssServerUrl }`, then call `await wallet.initialize()` before use. It manages **two** underlying RGB wallets (Bitcoin L1 / “layer1” and the UTEXO layer) and combines standard RGB operations with the extra `UTEXOWallet` APIs in the table below—including **Lightning** and **onchain** APIs that use the [UTEXO Gateway](#utexo-gateway-lightning--onchain)—matching the Node.js [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) API shape.
+The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or seed) and optional `{ network, dataDir, vssServerUrl }`, then call `await wallet.initialize()` before use. It combines standard RGB operations with the extra `UTEXOWallet` APIs in the table below—including **Lightning** and **onchain** APIs that use the [UTEXO Lightning & onchain](#utexo-lightning--onchain) HTTP API—matching the Node.js [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) and [`@utexo/rgb-sdk-web`](https://github.com/UTEXO-Protocol/rgb-sdk-web) API shape.
 
 **Network preset:** `options.network` must be **`'mainnet'`** or **`'testnet'`** only (`UtxoNetworkPreset` in `@utexo/rgb-sdk-core`). There is no `regtest` / `signet` preset for `UTEXOWallet`. If you omit options, **`network` defaults to `'mainnet'`** (same as `new UTEXOWallet(mnemonic)` with no second argument). For **regtest**, **signet**, or **testnet4** RGB development, use **`WalletManager`** with the usual `network` string for rgb-lib.
 
@@ -65,7 +65,7 @@ The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or 
 | `configureVssBackup(config)` | Auto VSS after state-changing operations (configures both stores) |
 | `disableVssAutoBackup()` | Disable auto VSS on both stores |
 | `UTEXOWallet.restoreFromVss(mnemonicOrSeed, targetDir, config?)` | **Static:** restore **both** stores from VSS before constructing a new `UTEXOWallet` |
-| **Lightning** | *Requires UTEXO gateway — [below](#utexo-gateway-lightning--onchain)* |
+| **Lightning** | *Requires the [UTEXO Lightning & onchain](#utexo-lightning--onchain) HTTP API* |
 | `createLightningInvoice({ asset })` | Create a Lightning invoice for receiving (asset or BTC) |
 | `getLightningReceiveRequest(lnInvoice)` | Look up status of a Lightning receive by invoice |
 | `getLightningSendRequest(lnInvoice)` | Look up status of a Lightning send by invoice |
@@ -74,7 +74,7 @@ The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or 
 | `payLightningInvoiceEnd({ signedPsbt, lnInvoice })` | Finish payment with signed PSBT |
 | `payLightningInvoice({ lnInvoice, amount?, assetId? }, mnemonic?)` | Full flow: begin → sign → end |
 | `listLightningPayments()` | List Lightning payments |
-| **Onchain** | *Requires UTEXO gateway — [below](#utexo-gateway-lightning--onchain)* |
+| **Onchain** | *Requires the [UTEXO Lightning & onchain](#utexo-lightning--onchain) HTTP API* |
 | `onchainReceive({ assetId, amount })` | Create a mainnet-side invoice to receive into UTEXO via the bridge |
 | `onchainSendBegin({ invoice, assetId?, amount? })` | Start send from UTEXO toward mainnet (returns unsigned PSBT) |
 | `onchainSendEnd({ signedPsbt, invoice })` | Complete send with signed PSBT |
@@ -101,7 +101,7 @@ Use **`WalletManager`** when you only need one RGB wallet instance (one network)
 
 - All RGB operations are handled **locally** using native `rgb-lib` bindings. No external RGB Node server is required.
 - The SDK connects to Bitcoin indexers (Electrum servers) for blockchain data synchronization.
-- Use **`UTEXOWallet`** for the same high-level model as [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) (Node): one mnemonic, two coordinated RGB wallets, and VSS/backup across both. Lightning and onchain helpers use the [UTEXO Gateway](#utexo-gateway-lightning--onchain) when you call those APIs.
+- Use **`UTEXOWallet`** for the same high-level model as [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) (Node): one mnemonic, two coordinated RGB wallets, and VSS/backup across both. Lightning and onchain helpers use the [UTEXO Lightning & onchain](#utexo-lightning--onchain) HTTP API when you call those APIs.
 - The `signPsbt` method is async and demonstrates how to integrate a signing flow using `bdk-rn`. This can be replaced with your own HSM or hardware wallet integration if needed.
 - By using this SDK, developers have full control over:
   - Transfer orchestration
@@ -119,9 +119,9 @@ This pattern enables advanced use cases, such as:
 
 ---
 
-## UTEXO Gateway (Lightning & onchain)
+## UTEXO Lightning & onchain
 
-Some **`UTEXOWallet`** APIs are not purely local rgb-lib calls: they use the **UTEXO gateway HTTP API** (REST routes under `/v1/utexo/bridge` on the gateway host). The methods below are the ones that depend on it (same entries as the **Lightning** and **Onchain** rows in the capabilities table).
+Some **`UTEXOWallet`** APIs are not purely local rgb-lib calls: they use the **UTEXO Lightning & onchain** HTTP API (REST routes under `/v1/utexo/bridge` on the gateway host). The methods below are the ones that depend on it (same entries as the **Lightning** and **Onchain** rows in the capabilities table).
 
 **Lightning**
 
@@ -131,18 +131,18 @@ Some **`UTEXOWallet`** APIs are not purely local rgb-lib calls: they use the **U
 
 - `onchainReceive`, `onchainSendBegin`, `onchainSendEnd`, `onchainSend`, `getOnchainSendStatus`, `listOnchainTransfers`
 
-**Standard RGB usage** (UTXOs, RGB transfers, sync, backups, VSS) stays on-device via rgb-lib and does **not** require this gateway.
+**Standard RGB usage** (UTXOs, RGB transfers, sync, backups, VSS) stays on-device via rgb-lib and does **not** require this HTTP API.
 
-**Default gateway base URLs** come from `@utexo/rgb-sdk-core` (`DEFAULT_GATEWAY_BASE_URLS`) and match the **`mainnet`** / **`testnet`** preset you pass to `UTEXOWallet`:
+**Default base URLs** for **UTEXO Lightning & onchain** come from `@utexo/rgb-sdk-core` (`DEFAULT_GATEWAY_BASE_URLS`) and match the **`mainnet`** / **`testnet`** preset you pass to `UTEXOWallet`:
 
-| Preset | Gateway base URL |
+| Preset | Base URL |
 |--------|-------------------|
 | **mainnet** | `https://gateway.utexo.utexo.com/` |
 | **testnet** | `https://dev.gateway.utexo.tricorn.network/` |
 
-The wallet uses `getBridgeAPI(preset)` internally. For low-level or custom tooling you can import `getBridgeAPI` from `@utexo/rgb-sdk-rn` (same as `@utexo/rgb-sdk-core`). The device must be able to reach the gateway (TLS, firewall, and env-specific allowlists) when you use those methods.
+The wallet uses `getBridgeAPI(preset)` internally. For low-level or custom tooling you can import `getBridgeAPI` from `@utexo/rgb-sdk-rn` (same as `@utexo/rgb-sdk-core`). The device must be able to reach this HTTP API (TLS, firewall, and env-specific allowlists) when you use those methods.
 
-Everything else—asset issuance, ordinary RGB transfers, UTXO management, sync, backups, VSS—runs entirely in rgb-lib **locally**, whether you use **`WalletManager`** or **`UTEXOWallet`** (only the Lightning and onchain methods in this section require the gateway).
+Everything else—asset issuance, ordinary RGB transfers, UTXO management, sync, backups, VSS—runs entirely in rgb-lib **locally**, whether you use **`WalletManager`** or **`UTEXOWallet`** (only the Lightning and onchain methods in this section require the **UTEXO Lightning & onchain** HTTP API).
 
 ---
 
@@ -241,10 +241,11 @@ These match **`DEFAULT_INDEXER_URLS`** in `@utexo/rgb-sdk-core` (used when **`Wa
 
 | Network | Default indexer URL |
 |--------|---------------------|
+| **utexo** | `https://esplora-api.utexo.com` |
 | **mainnet** | `ssl://electrum.iriswallet.com:50003` |
 | **testnet** | `ssl://electrum.iriswallet.com:50013` |
 | **testnet4** | `ssl://electrum.iriswallet.com:50053` |
-| **signet** | `https://esplora-api.utexo.com` |
+| **signet** | `ssl://electrum.iriswallet.com:50033` |
 | **regtest** | `tcp://regtest.thunderstack.org:50001` |
 
 **`UTEXOWallet`** does **not** pick from this table directly; it uses the **`mainnet`** or **`testnet`** preset from `getUtxoNetworkConfig` in `@utexo/rgb-sdk-core`. To use the defaults above explicitly, or to override them, use **`WalletManager`** and pass `indexerUrl` / `transportEndpoint` in its constructor.
@@ -255,10 +256,11 @@ These match **`DEFAULT_TRANSPORT_ENDPOINTS`** in `@utexo/rgb-sdk-core` (used whe
 
 | Network | Default transport URL |
 |--------|------------------------|
+| **utexo** | `rpcs://rgb-proxy-utexo.utexo.com/json-rpc` |
 | **mainnet** | `rpcs://rgb-proxy-mainnet.utexo.com/json-rpc` |
 | **testnet** | `rpcs://rgb-proxy-testnet3.utexo.com/json-rpc` |
 | **testnet4** | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
-| **signet** | `rpcs://rgb-proxy-utexo.utexo.com/json-rpc` |
+| **signet** | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
 | **regtest** | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
 
 ---
@@ -496,6 +498,69 @@ async function demo() {
 
 ---
 
+
+### On-chain receive/send
+
+```javascript
+const { UTEXOWallet } = require('@utexo/rgb-sdk-rn');
+
+  const sender = new UTEXOWallet("test mnemonic sender", { network: 'testnet' });
+  const receiver = new UTEXOWallet("test mnemonic receiver", { network: 'testnet' });
+  await sender.initialize();
+  await receiver.initialize();
+
+  // 1) Receiver: onchainReceive – create mainnet invoice for deposit
+  const { invoice } = await receiver.onchainReceive({
+    assetId: "rgb:WPRv95Nj-icdrgPp-zpQhIp_-2TyJ~Ge-k~FvuMZ-~vVnkA0",
+    amount: 5,
+  });
+
+  // 2) Sender: onchainSend – pay that mainnet invoice from UTEXO
+  const sendResult = await sender.onchainSend({ invoice });
+  console.log('Onchain send result:', sendResult);
+
+  await receiver.refreshWallet()
+  await sender.refreshWallet()
+
+  // wait 3 confirmation blocks
+
+  await receiver.refreshWallet()
+  await sender.refreshWallet()
+
+  const status = await receiver.getOnchainSendStatus(invoice)
+  console.log(status)
+
+```
+
+### Lightning receive/send
+
+```javascript
+const { UTEXOWallet } = require('@utexo/rgb-sdk-rn');
+
+const sender = new UTEXOWallet("test mnemonic sender", { network: 'testnet' });
+const receiver = new UTEXOWallet("test mnemonic receiver", { network: 'testnet' });
+await sender.initialize();
+await receiver.initialize();
+
+// 1) Receiver: createLightningInvoice – create Lightning invoice for receiving
+const assetId = "rgb:WPRv95Nj-icdrgPp-zpQhIp_-2TyJ~Ge-k~FvuMZ-~vVnkA0";
+const { lnInvoice } = await receiver.createLightningInvoice({
+  asset: { assetId, amount: 5 },
+});
+
+// 2) Sender: payLightningInvoice – pay that Lightning invoice from UTEXO
+const sendResult = await sender.payLightningInvoice({ lnInvoice, assetId, amount: 5 });
+console.log('Lightning send result:', sendResult);
+
+await receiver.refreshWallet();
+await sender.refreshWallet();
+
+const status = await sender.getLightningSendRequest(lnInvoice);
+console.log(status);
+```
+
+---
+
 ## Security
 
 ### Key Management
@@ -620,7 +685,7 @@ await restored.initialize();
 
 ## Demo App
 
-A full working demo app is available at **[rgb-sdk-rn-demo](https://github.com/RGB-OS/rgb-sdk-rn-demo)**. It demonstrates the complete SDK functionality in an Expo/React Native application, including:
+A full working demo app is available at **[rgb-sdk-rn-playground](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo)**. It demonstrates the complete SDK functionality in an Expo/React Native application, including:
 
 - **Wallet flow**: Key generation, wallet initialization, UTXO creation, NIA/IFA asset issuance, blind/witness transfers, BTC sends, and backup/restore
 - **UTEXO / extended flows**: optional Lightning and onchain methods on `UTEXOWallet` (see capabilities table)
@@ -630,7 +695,7 @@ A full working demo app is available at **[rgb-sdk-rn-demo](https://github.com/R
 ### Running the Demo
 
 ```bash
-git clone https://github.com/RGB-OS/rgb-sdk-rn-demo.git
+git clone https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo
 cd rgb-sdk-rn-demo
 npm install
 npm run prebuild

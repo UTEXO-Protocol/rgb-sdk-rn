@@ -1,5 +1,6 @@
 import Rgb from './NativeRgb';
 import type { Keys, BitcoinNetwork as RNBitcoinNetwork } from './Interfaces';
+import { toNativeNetwork } from './Interfaces';
 import type { InvoiceData } from '@utexo/rgb-sdk-core';
 
 
@@ -7,14 +8,14 @@ import type { InvoiceData } from '@utexo/rgb-sdk-core';
 // ── Standalone functions (mirrors NodeRgbLibBinding exports) ─────────────────
 
 export async function generateKeys(network: RNBitcoinNetwork): Promise<Keys> {
-    return Rgb.generateKeys(network);
+    return Rgb.generateKeys(toNativeNetwork(network));
   }
-  
+
   export async function restoreKeys(
     network: RNBitcoinNetwork,
     mnemonic: string
   ): Promise<Keys> {
-    return Rgb.restoreKeys(network, mnemonic);
+    return Rgb.restoreKeys(toNativeNetwork(network), mnemonic);
   }
   
   export async function restoreBackup(

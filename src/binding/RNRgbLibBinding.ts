@@ -13,6 +13,7 @@ import {
   WalletError,
   normalizeNetwork,
 } from '@utexo/rgb-sdk-core';
+import { toNativeNetwork } from './Interfaces';
 import type {
   BtcBalance,
   Unspent,
@@ -71,7 +72,8 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       );
 
     const network = normalizeNetwork(params.network ?? 'regtest');
-    this.rnNetwork = network;
+    // utexo is a UTEXO-specific network — native rgb-lib only knows signet
+    this.rnNetwork = toNativeNetwork(network);
     this.transportEndpoint =
       params.transportEndpoint ??
       DEFAULT_TRANSPORT_ENDPOINTS[network] ??

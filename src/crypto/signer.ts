@@ -35,6 +35,7 @@ function toBDKNetwork(network: Network): BDKNetwork {
     case 'testnet':
       return NetworkEnum.Testnet;
     case 'signet':
+    case 'utexo':
       return NetworkEnum.Signet;
     case 'regtest':
       return NetworkEnum.Regtest;
@@ -53,7 +54,10 @@ export async function signPsbt(
     validatePsbt(psbtBase64, 'psbtBase64');
 
     const normalizedNetwork = normalizeNetwork(network);
+    // utexo shares BDK's signet parameters — toBDKNetwork handles the mapping
     const bdkNetwork = toBDKNetwork(normalizedNetwork);
+    // utexo and signet share the same BIP32 derivation paths
+    const bip32Network: Network = normalizedNetwork === 'utexo' ? 'signet' : normalizedNetwork;
 
     const seed = bip39.mnemonicToSeedSync(mnemonic.trim());
     const rootNode = bip32Factory().fromSeed(
@@ -69,7 +73,7 @@ export async function signPsbt(
       const { external, internal } = deriveDescriptors(
         rootNode,
         fp,
-        normalizedNetwork,
+        bip32Network,
         type
       );
       const wallet = new Wallet(

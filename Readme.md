@@ -189,7 +189,7 @@ This SDK is designed for React Native applications and uses native modules (via 
 
 **Important Notes**:
 - This is the **React Native counterpart** of [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk) (Node.js). For Node backends or scripts, use that package.
-- This library is not compatible with browser environments. It requires React Native's native module system.
+- This library is not compatible with browser environments; it requires React Native's native module system. For **browser** apps, use [`@utexo/rgb-sdk-web`](https://github.com/UTEXO-Protocol/rgb-sdk-web).
 
 ### Basic Usage
 

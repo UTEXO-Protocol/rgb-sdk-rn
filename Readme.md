@@ -5,15 +5,7 @@ This is the **React Native SDK** for RGB client applications. It provides a comp
 
 > **Note**: This is the React Native version of the [original RGB SDK for Node.js](https://github.com/UTEXO-Protocol/rgb-sdk). If you're building a Node.js application, use the original SDK instead.
 
-
-⚠️ **Security Notice**  
-If you're migrating from the legacy `rgb-sdk-rn` (which relied on a remote RGB Node server), be aware that wallet metadata such as xpubs may have been exposed and this cannot be undone.
-
-If you're upgrading from `rgb-sdk-rn` to `@utexo/rgb-sdk-rn`, see the **[Migration Guide](./MIGRATION.md)** for step-by-step instructions on moving your wallet state to local storage.
-
-For full details on security implications and recommended actions, please read **[SECURITY.md](./SECURITY.md)**.
-
-> **RGB Protocol**: This SDK uses the [`rgb-lib`](https://github.com/RGB-Tools/rgb-lib) binding library to interact with the RGB protocol. All operations are performed locally, providing full control over wallet data and operations.
+**RGB Protocol**: This SDK uses the [`rgb-lib`](https://github.com/RGB-Tools/rgb-lib) binding library to interact with the RGB protocol. All operations are performed locally, providing full control over wallet data and operations.
 
 ---
 
@@ -704,4 +696,3 @@ npm run ios:release    # or npm run android:release
 ```
 
 ---
-

@@ -3,7 +3,8 @@ export type BitcoinNetwork =
   | 'testnet'
   | 'testnet4'
   | 'regtest'
-  | 'signet';
+  | 'signet'
+  | 'utexo';
 
 export const BitcoinNetwork = {
   MAINNET: 'mainnet' as const,
@@ -11,7 +12,18 @@ export const BitcoinNetwork = {
   TESTNET4: 'testnet4' as const,
   REGTEST: 'regtest' as const,
   SIGNET: 'signet' as const,
+  UTEXO: 'utexo' as const,
 } as const;
+
+/**
+ * Maps SDK network names to the network names understood by the native rgb-lib module.
+ * `utexo` is a UTEXO Protocol-specific network that rgb-lib treats as signet.
+ */
+export type NativeBitcoinNetwork = Exclude<BitcoinNetwork, 'utexo'>;
+
+export function toNativeNetwork(network: BitcoinNetwork): NativeBitcoinNetwork {
+  return network === 'utexo' ? 'signet' : network;
+}
 
 export type Keys = {
   mnemonic: string;

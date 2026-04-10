@@ -32,6 +32,7 @@ import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.ReadableType
 import com.utexo.Token
 import com.utexo.Invoice
+import com.utexo.SinglesigKeys
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -235,6 +236,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     supportedSchemas: ReadableArray,
     maxAllocationsPerUtxo: Double,
     vanillaKeychain: Double,
+    reuseAddresses: Boolean,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -250,20 +252,23 @@ class RgbModule(reactContext: ReactApplicationContext) :
           schemaList.add(getAssetSchema(schemaStr ?: throw IllegalArgumentException("Invalid schema at index $i")))
         }
 
+        val singlesigKeys = SinglesigKeys(
+          accountXpubVanilla = accountXpubVanilla,
+          accountXpubColored = accountXpubColored,
+          vanillaKeychain = vanillaKeychain.toLong().toUByte(),
+          masterFingerprint = masterFingerprint,
+          mnemonic = mnemonic
+        )
         val walletData = WalletData(
           dataDir = networkDir.absolutePath,
           bitcoinNetwork = rgbNetwork,
           databaseType = DatabaseType.SQLITE,
-          maxAllocationsPerUtxo = maxAllocationsPerUtxo.toInt().toUInt(),
-          accountXpubVanilla = accountXpubVanilla,
-          accountXpubColored = accountXpubColored,
-          mnemonic = mnemonic,
-          masterFingerprint = masterFingerprint,
-          vanillaKeychain = vanillaKeychain.toInt().toUByte(),
-          supportedSchemas = schemaList
+          maxAllocationsPerUtxo = maxAllocationsPerUtxo.toLong().toUInt(),
+          supportedSchemas = schemaList,
+          reuseAddresses = reuseAddresses
         )
         val wallet = try {
-          Wallet(walletData)
+          Wallet(walletData, singlesigKeys)
         } catch (e: Exception) {
           val msg = e.message.orEmpty()
           val isCorruptedStoreError =
@@ -280,7 +285,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           )
           networkDir.deleteRecursively()
           networkDir.mkdirs()
-          Wallet(walletData)
+          Wallet(walletData, singlesigKeys)
         }
         val walletId = WalletStore.create(wallet)
         withContext(Dispatchers.Main) {
@@ -406,6 +411,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     val status = when (statusStr) {
       "WaitingCounterparty" -> RefreshTransferStatus.WAITING_COUNTERPARTY
       "WaitingConfirmations" -> RefreshTransferStatus.WAITING_CONFIRMATIONS
+      "Initiated" -> RefreshTransferStatus.INITIATED
       else -> throw IllegalArgumentException("Unknown RefreshTransferStatus: $statusStr")
     }
     val incoming = filterMap.getBoolean("incoming")
@@ -668,9 +674,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val receiveData = session.wallet.blindReceive(
           assetId,
           assignmentObj,
-          durationSeconds?.toInt()?.toUInt(),
+          durationSeconds?.toLong()?.toULong(),
           endpoints,
-          minConfirmations.toInt().toUByte()
+          minConfirmations.toLong().toUByte()
         )
 
         withContext(Dispatchers.Main) {
@@ -705,8 +711,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val count = session.wallet.createUtxos(
           online,
           upTo,
-          num?.toInt()?.toUByte(),
-          size?.toInt()?.toUInt(),
+          num?.toLong()?.toUByte(),
+          size?.toLong()?.toUInt(),
           feeRate.toULong(),
           skipSync
         )
@@ -743,8 +749,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val psbt = session.wallet.createUtxosBegin(
           online,
           upTo,
-          num?.toInt()?.toUByte(),
-          size?.toInt()?.toUInt(),
+          num?.toLong()?.toUByte(),
+          size?.toLong()?.toUInt(),
           feeRate.toULong(),
           skipSync
         )
@@ -976,6 +982,48 @@ class RgbModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun rotateVanillaAddress(walletId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val session = WalletStore.get(walletId.toInt())
+          ?: throw IllegalStateException("Wallet with id $walletId not found")
+
+        val address = session.wallet.rotateVanillaAddress()
+
+        withContext(Dispatchers.Main) {
+          promise.resolve(address)
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "rotateVanillaAddress error: ${e.message}", e)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rotateColoredAddress(walletId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val session = WalletStore.get(walletId.toInt())
+          ?: throw IllegalStateException("Wallet with id $walletId not found")
+
+        val address = session.wallet.rotateColoredAddress()
+
+        withContext(Dispatchers.Main) {
+          promise.resolve(address)
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "rotateColoredAddress error: ${e.message}", e)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+
+
   override fun getAssetBalance(walletId: Double, assetId: String, promise: Promise) {
     coroutineScope.launch(Dispatchers.IO) {
       try {
@@ -1132,6 +1180,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("Wallet with id $walletId not found")
 
         val walletData = session.wallet.getWalletData()
+        val keys = session.wallet.getKeys()
         val map = Arguments.createMap()
         map.putString("dataDir", walletData.dataDir)
 
@@ -1153,11 +1202,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putString("databaseType", dbTypeString)
 
         map.putDouble("maxAllocationsPerUtxo", walletData.maxAllocationsPerUtxo.toDouble())
-        map.putString("accountXpubVanilla", walletData.accountXpubVanilla)
-        map.putString("accountXpubColored", walletData.accountXpubColored)
-        walletData.mnemonic?.let { map.putString("mnemonic", it) }
-        map.putString("masterFingerprint", walletData.masterFingerprint)
-        walletData.vanillaKeychain?.let { map.putInt("vanillaKeychain", it.toInt()) }
+        map.putString("accountXpubVanilla", keys.accountXpubVanilla)
+        map.putString("accountXpubColored", keys.accountXpubColored)
+        keys.mnemonic?.let { map.putString("mnemonic", it) }
+        map.putString("masterFingerprint", keys.masterFingerprint)
+        keys.vanillaKeychain?.let { map.putInt("vanillaKeychain", it.toInt()) }
         val schemasArray = Arguments.createArray()
         walletData.supportedSchemas.forEach { schema ->
           val schemaString = when (schema) {
@@ -1228,7 +1277,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           assetId,
           amounts,
           feeRate.toULong(),
-          minConfirmations.toInt().toUByte()
+          minConfirmations.toLong().toUByte()
         )
 
         withContext(Dispatchers.Main) {
@@ -1249,6 +1298,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     inflationAmounts: ReadableArray,
     feeRate: Double,
     minConfirmations: Double,
+    dryRun: Boolean,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -1269,11 +1319,21 @@ class RgbModule(reactContext: ReactApplicationContext) :
           assetId,
           amounts,
           feeRate.toULong(),
-          minConfirmations.toInt().toUByte()
+          minConfirmations.toLong().toUByte(),
+          dryRun
         )
 
+        val map = Arguments.createMap()
+        map.putString("psbt", psbt)
+        map.putNull("batchTransferIdx")
+        val details = Arguments.createMap()
+        details.putString("fasciaPath", "")
+        details.putInt("minConfirmations", minConfirmations.toInt())
+        details.putDouble("entropy", 0.0)
+        map.putMap("details", details)
+
         withContext(Dispatchers.Main) {
-          promise.resolve(psbt)
+          promise.resolve(map)
         }
       } catch (e: Exception) {
         Log.e(TAG, "inflateBegin error: ${e.message}", e)
@@ -1333,7 +1393,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val asset = session.wallet.issueAssetCfa(
           name,
           details,
-          precision.toInt().toUByte(),
+          precision.toLong().toUByte(),
           amountsList,
           filePath
         )
@@ -1357,7 +1417,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
     precision: Double,
     amounts: ReadableArray,
     inflationAmounts: ReadableArray,
-    replaceRightsNum: Double,
     rejectListUrl: String?,
     promise: Promise
   ) {
@@ -1379,10 +1438,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val asset = session.wallet.issueAssetIfa(
           ticker,
           name,
-          precision.toInt().toUByte(),
+          precision.toLong().toUByte(),
           amountsList,
           inflationAmountsList,
-          replaceRightsNum.toInt().toUByte(),
           rejectListUrl
         )
 
@@ -1419,7 +1477,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val asset = session.wallet.issueAssetNia(
           ticker,
           name,
-          precision.toInt().toUByte(),
+          precision.toLong().toUByte(),
           amountsList
         )
 
@@ -1459,7 +1517,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ticker,
           name,
           details,
-          precision.toInt().toUByte(),
+          precision.toLong().toUByte(),
           mediaFilePath,
           attachmentsList
         )
@@ -1607,6 +1665,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           transferMap.putString("kind", kindString)
 
           val statusString = when (transfer.status) {
+            com.utexo.TransferStatus.INITIATED -> "Initiated"
             com.utexo.TransferStatus.WAITING_COUNTERPARTY -> "WaitingCounterparty"
             com.utexo.TransferStatus.WAITING_CONFIRMATIONS -> "WaitingConfirmations"
             com.utexo.TransferStatus.SETTLED -> "Settled"
@@ -1746,6 +1805,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           val refreshedMap = Arguments.createMap()
           refreshedTransfer.updatedStatus?.let { status ->
             val statusString = when (status) {
+              com.utexo.TransferStatus.INITIATED -> "Initiated"
               com.utexo.TransferStatus.WAITING_COUNTERPARTY -> "WaitingCounterparty"
               com.utexo.TransferStatus.WAITING_CONFIRMATIONS -> "WaitingConfirmations"
               com.utexo.TransferStatus.SETTLED -> "Settled"
@@ -1777,6 +1837,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     donation: Boolean,
     feeRate: Double,
     minConfirmations: Double,
+    expirationTimestamp: Double?,
     skipSync: Boolean,
     promise: Promise
   ) {
@@ -1807,7 +1868,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
           recipientMapNative,
           donation,
           feeRate.toULong(),
-          minConfirmations.toInt().toUByte(),
+          minConfirmations.toLong().toUByte(),
+          expirationTimestamp?.toLong()?.toULong(),
           skipSync
         )
 
@@ -1829,6 +1891,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
     donation: Boolean,
     feeRate: Double,
     minConfirmations: Double,
+    expirationTimestamp: Double?,
+    dryRun: Boolean,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -1858,11 +1922,23 @@ class RgbModule(reactContext: ReactApplicationContext) :
           recipientMapNative,
           donation,
           feeRate.toULong(),
-          minConfirmations.toInt().toUByte()
+          minConfirmations.toLong().toUByte(),
+          expirationTimestamp?.toLong()?.toULong(),
+          dryRun
         )
 
+        val map = Arguments.createMap()
+        map.putString("psbt", psbt)
+        map.putNull("batchTransferIdx")
+        val details = Arguments.createMap()
+        details.putString("fasciaPath", "")
+        details.putInt("minConfirmations", minConfirmations.toInt())
+        details.putDouble("entropy", 0.0)
+        details.putBoolean("isDonation", donation)
+        map.putMap("details", details)
+
         withContext(Dispatchers.Main) {
-          promise.resolve(psbt)
+          promise.resolve(map)
         }
       } catch (e: Exception) {
         Log.e(TAG, "sendBegin error: ${e.message}", e)
@@ -2088,9 +2164,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val receiveData = session.wallet.witnessReceive(
           assetId,
           assignmentObj,
-          durationSeconds?.toInt()?.toUInt(),
+          durationSeconds?.toLong()?.toULong(),
           endpoints,
-          minConfirmations.toInt().toUByte()
+          minConfirmations.toLong().toUByte()
         )
 
         withContext(Dispatchers.Main) {

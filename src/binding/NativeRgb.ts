@@ -40,9 +40,7 @@ export interface SendBeginResult {
 }
 
 export interface Spec extends TurboModule {
-  generateKeys(
-    bitcoinNetwork: NativeRgbBitcoinNetwork
-  ): Promise<{
+  generateKeys(bitcoinNetwork: NativeRgbBitcoinNetwork): Promise<{
     mnemonic: string;
     xpub: string;
     accountXpubVanilla: string;
@@ -101,7 +99,8 @@ export interface Spec extends TurboModule {
       type: 'Fungible' | 'NonFungible' | 'InflationRight' | 'Any';
       amount?: number;
     },
-    durationSeconds: number | null,
+    /** Absolute Unix time (seconds) when the invoice expires; matches rgb-lib / Swift. */
+    expirationTimestamp: number | null,
     transportEndpoints: string[],
     minConfirmations: number
   ): Promise<{
@@ -386,10 +385,7 @@ export interface Spec extends TurboModule {
     walletId: number,
     assetId: string | null,
     filter: Array<{
-      status:
-        | 'WaitingCounterparty'
-        | 'WaitingConfirmations'
-        | 'Initiated';
+      status: 'WaitingCounterparty' | 'WaitingConfirmations' | 'Initiated';
       incoming: boolean;
     }>,
     skipSync: boolean
@@ -487,7 +483,7 @@ export interface Spec extends TurboModule {
       type: 'Fungible' | 'NonFungible' | 'InflationRight' | 'Any';
       amount?: number;
     },
-    durationSeconds: number | null,
+    expirationTimestamp: number | null,
     transportEndpoints: string[],
     minConfirmations: number
   ): Promise<{

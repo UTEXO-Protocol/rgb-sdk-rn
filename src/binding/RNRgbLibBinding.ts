@@ -47,7 +47,32 @@ import type {
   AssignmentType,
 } from '@utexo/rgb-sdk-core';
 import type { Keys } from './Interfaces';
-import { DEFAULT_INDEXER_URLS, DEFAULT_TRANSPORT_ENDPOINTS } from '@utexo/rgb-sdk-core';
+import {
+  DEFAULT_INDEXER_URLS,
+  DEFAULT_TRANSPORT_ENDPOINTS,
+} from '@utexo/rgb-sdk-core';
+
+/**
+ * Maps `IRgbLibBinding` / `InvoiceRequest` (`durationSeconds` = TTL from now,
+ * optional absolute `expirationTimestamp`) to rgb-lib's absolute Unix seconds
+ * for the TurboModule (`NativeRgb` passes this through to Kotlin/Swift as-is).
+ */
+function receiveExpirationUnixSeconds(
+  params: InvoiceRequest & { expirationTimestamp?: number | null }
+): number {
+  const explicit = params.expirationTimestamp;
+  if (explicit != null && Number.isFinite(Number(explicit))) {
+    let ts = Math.floor(Number(explicit));
+    if (ts > 10_000_000_000) {
+      ts = Math.floor(ts / 1000);
+    }
+    return ts;
+  }
+  const duration = params.durationSeconds ?? 2000;
+  return (
+    Math.floor(Date.now() / 1000) + Math.max(1, Math.floor(Number(duration)))
+  );
+}
 
 // ── RNRgbLibBinding ──────────────────────────────────────────────────────────
 
@@ -366,7 +391,7 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       this.id(),
       params.assetId ?? null,
       assignment,
-      params.durationSeconds ?? 2000,
+      receiveExpirationUnixSeconds(params),
       [this.transportEndpoint],
       params.minConfirmations ?? 1
     ) as unknown as InvoiceReceiveData;
@@ -378,7 +403,7 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       this.id(),
       params.assetId ?? null,
       assignment,
-      params.durationSeconds ?? 2000,
+      receiveExpirationUnixSeconds(params),
       [this.transportEndpoint],
       params.minConfirmations ?? 1
     ) as unknown as InvoiceReceiveData;

@@ -14,7 +14,9 @@ const packageRoot = path.join(__dirname, '..');
 function findUniffiBindgenDir() {
   const req = createRequire(path.join(packageRoot, 'package.json'));
   try {
-    return path.dirname(req.resolve('uniffi-bindgen-react-native/package.json'));
+    return path.dirname(
+      req.resolve('uniffi-bindgen-react-native/package.json')
+    );
   } catch {
     // Fallback: walk up (covers some pnpm / nested layouts)
   }

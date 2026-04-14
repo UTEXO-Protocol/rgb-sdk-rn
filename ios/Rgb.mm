@@ -362,7 +362,7 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
 - (void)blindReceive:(double)walletId
               assetId:(NSString * _Nullable)assetId
            assignment:(JS::NativeRgb::SpecBlindReceiveAssignment &)assignment
-      durationSeconds:(NSNumber *)durationSeconds
+   expirationTimestamp:(NSNumber * _Nullable)expirationTimestamp
    transportEndpoints:(NSArray<NSString *> *)transportEndpoints
      minConfirmations:(double)minConfirmations
               resolve:(RCTPromiseResolveBlock)resolve
@@ -379,7 +379,7 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
     if (amountOpt.has_value()) {
         strongAssignment[@"amount"] = @(amountOpt.value());
     }
-    NSNumber *strongExpirationTimestamp = durationSeconds ? [durationSeconds copy] : nil;
+    NSNumber *strongExpirationTimestamp = expirationTimestamp ? [expirationTimestamp copy] : nil;
     NSArray *strongTransportEndpoints = [transportEndpoints copy];
     NSNumber *strongMinConfirmations = @(minConfirmations);
     
@@ -1736,7 +1736,7 @@ expirationTimestamp:(NSNumber *)expirationTimestamp
 - (void)witnessReceive:(double)walletId
                assetId:(NSString * _Nullable)assetId
             assignment:(JS::NativeRgb::SpecWitnessReceiveAssignment &)assignment
-       durationSeconds:(NSNumber *)durationSeconds
+   expirationTimestamp:(NSNumber * _Nullable)expirationTimestamp
    transportEndpoints:(NSArray<NSString *> *)transportEndpoints
      minConfirmations:(double)minConfirmations
               resolve:(RCTPromiseResolveBlock)resolve
@@ -1753,7 +1753,7 @@ expirationTimestamp:(NSNumber *)expirationTimestamp
     if (amountOpt.has_value()) {
         strongAssignment[@"amount"] = @(amountOpt.value());
     }
-    NSNumber *strongExpirationTimestamp = durationSeconds ? [durationSeconds copy] : nil;
+    NSNumber *strongExpirationTimestamp = expirationTimestamp ? [expirationTimestamp copy] : nil;
     NSArray *strongTransportEndpoints = [transportEndpoints copy];
     NSNumber *strongMinConfirmations = @(minConfirmations);
     

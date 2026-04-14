@@ -5,7 +5,7 @@
 /**
  * Version of the underlying rgb-lib-android native library (com.utexo:rgb-lib-android)
  */
-export const RGB_LIB_ANDROID_VERSION = '0.3.0-beta.17';
+export const RGB_LIB_ANDROID_VERSION = '0.3.0-beta.18';
 
 /**
  * Group ID of the underlying rgb-lib-android native library

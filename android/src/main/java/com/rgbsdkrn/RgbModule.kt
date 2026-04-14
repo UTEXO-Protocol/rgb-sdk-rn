@@ -81,11 +81,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
     coroutineScope.launch(Dispatchers.IO) {
       try {
         val network = when (bitcoinNetwork.lowercase()) {
-          "mainnet" -> BitcoinNetwork.Mainnet
-          "testnet" -> BitcoinNetwork.Testnet
-          "testnet4" -> BitcoinNetwork.Testnet4
-          "regtest" -> BitcoinNetwork.Regtest
-          "signet" -> BitcoinNetwork.Signet
+          "mainnet" -> BitcoinNetwork.MAINNET
+          "testnet" -> BitcoinNetwork.TESTNET
+          "testnet4" -> BitcoinNetwork.TESTNET4
+          "regtest" -> BitcoinNetwork.REGTEST
+          "signet" -> BitcoinNetwork.SIGNET
           else -> throw IllegalArgumentException("Unknown BitcoinNetwork: $bitcoinNetwork")
         }
 
@@ -107,11 +107,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
     coroutineScope.launch(Dispatchers.IO) {
       try {
         val network = when (bitcoinNetwork.lowercase()) {
-          "mainnet" -> BitcoinNetwork.Mainnet
-          "testnet" -> BitcoinNetwork.Testnet
-          "testnet4" -> BitcoinNetwork.Testnet4
-          "regtest" -> BitcoinNetwork.Regtest
-          "signet" -> BitcoinNetwork.Signet
+          "mainnet" -> BitcoinNetwork.MAINNET
+          "testnet" -> BitcoinNetwork.TESTNET
+          "testnet4" -> BitcoinNetwork.TESTNET4
+          "regtest" -> BitcoinNetwork.REGTEST
+          "signet" -> BitcoinNetwork.SIGNET
           else -> throw IllegalArgumentException("Unknown BitcoinNetwork: $bitcoinNetwork")
         }
         val keys = restoreKeys(bitcoinNetwork = network, mnemonic = mnemonic)
@@ -192,22 +192,23 @@ class RgbModule(reactContext: ReactApplicationContext) :
 
   private fun getNetwork(network: String): BitcoinNetwork {
     return when (network.lowercase()) {
-      "mainnet" -> BitcoinNetwork.Mainnet
-      "testnet" -> BitcoinNetwork.Testnet
-      "testnet4" -> BitcoinNetwork.Testnet4
-      "regtest" -> BitcoinNetwork.Regtest
-      "signet" -> BitcoinNetwork.Signet
+      "mainnet" -> BitcoinNetwork.MAINNET
+      "testnet" -> BitcoinNetwork.TESTNET
+      "testnet4" -> BitcoinNetwork.TESTNET4
+      "regtest" -> BitcoinNetwork.REGTEST
+      "signet" -> BitcoinNetwork.SIGNET
       else -> throw IllegalArgumentException("Unknown BitcoinNetwork: $network")
     }
   }
 
   private fun networkToString(network: BitcoinNetwork): String {
     return when (network) {
-      BitcoinNetwork.Mainnet -> "mainnet"
-      BitcoinNetwork.Testnet -> "testnet"
-      BitcoinNetwork.Testnet4 -> "testnet4"
-      BitcoinNetwork.Regtest -> "regtest"
-      BitcoinNetwork.Signet -> "signet"
+      BitcoinNetwork.MAINNET -> "mainnet"
+      BitcoinNetwork.TESTNET -> "testnet"
+      BitcoinNetwork.TESTNET4 -> "testnet4"
+      BitcoinNetwork.REGTEST -> "regtest"
+      BitcoinNetwork.SIGNET -> "signet"
+      BitcoinNetwork.SIGNET_CUSTOM -> "signetCustom"
       else -> "regtest"
     }
   }
@@ -400,7 +401,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val amount = assignmentMap.getDouble("amount").toULong()
         Assignment.InflationRight(amount)
       }
-      "ReplaceRight" -> Assignment.ReplaceRight
       "Any" -> Assignment.Any
       else -> throw IllegalArgumentException("Unknown Assignment type: $type")
     }
@@ -411,7 +411,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
     val status = when (statusStr) {
       "WaitingCounterparty" -> RefreshTransferStatus.WAITING_COUNTERPARTY
       "WaitingConfirmations" -> RefreshTransferStatus.WAITING_CONFIRMATIONS
-      "Initiated" -> RefreshTransferStatus.INITIATED
       else -> throw IllegalArgumentException("Unknown RefreshTransferStatus: $statusStr")
     }
     val incoming = filterMap.getBoolean("incoming")
@@ -461,9 +460,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
       is Assignment.InflationRight -> {
         map.putString("type", "InflationRight")
         map.putDouble("amount", assignment.amount.toDouble())
-      }
-      is Assignment.ReplaceRight -> {
-        map.putString("type", "ReplaceRight")
       }
       is Assignment.Any -> {
         map.putString("type", "Any")
@@ -655,7 +651,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     walletId: Double,
     assetId: String?,
     assignment: ReadableMap,
-    durationSeconds: Double?,
+    expirationTimestamp: Double?,
     transportEndpoints: ReadableArray,
     minConfirmations: Double,
     promise: Promise
@@ -674,7 +670,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val receiveData = session.wallet.blindReceive(
           assetId,
           assignmentObj,
-          durationSeconds?.toLong()?.toULong(),
+          expirationTimestamp?.toLong()?.toULong(),
           endpoints,
           minConfirmations.toLong().toUByte()
         )
@@ -1185,11 +1181,12 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putString("dataDir", walletData.dataDir)
 
         val networkString = when (walletData.bitcoinNetwork) {
-          BitcoinNetwork.Mainnet -> "mainnet"
-          BitcoinNetwork.Testnet -> "testnet"
-          BitcoinNetwork.Testnet4 -> "testnet4"
-          BitcoinNetwork.Regtest -> "regtest"
-          BitcoinNetwork.Signet -> "signet"
+          BitcoinNetwork.MAINNET -> "mainnet"
+          BitcoinNetwork.TESTNET -> "testnet"
+          BitcoinNetwork.TESTNET4 -> "testnet4"
+          BitcoinNetwork.REGTEST -> "regtest"
+          BitcoinNetwork.SIGNET -> "signet"
+          BitcoinNetwork.SIGNET_CUSTOM -> "signetCustom"
           else -> {
             throw Exception("Unknown bitcoin network")
           }
@@ -1314,7 +1311,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           amounts.add(inflationAmounts.getDouble(i).toULong())
         }
 
-        val psbt = session.wallet.inflateBegin(
+        val inflateBeginResult = session.wallet.inflateBegin(
           online,
           assetId,
           amounts,
@@ -1324,12 +1321,12 @@ class RgbModule(reactContext: ReactApplicationContext) :
         )
 
         val map = Arguments.createMap()
-        map.putString("psbt", psbt)
-        map.putNull("batchTransferIdx")
+        map.putString("psbt", inflateBeginResult.psbt)
+        inflateBeginResult.batchTransferIdx?.let { map.putInt("batchTransferIdx", it) } ?: map.putNull("batchTransferIdx")
         val details = Arguments.createMap()
-        details.putString("fasciaPath", "")
-        details.putInt("minConfirmations", minConfirmations.toInt())
-        details.putDouble("entropy", 0.0)
+        details.putString("fasciaPath", inflateBeginResult.details.fasciaPath)
+        details.putInt("minConfirmations", inflateBeginResult.details.minConfirmations.toInt())
+        details.putDouble("entropy", inflateBeginResult.details.entropy.toDouble())
         map.putMap("details", details)
 
         withContext(Dispatchers.Main) {
@@ -1675,7 +1672,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
 
           transfer.txid?.let { transferMap.putString("txid", it) }
           transfer.recipientId?.let { transferMap.putString("recipientId", it) }
-          transfer.expiration?.let { transferMap.putDouble("expiration", it.toDouble()) }
+          transfer.expirationTimestamp?.let { transferMap.putDouble("expiration", it.toDouble()) }
 
           transfer.requestedAssignment?.let {
             transferMap.putMap("requestedAssignment", assignmentToMap(it))
@@ -1917,7 +1914,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           recipientMapNative[key] = recipientsList
         }
 
-        val psbt = session.wallet.sendBegin(
+        val sendBeginResult = session.wallet.sendBegin(
           online,
           recipientMapNative,
           donation,
@@ -1928,13 +1925,13 @@ class RgbModule(reactContext: ReactApplicationContext) :
         )
 
         val map = Arguments.createMap()
-        map.putString("psbt", psbt)
-        map.putNull("batchTransferIdx")
+        map.putString("psbt", sendBeginResult.psbt)
+        sendBeginResult.batchTransferIdx?.let { map.putInt("batchTransferIdx", it) } ?: map.putNull("batchTransferIdx")
         val details = Arguments.createMap()
-        details.putString("fasciaPath", "")
-        details.putInt("minConfirmations", minConfirmations.toInt())
-        details.putDouble("entropy", 0.0)
-        details.putBoolean("isDonation", donation)
+        details.putString("fasciaPath", sendBeginResult.details.fasciaPath)
+        details.putInt("minConfirmations", sendBeginResult.details.minConfirmations.toInt())
+        details.putDouble("entropy", sendBeginResult.details.entropy.toDouble())
+        details.putBoolean("isDonation", sendBeginResult.details.isDonation)
         map.putMap("details", details)
 
         withContext(Dispatchers.Main) {
@@ -2145,7 +2142,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     walletId: Double,
     assetId: String?,
     assignment: ReadableMap,
-    durationSeconds: Double?,
+    expirationTimestamp: Double?,
     transportEndpoints: ReadableArray,
     minConfirmations: Double,
     promise: Promise
@@ -2164,7 +2161,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val receiveData = session.wallet.witnessReceive(
           assetId,
           assignmentObj,
-          durationSeconds?.toLong()?.toULong(),
+          expirationTimestamp?.toLong()?.toULong(),
           endpoints,
           minConfirmations.toLong().toUByte()
         )

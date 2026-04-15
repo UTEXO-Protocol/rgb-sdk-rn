@@ -128,6 +128,7 @@
         supportedSchemas:(NSArray<NSString *> *)supportedSchemas
    maxAllocationsPerUtxo:(double)maxAllocationsPerUtxo
          vanillaKeychain:(double)vanillaKeychain
+          reuseAddresses:(BOOL)reuseAddresses
                   resolve:(RCTPromiseResolveBlock)resolve
                    reject:(RCTPromiseRejectBlock)reject
 {
@@ -151,7 +152,8 @@
     
     NSNumber *strongMaxAllocationsPerUtxo = @(maxAllocationsPerUtxo);
     NSNumber *strongVanillaKeychain = @(vanillaKeychain);
-    
+    BOOL strongReuseAddresses = reuseAddresses;
+
     if (!strongNetwork || !strongAccountXpubVanilla || !strongAccountXpubColored ||
         !strongMnemonic || !strongMasterFingerprint || !strongSupportedSchemas) {
         if (strongReject) {
@@ -159,7 +161,7 @@
         }
         return;
     }
-    
+
     EXEC_ASYNC({
         NSDictionary *result = [RgbSwiftHelper _initializeWallet:strongNetwork
                                             accountXpubVanilla:strongAccountXpubVanilla
@@ -168,7 +170,8 @@
                                              masterFingerprint:strongMasterFingerprint
                                              supportedSchemas:strongSupportedSchemas
                                         maxAllocationsPerUtxo:strongMaxAllocationsPerUtxo
-                                              vanillaKeychain:strongVanillaKeychain];
+                                              vanillaKeychain:strongVanillaKeychain
+                                             reuseAddresses:strongReuseAddresses];
         
         if (!result) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -359,7 +362,7 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
 - (void)blindReceive:(double)walletId
               assetId:(NSString * _Nullable)assetId
            assignment:(JS::NativeRgb::SpecBlindReceiveAssignment &)assignment
-      durationSeconds:(NSNumber *)durationSeconds
+   expirationTimestamp:(NSNumber * _Nullable)expirationTimestamp
    transportEndpoints:(NSArray<NSString *> *)transportEndpoints
      minConfirmations:(double)minConfirmations
               resolve:(RCTPromiseResolveBlock)resolve
@@ -376,7 +379,7 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
     if (amountOpt.has_value()) {
         strongAssignment[@"amount"] = @(amountOpt.value());
     }
-    NSNumber *strongDurationSeconds = durationSeconds ? [durationSeconds copy] : nil;
+    NSNumber *strongExpirationTimestamp = expirationTimestamp ? [expirationTimestamp copy] : nil;
     NSArray *strongTransportEndpoints = [transportEndpoints copy];
     NSNumber *strongMinConfirmations = @(minConfirmations);
     
@@ -384,7 +387,7 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
         NSDictionary *result = [RgbSwiftHelper _blindReceive:strongWalletId
                                                      assetId:strongAssetId
                                                   assignment:strongAssignment
-                                             durationSeconds:strongDurationSeconds
+                                         expirationTimestamp:strongExpirationTimestamp
                                           transportEndpoints:strongTransportEndpoints
                                             minConfirmations:strongMinConfirmations];
         NSString *errorMessage = result[@"error"];
@@ -757,6 +760,62 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
     });
 }
 
+- (void)rotateVanillaAddress:(double)walletId
+                     resolve:(RCTPromiseResolveBlock)resolve
+                      reject:(RCTPromiseRejectBlock)reject
+{
+    __weak Rgb *weakSelf = self;
+    RCTPromiseResolveBlock strongResolve = resolve;
+    RCTPromiseRejectBlock strongReject = reject;
+    NSNumber *strongWalletId = @(walletId);
+
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rotateVanillaAddress:strongWalletId];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            NSString *errorCode = result[@"errorCode"] ?: @"ERROR";
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (strongReject) {
+                    strongReject(errorCode, errorMessage, nil);
+                }
+            });
+        } else {
+            __strong Rgb *strongSelf = weakSelf;
+            if (strongSelf && strongResolve) {
+                [strongSelf resolvePromise:strongResolve withResult:result[@"address"]];
+            }
+        }
+    });
+}
+
+- (void)rotateColoredAddress:(double)walletId
+                     resolve:(RCTPromiseResolveBlock)resolve
+                      reject:(RCTPromiseRejectBlock)reject
+{
+    __weak Rgb *weakSelf = self;
+    RCTPromiseResolveBlock strongResolve = resolve;
+    RCTPromiseRejectBlock strongReject = reject;
+    NSNumber *strongWalletId = @(walletId);
+
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rotateColoredAddress:strongWalletId];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            NSString *errorCode = result[@"errorCode"] ?: @"ERROR";
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (strongReject) {
+                    strongReject(errorCode, errorMessage, nil);
+                }
+            });
+        } else {
+            __strong Rgb *strongSelf = weakSelf;
+            if (strongSelf && strongResolve) {
+                [strongSelf resolvePromise:strongResolve withResult:result[@"address"]];
+            }
+        }
+    });
+}
+
 - (void)getAssetBalance:(double)walletId
                 assetId:(NSString * _Nonnull)assetId
                 resolve:(RCTPromiseResolveBlock)resolve
@@ -976,6 +1035,7 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
     inflationAmounts:(NSArray<NSNumber *> *)inflationAmounts
              feeRate:(double)feeRate
     minConfirmations:(double)minConfirmations
+             dryRun:(BOOL)dryRun
              resolve:(RCTPromiseResolveBlock)resolve
               reject:(RCTPromiseRejectBlock)reject
 {
@@ -987,13 +1047,15 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
     NSArray *strongInflationAmounts = [inflationAmounts copy];
     NSNumber *strongFeeRate = @(feeRate);
     NSNumber *strongMinConfirmations = @(minConfirmations);
-    
+    BOOL strongDryRun = dryRun;
+
     EXEC_ASYNC({
         NSDictionary *result = [RgbSwiftHelper _inflateBegin:strongWalletId
                                                      assetId:strongAssetId
                                             inflationAmounts:strongInflationAmounts
                                                      feeRate:strongFeeRate
-                                            minConfirmations:strongMinConfirmations];
+                                            minConfirmations:strongMinConfirmations
+                                                      dryRun:strongDryRun];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             NSString *errorCode = result[@"errorCode"] ?: @"ERROR";
@@ -1090,7 +1152,6 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
             precision:(double)precision
               amounts:(NSArray<NSNumber *> *)amounts
      inflationAmounts:(NSArray<NSNumber *> *)inflationAmounts
-     replaceRightsNum:(double)replaceRightsNum
        rejectListUrl:(NSString * _Nullable)rejectListUrl
               resolve:(RCTPromiseResolveBlock)resolve
                reject:(RCTPromiseRejectBlock)reject
@@ -1104,9 +1165,8 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
     NSNumber *strongPrecision = @(precision);
     NSArray *strongAmounts = [amounts copy];
     NSArray *strongInflationAmounts = [inflationAmounts copy];
-    NSNumber *strongReplaceRightsNum = @(replaceRightsNum);
     NSString *strongRejectListUrl = rejectListUrl ? [rejectListUrl copy] : nil;
-    
+
     EXEC_ASYNC({
         NSDictionary *result = [RgbSwiftHelper _issueAssetIfa:strongWalletId
                                                         ticker:strongTicker
@@ -1114,7 +1174,6 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
                                                      precision:strongPrecision
                                                        amounts:strongAmounts
                                               inflationAmounts:strongInflationAmounts
-                                              replaceRightsNum:strongReplaceRightsNum
                                                 rejectListUrl:strongRejectListUrl];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
@@ -1385,6 +1444,7 @@ skipConsistencyCheck:(BOOL)skipConsistencyCheck
      donation:(BOOL)donation
       feeRate:(double)feeRate
 minConfirmations:(double)minConfirmations
+expirationTimestamp:(NSNumber *)expirationTimestamp
      skipSync:(BOOL)skipSync
      resolve:(RCTPromiseResolveBlock)resolve
       reject:(RCTPromiseRejectBlock)reject
@@ -1397,15 +1457,17 @@ minConfirmations:(double)minConfirmations
     NSNumber *strongDonation = @(donation);
     NSNumber *strongFeeRate = @(feeRate);
     NSNumber *strongMinConfirmations = @(minConfirmations);
+    NSNumber *strongExpirationTimestamp = expirationTimestamp;
     NSNumber *strongSkipSync = @(skipSync);
-    
+
     EXEC_ASYNC({
         NSDictionary *result = [RgbSwiftHelper _send:strongWalletId
                                         recipientMap:strongRecipientMap
                                              donation:strongDonation
                                               feeRate:strongFeeRate
                                      minConfirmations:strongMinConfirmations
-                                            skipSync:strongSkipSync];
+                                  expirationTimestamp:strongExpirationTimestamp
+                                             skipSync:strongSkipSync];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             NSString *errorCode = result[@"errorCode"] ?: @"ERROR";
@@ -1428,6 +1490,8 @@ minConfirmations:(double)minConfirmations
           donation:(BOOL)donation
            feeRate:(double)feeRate
   minConfirmations:(double)minConfirmations
+expirationTimestamp:(NSNumber *)expirationTimestamp
+           dryRun:(BOOL)dryRun
           resolve:(RCTPromiseResolveBlock)resolve
            reject:(RCTPromiseRejectBlock)reject
 {
@@ -1439,13 +1503,17 @@ minConfirmations:(double)minConfirmations
     NSNumber *strongDonation = @(donation);
     NSNumber *strongFeeRate = @(feeRate);
     NSNumber *strongMinConfirmations = @(minConfirmations);
-    
+    NSNumber *strongExpirationTimestamp = expirationTimestamp;
+    BOOL strongDryRun = dryRun;
+
     EXEC_ASYNC({
         NSDictionary *result = [RgbSwiftHelper _sendBegin:strongWalletId
-                                          recipientMap:strongRecipientMap
-                                               donation:strongDonation
-                                                feeRate:strongFeeRate
-                                       minConfirmations:strongMinConfirmations];
+                                             recipientMap:strongRecipientMap
+                                                  donation:strongDonation
+                                                   feeRate:strongFeeRate
+                                          minConfirmations:strongMinConfirmations
+                                       expirationTimestamp:strongExpirationTimestamp
+                                                   dryRun:strongDryRun];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             NSString *errorCode = result[@"errorCode"] ?: @"ERROR";
@@ -1668,7 +1736,7 @@ minConfirmations:(double)minConfirmations
 - (void)witnessReceive:(double)walletId
                assetId:(NSString * _Nullable)assetId
             assignment:(JS::NativeRgb::SpecWitnessReceiveAssignment &)assignment
-       durationSeconds:(NSNumber *)durationSeconds
+   expirationTimestamp:(NSNumber * _Nullable)expirationTimestamp
    transportEndpoints:(NSArray<NSString *> *)transportEndpoints
      minConfirmations:(double)minConfirmations
               resolve:(RCTPromiseResolveBlock)resolve
@@ -1685,7 +1753,7 @@ minConfirmations:(double)minConfirmations
     if (amountOpt.has_value()) {
         strongAssignment[@"amount"] = @(amountOpt.value());
     }
-    NSNumber *strongDurationSeconds = durationSeconds ? [durationSeconds copy] : nil;
+    NSNumber *strongExpirationTimestamp = expirationTimestamp ? [expirationTimestamp copy] : nil;
     NSArray *strongTransportEndpoints = [transportEndpoints copy];
     NSNumber *strongMinConfirmations = @(minConfirmations);
     
@@ -1693,7 +1761,7 @@ minConfirmations:(double)minConfirmations
         NSDictionary *result = [RgbSwiftHelper _witnessReceive:strongWalletId
                                                        assetId:strongAssetId
                                                     assignment:strongAssignment
-                                               durationSeconds:strongDurationSeconds
+                                           expirationTimestamp:strongExpirationTimestamp
                                           transportEndpoints:strongTransportEndpoints
                                             minConfirmations:strongMinConfirmations];
         NSString *errorMessage = result[@"error"];

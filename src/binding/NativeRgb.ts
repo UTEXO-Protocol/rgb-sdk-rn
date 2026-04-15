@@ -9,10 +9,38 @@ import type {
   AssetNia,
 } from './Interfaces';
 
+/** Bitcoin networks accepted by rgb-lib native bindings (maps to `BitcoinNetwork`). */
+export type NativeRgbBitcoinNetwork =
+  | 'mainnet'
+  | 'testnet'
+  | 'testnet4'
+  | 'regtest'
+  | 'signet'
+  | 'signet_custom';
+
+export interface InflateBeginResult {
+  psbt: string;
+  batchTransferIdx: number | null;
+  details: {
+    fasciaPath: string;
+    minConfirmations: number;
+    entropy: number;
+  };
+}
+
+export interface SendBeginResult {
+  psbt: string;
+  batchTransferIdx: number | null;
+  details: {
+    fasciaPath: string;
+    minConfirmations: number;
+    entropy: number;
+    isDonation: boolean;
+  };
+}
+
 export interface Spec extends TurboModule {
-  generateKeys(
-    bitcoinNetwork: 'mainnet' | 'testnet' | 'testnet4' | 'regtest' | 'signet'
-  ): Promise<{
+  generateKeys(bitcoinNetwork: NativeRgbBitcoinNetwork): Promise<{
     mnemonic: string;
     xpub: string;
     accountXpubVanilla: string;
@@ -20,7 +48,7 @@ export interface Spec extends TurboModule {
     masterFingerprint: string;
   }>;
   restoreKeys(
-    bitcoinNetwork: 'mainnet' | 'testnet' | 'testnet4' | 'regtest' | 'signet',
+    bitcoinNetwork: NativeRgbBitcoinNetwork,
     mnemonic: string
   ): Promise<{
     mnemonic: string;
@@ -38,7 +66,8 @@ export interface Spec extends TurboModule {
     masterFingerprint: string,
     supportedSchemas: string[],
     maxAllocationsPerUtxo: number,
-    vanillaKeychain: number
+    vanillaKeychain: number,
+    reuseAddresses: boolean
   ): Promise<number>;
   goOnline(
     walletId: number,
@@ -67,15 +96,11 @@ export interface Spec extends TurboModule {
     walletId: number,
     assetId: string | null,
     assignment: {
-      type:
-        | 'Fungible'
-        | 'NonFungible'
-        | 'InflationRight'
-        | 'ReplaceRight'
-        | 'Any';
+      type: 'Fungible' | 'NonFungible' | 'InflationRight' | 'Any';
       amount?: number;
     },
-    durationSeconds: number | null,
+    /** Absolute Unix time (seconds) when the invoice expires; matches rgb-lib / Swift. */
+    expirationTimestamp: number | null,
     transportEndpoints: string[],
     minConfirmations: number
   ): Promise<{
@@ -131,6 +156,8 @@ export interface Spec extends TurboModule {
   ): Promise<boolean>;
   finalizePsbt(walletId: number, signedPsbt: string): Promise<string>;
   getAddress(walletId: number): Promise<string>;
+  rotateVanillaAddress(walletId: number): Promise<string>;
+  rotateColoredAddress(walletId: number): Promise<string>;
   getAssetBalance(
     walletId: number,
     assetId: string
@@ -153,6 +180,7 @@ export interface Spec extends TurboModule {
     masterFingerprint: string;
     vanillaKeychain?: number;
     supportedSchemas: string[];
+    reuseAddresses?: boolean;
   }>;
   getWalletDir(walletId: number): Promise<string>;
   inflate(
@@ -170,8 +198,9 @@ export interface Spec extends TurboModule {
     assetId: string,
     inflationAmounts: number[],
     feeRate: number,
-    minConfirmations: number
-  ): Promise<string>;
+    minConfirmations: number,
+    dryRun: boolean
+  ): Promise<InflateBeginResult>;
   inflateEnd(
     walletId: number,
     signedPsbt: string
@@ -194,7 +223,6 @@ export interface Spec extends TurboModule {
     precision: number,
     amounts: number[],
     inflationAmounts: number[],
-    replaceRightsNum: number,
     rejectListUrl: string | null
   ): Promise<AssetIfa>;
   issueAssetNia(
@@ -357,7 +385,7 @@ export interface Spec extends TurboModule {
     walletId: number,
     assetId: string | null,
     filter: Array<{
-      status: 'WaitingCounterparty' | 'WaitingConfirmations';
+      status: 'WaitingCounterparty' | 'WaitingConfirmations' | 'Initiated';
       incoming: boolean;
     }>,
     skipSync: boolean
@@ -367,7 +395,8 @@ export interface Spec extends TurboModule {
         | 'WaitingCounterparty'
         | 'WaitingConfirmations'
         | 'Settled'
-        | 'Failed';
+        | 'Failed'
+        | 'Initiated';
       failure?: string;
     };
   }>;
@@ -381,12 +410,7 @@ export interface Spec extends TurboModule {
           blinding?: number;
         };
         assignment: {
-          type:
-            | 'Fungible'
-            | 'NonFungible'
-            | 'InflationRight'
-            | 'ReplaceRight'
-            | 'Any';
+          type: 'Fungible' | 'NonFungible' | 'InflationRight' | 'Any';
           amount?: number;
         };
         transportEndpoints: string[];
@@ -395,6 +419,7 @@ export interface Spec extends TurboModule {
     donation: boolean,
     feeRate: number,
     minConfirmations: number,
+    expirationTimestamp: number | null,
     skipSync: boolean
   ): Promise<{
     txid: string;
@@ -410,12 +435,7 @@ export interface Spec extends TurboModule {
           blinding?: number;
         };
         assignment: {
-          type:
-            | 'Fungible'
-            | 'NonFungible'
-            | 'InflationRight'
-            | 'ReplaceRight'
-            | 'Any';
+          type: 'Fungible' | 'NonFungible' | 'InflationRight' | 'Any';
           amount?: number;
         };
         transportEndpoints: string[];
@@ -423,8 +443,10 @@ export interface Spec extends TurboModule {
     },
     donation: boolean,
     feeRate: number,
-    minConfirmations: number
-  ): Promise<string>;
+    minConfirmations: number,
+    expirationTimestamp: number | null,
+    dryRun: boolean
+  ): Promise<SendBeginResult>;
   sendBtc(
     walletId: number,
     address: string,
@@ -458,15 +480,10 @@ export interface Spec extends TurboModule {
     walletId: number,
     assetId: string | null,
     assignment: {
-      type:
-        | 'Fungible'
-        | 'NonFungible'
-        | 'InflationRight'
-        | 'ReplaceRight'
-        | 'Any';
+      type: 'Fungible' | 'NonFungible' | 'InflationRight' | 'Any';
       amount?: number;
     },
-    durationSeconds: number | null,
+    expirationTimestamp: number | null,
     transportEndpoints: string[],
     minConfirmations: number
   ): Promise<{
@@ -476,7 +493,7 @@ export interface Spec extends TurboModule {
     batchTransferIdx: number;
   }>;
   decodeInvoice(invoice: string): Promise<InvoiceData>;
-  
+
   // ── VSS Backup methods ──────────────────────────────────────────────────────
 
   /**

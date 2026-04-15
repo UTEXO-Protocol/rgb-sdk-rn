@@ -47,7 +47,32 @@ import type {
   AssignmentType,
 } from '@utexo/rgb-sdk-core';
 import type { Keys } from './Interfaces';
-import { DEFAULT_INDEXER_URLS, DEFAULT_TRANSPORT_ENDPOINTS } from '@utexo/rgb-sdk-core';
+import {
+  DEFAULT_INDEXER_URLS,
+  DEFAULT_TRANSPORT_ENDPOINTS,
+} from '@utexo/rgb-sdk-core';
+
+/**
+ * Maps `IRgbLibBinding` / `InvoiceRequest` (`durationSeconds` = TTL from now,
+ * optional absolute `expirationTimestamp`) to rgb-lib's absolute Unix seconds
+ * for the TurboModule (`NativeRgb` passes this through to Kotlin/Swift as-is).
+ */
+function receiveExpirationUnixSeconds(
+  params: InvoiceRequest & { expirationTimestamp?: number | null }
+): number {
+  const explicit = params.expirationTimestamp;
+  if (explicit != null && Number.isFinite(Number(explicit))) {
+    let ts = Math.floor(Number(explicit));
+    if (ts > 10_000_000_000) {
+      ts = Math.floor(ts / 1000);
+    }
+    return ts;
+  }
+  const duration = params.durationSeconds ?? 2000;
+  return (
+    Math.floor(Date.now() / 1000) + Math.max(1, Math.floor(Number(duration)))
+  );
+}
 
 // ── RNRgbLibBinding ──────────────────────────────────────────────────────────
 
@@ -59,6 +84,9 @@ export class RNRgbLibBinding implements IRgbLibBinding {
   private readonly rnNetwork: string;
   private readonly transportEndpoint: string;
   readonly indexerUrl: string;
+  private readonly maxAllocationsPerUtxo: number;
+  private readonly vanillaKeychain: number;
+  private readonly reuseAddresses: boolean;
 
   constructor(params: WalletInitParams) {
     if (!params.xpubVan)
@@ -91,6 +119,9 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       accountXpubColored: params.xpubCol,
       masterFingerprint: params.masterFingerprint,
     };
+    this.maxAllocationsPerUtxo = params.maxAllocationsPerUtxo ?? 1;
+    this.vanillaKeychain = params.vanillaKeychain ?? 0;
+    this.reuseAddresses = params.reuseAddresses ?? false;
   }
 
   private async ensureInitialized(): Promise<void> {
@@ -104,8 +135,9 @@ export class RNRgbLibBinding implements IRgbLibBinding {
         this.keys.mnemonic,
         this.keys.masterFingerprint,
         ['Nia', 'Uda', 'Cfa'],
-        1,
-        0
+        this.maxAllocationsPerUtxo,
+        this.vanillaKeychain,
+        this.reuseAddresses
       );
     })();
     await this.initPromise;
@@ -147,6 +179,14 @@ export class RNRgbLibBinding implements IRgbLibBinding {
 
   async getAddress(): Promise<string> {
     return Rgb.getAddress(this.id());
+  }
+
+  async rotateVanillaAddress(): Promise<string> {
+    return Rgb.rotateVanillaAddress(this.id());
+  }
+
+  async rotateColoredAddress(): Promise<string> {
+    return Rgb.rotateColoredAddress(this.id());
   }
 
   async listUnspents(): Promise<Unspent[]> {
@@ -222,19 +262,21 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       params.precision,
       params.amounts,
       params.inflationAmounts,
-      params.replaceRightsNum,
       params.rejectListUrl
     ) as unknown as AssetIfa;
   }
 
   async inflateBegin(params: InflateAssetIfaRequestModel): Promise<string> {
-    return Rgb.inflateBegin(
+    const dryRun = (params as { dryRun?: boolean }).dryRun ?? false;
+    const r = await Rgb.inflateBegin(
       this.id(),
       params.assetId,
       params.inflationAmounts,
       params.feeRate ?? 1,
-      params.minConfirmations ?? 1
+      params.minConfirmations ?? 1,
+      dryRun
     );
+    return r.psbt;
   }
 
   async inflateEnd(params: InflateEndRequestModel): Promise<OperationResult> {
@@ -275,13 +317,20 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       ],
     };
 
-    return Rgb.sendBegin(
+    const expirationTimestamp =
+      (params as { expirationTimestamp?: number | null }).expirationTimestamp ??
+      null;
+    const dryRun = (params as { dryRun?: boolean }).dryRun ?? false;
+    const r = await Rgb.sendBegin(
       this.id(),
       recipientMap,
       params.donation ?? false,
       params.feeRate ?? 1,
-      params.minConfirmations ?? 1
+      params.minConfirmations ?? 1,
+      expirationTimestamp,
+      dryRun
     );
+    return r.psbt;
   }
 
   async sendBeginBatch(params: {
@@ -289,6 +338,8 @@ export class RNRgbLibBinding implements IRgbLibBinding {
     feeRate?: number;
     minConfirmations?: number;
     donation?: boolean;
+    expirationTimestamp?: number | null;
+    dryRun?: boolean;
   }): Promise<string> {
     if (!params.recipientMap || Object.keys(params.recipientMap).length === 0) {
       throw new ValidationError(
@@ -296,13 +347,16 @@ export class RNRgbLibBinding implements IRgbLibBinding {
         'recipientMap'
       );
     }
-    return Rgb.sendBegin(
+    const r = await Rgb.sendBegin(
       this.id(),
       params.recipientMap as Record<string, any[]>,
       params.donation ?? true,
       params.feeRate ?? 1,
-      params.minConfirmations ?? 1
+      params.minConfirmations ?? 1,
+      params.expirationTimestamp ?? null,
+      params.dryRun ?? false
     );
+    return r.psbt;
   }
 
   async sendEnd(params: SendAssetEndRequestModel): Promise<SendResult> {
@@ -337,7 +391,7 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       this.id(),
       params.assetId ?? null,
       assignment,
-      params.durationSeconds ?? 2000,
+      receiveExpirationUnixSeconds(params),
       [this.transportEndpoint],
       params.minConfirmations ?? 1
     ) as unknown as InvoiceReceiveData;
@@ -349,7 +403,7 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       this.id(),
       params.assetId ?? null,
       assignment,
-      params.durationSeconds ?? 2000,
+      receiveExpirationUnixSeconds(params),
       [this.transportEndpoint],
       params.minConfirmations ?? 1
     ) as unknown as InvoiceReceiveData;

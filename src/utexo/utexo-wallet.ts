@@ -5,9 +5,17 @@
  * the platform-specific initialize() that creates WalletManager instances
  * backed by the RN TurboModule binding.
  */
-import { UTEXOWalletCore, getVssConfigs, buildVssConfigFromMnemonic, ValidationError } from '@utexo/rgb-sdk-core';
+import {
+  UTEXOWalletCore,
+  getVssConfigs,
+  buildVssConfigFromMnemonic,
+  ValidationError,
+} from '@utexo/rgb-sdk-core';
 import type { ConfigOptions, VssBackupConfig } from '@utexo/rgb-sdk-core';
-import { WalletManager, restoreFromVss as walletManagerRestoreFromVss } from '../wallet/wallet-manager';
+import {
+  WalletManager,
+  restoreFromVss as walletManagerRestoreFromVss,
+} from '../wallet/wallet-manager';
 
 export type { ConfigOptions };
 
@@ -71,7 +79,7 @@ export class UTEXOWallet extends UTEXOWalletCore {
     if (typeof mnemonicOrSeed === 'string') {
       const serverUrl = config?.serverUrl ?? DEFAULT_VSS_SERVER_URL;
       baseConfig = {
-        ...await buildVssConfigFromMnemonic(mnemonicOrSeed, serverUrl),
+        ...(await buildVssConfigFromMnemonic(mnemonicOrSeed, serverUrl)),
         ...config,
       };
     } else {

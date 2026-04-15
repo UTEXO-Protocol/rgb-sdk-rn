@@ -83,18 +83,14 @@ public class RgbSwiftHelper: NSObject {
       fatalError("Unknown BitcoinNetwork: \(bitcoinNetwork)")
     }
     
-    do {
-      let keys = try generateKeys(bitcoinNetwork: network)
-      return [
-        "mnemonic": keys.mnemonic,
-        "xpub": keys.xpub,
-        "accountXpubVanilla": keys.accountXpubVanilla,
-        "accountXpubColored": keys.accountXpubColored,
-        "masterFingerprint": keys.masterFingerprint,
-      ] as NSDictionary
-    } catch {
-      return ["error": error.localizedDescription, "errorCode": "GENERATE_KEYS_ERROR"] as NSDictionary
-    }
+    let keys = generateKeys(bitcoinNetwork: network)
+    return [
+      "mnemonic": keys.mnemonic,
+      "xpub": keys.xpub,
+      "accountXpubVanilla": keys.accountXpubVanilla,
+      "accountXpubColored": keys.accountXpubColored,
+      "masterFingerprint": keys.masterFingerprint,
+    ] as NSDictionary
   }
   
   @objc
@@ -182,7 +178,7 @@ public class RgbSwiftHelper: NSObject {
     }
   }
   
-  @objc(_initializeWallet:accountXpubVanilla:accountXpubColored:mnemonic:masterFingerprint:supportedSchemas:maxAllocationsPerUtxo:vanillaKeychain:)
+  @objc(_initializeWallet:accountXpubVanilla:accountXpubColored:mnemonic:masterFingerprint:supportedSchemas:maxAllocationsPerUtxo:vanillaKeychain:reuseAddresses:)
   public static func _initializeWallet(
     _ network: String,
     _ accountXpubVanilla: String,
@@ -191,29 +187,30 @@ public class RgbSwiftHelper: NSObject {
     _ masterFingerprint: String,
     _ supportedSchemas: NSArray,
     _ maxAllocationsPerUtxo: NSNumber,
-    _ vanillaKeychain: NSNumber
+    _ vanillaKeychain: NSNumber,
+    _ reuseAddresses: Bool
   ) -> NSDictionary {
     do {
       guard !network.isEmpty, !accountXpubVanilla.isEmpty, !accountXpubColored.isEmpty,
             !mnemonic.isEmpty, !masterFingerprint.isEmpty else {
         return ["error": "All string parameters must be non-empty"] as NSDictionary
       }
-      
+
       guard supportedSchemas.count > 0 else {
         return ["error": "supportedSchemas must not be empty"] as NSDictionary
       }
-      
+
       let constants = AppConstants.shared
       constants.ensureInitialized()
-      
+
       guard let rgbDir = constants.rgbDir else {
         return ["error": "RGB directory not initialized. Call AppConstants.initContext() first."] as NSDictionary
       }
-      
+
       let networkDir = rgbDir.appendingPathComponent(network.lowercased())
       try FileManager.default.createDirectory(at: networkDir, withIntermediateDirectories: true, attributes: nil)
       let dataDirPath = networkDir.path
-      
+
       let bitcoinNetwork = getNetwork(network)
       var schemaList: [AssetSchema] = []
       for schemaStr in supportedSchemas {
@@ -221,20 +218,23 @@ public class RgbSwiftHelper: NSObject {
           schemaList.append(getAssetSchema(schemaString))
         }
       }
-      
+
+      let singlesigKeys = SinglesigKeys(
+        accountXpubVanilla: accountXpubVanilla,
+        accountXpubColored: accountXpubColored,
+        vanillaKeychain: UInt8(vanillaKeychain.intValue),
+        masterFingerprint: masterFingerprint,
+        mnemonic: mnemonic
+      )
       let walletData = WalletData(
         dataDir: dataDirPath,
         bitcoinNetwork: bitcoinNetwork,
         databaseType: .sqlite,
         maxAllocationsPerUtxo: UInt32(maxAllocationsPerUtxo.intValue),
-        accountXpubVanilla: accountXpubVanilla,
-        accountXpubColored: accountXpubColored,
-        mnemonic: mnemonic,
-        masterFingerprint: masterFingerprint,
-        vanillaKeychain: UInt8(vanillaKeychain.intValue),
-        supportedSchemas: schemaList
+        supportedSchemas: schemaList,
+        reuseAddresses: reuseAddresses
       )
-      let wallet = try Wallet(walletData: walletData)
+      let wallet = try Wallet(walletData: walletData, keys: singlesigKeys)
       
       let store = WalletStore.shared
       let walletId = store.create(wallet: wallet)
@@ -338,8 +338,6 @@ public class RgbSwiftHelper: NSObject {
         fatalError("Amount is required for InflationRight assignment")
       }
       return .inflationRight(amount: amount.uint64Value)
-    case "ReplaceRight":
-      return .replaceRight
     case "Any":
       return .any
     default:
@@ -619,12 +617,12 @@ public class RgbSwiftHelper: NSObject {
     }
   }
   
-  @objc(_blindReceive:assetId:assignment:durationSeconds:transportEndpoints:minConfirmations:)
+  @objc(_blindReceive:assetId:assignment:expirationTimestamp:transportEndpoints:minConfirmations:)
   public static func _blindReceive(
     _ walletId: NSNumber,
     _ assetId: String?,
     _ assignment: NSDictionary,
-    _ durationSeconds: NSNumber?,
+    _ expirationTimestamp: NSNumber?,
     _ transportEndpoints: NSArray,
     _ minConfirmations: NSNumber
   ) -> NSDictionary {
@@ -644,7 +642,7 @@ public class RgbSwiftHelper: NSObject {
       let receiveData = try session.wallet.blindReceive(
         assetId: assetId,
         assignment: assignmentObj,
-        durationSeconds: durationSeconds?.uint32Value,
+        expirationTimestamp: expirationTimestamp?.uint64Value,
         transportEndpoints: endpoints,
         minConfirmations: minConfirmations.uint8Value
       )
@@ -1029,7 +1027,8 @@ public class RgbSwiftHelper: NSObject {
     }
     
     let walletData = session.wallet.getWalletData()
-    
+    let keys = session.wallet.getKeys()
+
     let networkString: String
     switch walletData.bitcoinNetwork {
     case .mainnet: networkString = "mainnet"
@@ -1060,16 +1059,16 @@ public class RgbSwiftHelper: NSObject {
       "bitcoinNetwork": networkString,
       "databaseType": dbTypeString,
       "maxAllocationsPerUtxo": NSNumber(value: walletData.maxAllocationsPerUtxo),
-      "accountXpubVanilla": walletData.accountXpubVanilla,
-      "accountXpubColored": walletData.accountXpubColored,
-      "masterFingerprint": walletData.masterFingerprint,
+      "accountXpubVanilla": keys.accountXpubVanilla,
+      "accountXpubColored": keys.accountXpubColored,
+      "masterFingerprint": keys.masterFingerprint,
       "supportedSchemas": schemaStrings
     ]
-    
-    if let mnemonic = walletData.mnemonic {
+
+    if let mnemonic = keys.mnemonic {
       dict["mnemonic"] = mnemonic
     }
-    if let vanillaKeychain = walletData.vanillaKeychain {
+    if let vanillaKeychain = keys.vanillaKeychain {
       dict["vanillaKeychain"] = NSNumber(value: vanillaKeychain)
     }
     
@@ -1081,11 +1080,37 @@ public class RgbSwiftHelper: NSObject {
     guard let session = WalletStore.shared.get(id: walletId.intValue) else {
       return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
     }
-    
+
     let walletDir = session.wallet.getWalletDir()
     return ["walletDir": walletDir] as NSDictionary
   }
-  
+
+  @objc(_rotateVanillaAddress:)
+  public static func _rotateVanillaAddress(_ walletId: NSNumber) -> NSDictionary {
+    guard let session = WalletStore.shared.get(id: walletId.intValue) else {
+      return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
+    }
+    do {
+      let address = try session.wallet.rotateVanillaAddress()
+      return ["address": address] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rotateColoredAddress:)
+  public static func _rotateColoredAddress(_ walletId: NSNumber) -> NSDictionary {
+    guard let session = WalletStore.shared.get(id: walletId.intValue) else {
+      return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
+    }
+    do {
+      let address = try session.wallet.rotateColoredAddress()
+      return ["address": address] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
   @objc(_inflate:assetId:inflationAmounts:feeRate:minConfirmations:)
   public static func _inflate(
     _ walletId: NSNumber,
@@ -1128,22 +1153,23 @@ public class RgbSwiftHelper: NSObject {
     }
   }
   
-  @objc(_inflateBegin:assetId:inflationAmounts:feeRate:minConfirmations:)
+  @objc(_inflateBegin:assetId:inflationAmounts:feeRate:minConfirmations:dryRun:)
   public static func _inflateBegin(
     _ walletId: NSNumber,
     _ assetId: String,
     _ inflationAmounts: NSArray,
     _ feeRate: NSNumber,
-    _ minConfirmations: NSNumber
+    _ minConfirmations: NSNumber,
+    _ dryRun: Bool
   ) -> NSDictionary {
     guard let session = WalletStore.shared.get(id: walletId.intValue) else {
       return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
     }
-    
+
     guard let online = session.online else {
       return ["error": "Wallet is not online"] as NSDictionary
     }
-    
+
     do {
       var amounts: [UInt64] = []
       for amount in inflationAmounts {
@@ -1151,16 +1177,25 @@ public class RgbSwiftHelper: NSObject {
           amounts.append(amountNum.uint64Value)
         }
       }
-      
-      let psbt = try session.wallet.inflateBegin(
+
+      let result = try session.wallet.inflateBegin(
         online: online,
         assetId: assetId,
         inflationAmounts: amounts,
         feeRate: feeRate.uint64Value,
-        minConfirmations: minConfirmations.uint8Value
+        minConfirmations: minConfirmations.uint8Value,
+        dryRun: dryRun
       )
-      
-      return ["psbt": psbt] as NSDictionary
+
+      return [
+        "psbt": result.psbt,
+        "batchTransferIdx": result.batchTransferIdx.map { NSNumber(value: $0) } ?? NSNull(),
+        "details": [
+          "fasciaPath": result.details.fasciaPath,
+          "minConfirmations": NSNumber(value: result.details.minConfirmations),
+          "entropy": NSNumber(value: result.details.entropy)
+        ] as [String: Any]
+      ] as NSDictionary
     } catch {
       let errorData = [
         "error": parseErrorMessage(error),
@@ -1231,7 +1266,7 @@ public class RgbSwiftHelper: NSObject {
     }
   }
   
-  @objc(_issueAssetIfa:ticker:name:precision:amounts:inflationAmounts:replaceRightsNum:rejectListUrl:)
+  @objc(_issueAssetIfa:ticker:name:precision:amounts:inflationAmounts:rejectListUrl:)
   public static func _issueAssetIfa(
     _ walletId: NSNumber,
     _ ticker: String,
@@ -1239,13 +1274,12 @@ public class RgbSwiftHelper: NSObject {
     _ precision: NSNumber,
     _ amounts: NSArray,
     _ inflationAmounts: NSArray,
-    _ replaceRightsNum: NSNumber,
     _ rejectListUrl: String?
   ) -> NSDictionary {
     guard let session = WalletStore.shared.get(id: walletId.intValue) else {
       return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
     }
-    
+
     do {
       var amountsList: [UInt64] = []
       for amount in amounts {
@@ -1253,21 +1287,20 @@ public class RgbSwiftHelper: NSObject {
           amountsList.append(amountNum.uint64Value)
         }
       }
-      
+
       var inflationAmountsList: [UInt64] = []
       for amount in inflationAmounts {
         if let amountNum = amount as? NSNumber {
           inflationAmountsList.append(amountNum.uint64Value)
         }
       }
-      
+
       let asset = try session.wallet.issueAssetIfa(
         ticker: ticker,
         name: name,
         precision: precision.uint8Value,
         amounts: amountsList,
         inflationAmounts: inflationAmountsList,
-        replaceRightsNum: replaceRightsNum.uint8Value,
         rejectListUrl: rejectListUrl
       )
       
@@ -1476,6 +1509,7 @@ public class RgbSwiftHelper: NSObject {
         
         let statusString: String
         switch transfer.status {
+        case .initiated: statusString = "Initiated"
         case .waitingCounterparty: statusString = "WaitingCounterparty"
         case .waitingConfirmations: statusString = "WaitingConfirmations"
         case .settled: statusString = "Settled"
@@ -1497,7 +1531,7 @@ public class RgbSwiftHelper: NSObject {
         if let recipientId = transfer.recipientId {
           transferDict["recipientId"] = recipientId
         }
-        if let expiration = transfer.expiration {
+        if let expiration = transfer.expirationTimestamp {
           transferDict["expiration"] = NSNumber(value: expiration)
         }
         
@@ -1633,6 +1667,7 @@ public class RgbSwiftHelper: NSObject {
         if let updatedStatus = refreshedTransfer.updatedStatus {
           let statusString: String
           switch updatedStatus {
+          case .initiated: statusString = "Initiated"
           case .waitingCounterparty: statusString = "WaitingCounterparty"
           case .waitingConfirmations: statusString = "WaitingConfirmations"
           case .settled: statusString = "Settled"
@@ -1656,13 +1691,14 @@ public class RgbSwiftHelper: NSObject {
     }
   }
   
-  @objc(_send:recipientMap:donation:feeRate:minConfirmations:skipSync:)
+  @objc(_send:recipientMap:donation:feeRate:minConfirmations:expirationTimestamp:skipSync:)
   public static func _send(
     _ walletId: NSNumber,
     _ recipientMap: NSDictionary,
     _ donation: NSNumber,
     _ feeRate: NSNumber,
     _ minConfirmations: NSNumber,
+    _ expirationTimestamp: NSNumber?,
     _ skipSync: NSNumber
   ) -> NSDictionary {
     guard let session = WalletStore.shared.get(id: walletId.intValue) else {
@@ -1693,6 +1729,7 @@ public class RgbSwiftHelper: NSObject {
         donation: donation.boolValue,
         feeRate: feeRate.uint64Value,
         minConfirmations: minConfirmations.uint8Value,
+        expirationTimestamp: expirationTimestamp?.uint64Value,
         skipSync: skipSync.boolValue
       )
       
@@ -1706,22 +1743,24 @@ public class RgbSwiftHelper: NSObject {
     }
   }
   
-  @objc(_sendBegin:recipientMap:donation:feeRate:minConfirmations:)
+  @objc(_sendBegin:recipientMap:donation:feeRate:minConfirmations:expirationTimestamp:dryRun:)
   public static func _sendBegin(
     _ walletId: NSNumber,
     _ recipientMap: NSDictionary,
     _ donation: NSNumber,
     _ feeRate: NSNumber,
-    _ minConfirmations: NSNumber
+    _ minConfirmations: NSNumber,
+    _ expirationTimestamp: NSNumber?,
+    _ dryRun: Bool
   ) -> NSDictionary {
     guard let session = WalletStore.shared.get(id: walletId.intValue) else {
       return ["error": "Wallet with id \(walletId) not found"] as NSDictionary
     }
-    
+
     guard let online = session.online else {
       return ["error": "Wallet is not online"] as NSDictionary
     }
-    
+
     do {
       var recipientMapNative: [String: [Recipient]] = [:]
       for (key, value) in recipientMap {
@@ -1735,16 +1774,27 @@ public class RgbSwiftHelper: NSObject {
           recipientMapNative[keyStr] = recipientsList
         }
       }
-      
-      let psbt = try session.wallet.sendBegin(
+
+      let result = try session.wallet.sendBegin(
         online: online,
         recipientMap: recipientMapNative,
         donation: donation.boolValue,
         feeRate: feeRate.uint64Value,
-        minConfirmations: minConfirmations.uint8Value
+        minConfirmations: minConfirmations.uint8Value,
+        expirationTimestamp: expirationTimestamp?.uint64Value,
+        dryRun: dryRun
       )
-      
-      return ["psbt": psbt] as NSDictionary
+
+      return [
+        "psbt": result.psbt,
+        "batchTransferIdx": result.batchTransferIdx.map { NSNumber(value: $0) } ?? NSNull(),
+        "details": [
+          "fasciaPath": result.details.fasciaPath,
+          "minConfirmations": NSNumber(value: result.details.minConfirmations),
+          "entropy": NSNumber(value: result.details.entropy),
+          "isDonation": result.details.isDonation
+        ] as [String: Any]
+      ] as NSDictionary
     } catch {
       let errorData = [
         "error": parseErrorMessage(error),
@@ -1936,12 +1986,12 @@ public class RgbSwiftHelper: NSObject {
     }
   }
   
-  @objc(_witnessReceive:assetId:assignment:durationSeconds:transportEndpoints:minConfirmations:)
+  @objc(_witnessReceive:assetId:assignment:expirationTimestamp:transportEndpoints:minConfirmations:)
   public static func _witnessReceive(
     _ walletId: NSNumber,
     _ assetId: String?,
     _ assignment: NSDictionary,
-    _ durationSeconds: NSNumber?,
+    _ expirationTimestamp: NSNumber?,
     _ transportEndpoints: NSArray,
     _ minConfirmations: NSNumber
   ) -> NSDictionary {
@@ -1961,7 +2011,7 @@ public class RgbSwiftHelper: NSObject {
       let receiveData = try session.wallet.witnessReceive(
         assetId: assetId,
         assignment: assignmentObj,
-        durationSeconds: durationSeconds?.uint32Value,
+        expirationTimestamp: expirationTimestamp?.uint64Value,
         transportEndpoints: endpoints,
         minConfirmations: minConfirmations.uint8Value
       )
@@ -1987,8 +2037,6 @@ public class RgbSwiftHelper: NSObject {
     case .inflationRight(let amount):
       assignmentDict["type"] = "InflationRight"
       assignmentDict["amount"] = NSNumber(value: amount)
-    case .replaceRight:
-      assignmentDict["type"] = "ReplaceRight"
     case .any:
       assignmentDict["type"] = "Any"
     }

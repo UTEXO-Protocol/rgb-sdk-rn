@@ -4,6 +4,7 @@ export type BitcoinNetwork =
   | 'testnet4'
   | 'regtest'
   | 'signet'
+  | 'signet_custom'
   | 'utexo';
 
 export const BitcoinNetwork = {
@@ -12,6 +13,7 @@ export const BitcoinNetwork = {
   TESTNET4: 'testnet4' as const,
   REGTEST: 'regtest' as const,
   SIGNET: 'signet' as const,
+  SIGNET_CUSTOM: 'signet_custom' as const,
   UTEXO: 'utexo' as const,
 } as const;
 
@@ -22,7 +24,9 @@ export const BitcoinNetwork = {
 export type NativeBitcoinNetwork = Exclude<BitcoinNetwork, 'utexo'>;
 
 export function toNativeNetwork(network: BitcoinNetwork): NativeBitcoinNetwork {
-  return network === 'utexo' ? 'signet' : network;
+  if (network === 'utexo') return 'signet';
+  if (network === 'signet_custom') return 'signet_custom';
+  return network;
 }
 
 export type Keys = {
@@ -57,7 +61,6 @@ export type AssignmentType =
   | 'Fungible'
   | 'NonFungible'
   | 'InflationRight'
-  | 'ReplaceRight'
   | 'Any';
 
 export type Assignment = {
@@ -85,7 +88,8 @@ export type RgbAllocation = {
 
 export type RefreshTransferStatus =
   | 'WaitingCounterparty'
-  | 'WaitingConfirmations';
+  | 'WaitingConfirmations'
+  | 'Initiated';
 
 export type RefreshFilter = {
   status: RefreshTransferStatus;
@@ -229,14 +233,19 @@ export type Transfer = {
   createdAt: number;
   updatedAt: number;
   kind: 'Issuance' | 'ReceiveBlind' | 'ReceiveWitness' | 'Send' | 'Inflation';
-  status: 'WaitingCounterparty' | 'WaitingConfirmations' | 'Settled' | 'Failed';
+  status:
+    | 'WaitingCounterparty'
+    | 'WaitingConfirmations'
+    | 'Settled'
+    | 'Failed'
+    | 'Initiated';
   txid?: string;
   recipientId?: string;
   requestedAssignment?: Assignment;
   assignments: Assignment[];
   receiveUtxo?: Outpoint;
   changeUtxo?: Outpoint;
-  expiration?: number;
+  expirationTimestamp?: number;
   transportEndpoints: TransferTransportEndpoint[];
   invoiceString?: string;
   consignmentPath?: string;
@@ -253,7 +262,8 @@ export type RefreshedTransfer = {
     | 'WaitingCounterparty'
     | 'WaitingConfirmations'
     | 'Settled'
-    | 'Failed';
+    | 'Failed'
+    | 'Initiated';
   failure?: string;
 };
 
@@ -268,6 +278,7 @@ export type WalletData = {
   masterFingerprint: string;
   vanillaKeychain?: number;
   supportedSchemas: string[];
+  reuseAddresses?: boolean;
 };
 
 export type AssetMetadata = {

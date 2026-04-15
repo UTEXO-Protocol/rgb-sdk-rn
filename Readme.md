@@ -31,7 +31,9 @@ The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or 
 | `generateKeys(network?)` | Generate new wallet keys (mnemonic, xpubs, master fingerprint) – top-level function |
 | `deriveKeysFromMnemonic(network, mnemonic)` | Derive wallet keys from an existing mnemonic |
 | `deriveKeysFromSeed(network, seed)` | Derive wallet keys from a BIP39 seed |
-| `getAddress()` | Get deposit address (async) |
+| `getAddress()` | Get current deposit address (async) |
+| `rotateVanillaAddress()` | Rotate to the next vanilla (BTC) receive address and return it (async) |
+| `rotateColoredAddress()` | Rotate to the next colored (RGB) receive address and return it (async) |
 | `getBtcBalance()` | Get on-chain BTC balance (async) |
 | `getXpub()` | Get vanilla and colored xpubs |
 | `getNetwork()` | Get current network |
@@ -380,6 +382,44 @@ console.log('Fee rate:', feeEstimate.feeRate);
 // Estimate fee for a specific PSBT
 const psbtFee = await wallet.estimateFee(psbtBase64);
 console.log('Estimated fee:', psbtFee.fee, 'satoshis');
+```
+
+### Address Reuse and Rotation
+
+By default, each call to `getAddress()` advances the derivation index so a fresh receive address is returned. Set `reuseAddresses: true` to keep returning the same address — useful for testing or scenarios where address rotation is handled externally.
+
+```javascript
+import { WalletManager, generateKeys } from '@utexo/rgb-sdk-rn';
+
+const keys = await generateKeys('regtest');
+const wallet = new WalletManager({
+  mnemonic: keys.mnemonic,
+  xpubVan: keys.accountXpubVanilla,
+  xpubCol: keys.accountXpubColored,
+  masterFingerprint: keys.masterFingerprint,
+  network: 'regtest',
+  reuseAddresses: true, // same address on every getAddress() call
+});
+await wallet.initialize();
+
+// These all return the same address when reuseAddresses is true
+const addr1 = await wallet.getAddress();
+const addr2 = await wallet.getAddress();
+console.log(addr1 === addr2); // true
+
+// Manually advance to the next address regardless of reuseAddresses
+const nextVanilla = await wallet.rotateVanillaAddress();
+const nextColored = await wallet.rotateColoredAddress();
+```
+
+For `UTEXOWallet`, pass `reuseAddresses` via the options object:
+
+```javascript
+const wallet = new UTEXOWallet(keys.mnemonic, {
+  network: 'testnet',
+  reuseAddresses: true,
+});
+await wallet.initialize();
 ```
 
 ### Invoice Decoding

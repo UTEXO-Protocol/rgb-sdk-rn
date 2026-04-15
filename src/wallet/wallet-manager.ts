@@ -14,8 +14,11 @@ import type {
 import { RNRgbLibBinding } from '../binding/RNRgbLibBinding';
 import { RNSigner } from '../signer/RNSigner';
 import { BitcoinNetwork } from '../binding/Interfaces';
-import { generateKeys, restoreBackup, restoreFromVss as nativeRestoreFromVss } from '../binding';
-
+import {
+  generateKeys,
+  restoreBackup,
+  restoreFromVss as nativeRestoreFromVss,
+} from '../binding';
 
 export type { WalletInitParams };
 
@@ -89,9 +92,7 @@ export class WalletManager extends BaseWalletManager {
    * Configures automatic VSS cloud backup for the open wallet.
    * @param config - VSS backup configuration
    */
-  public async configureVssBackup(
-    config: VssBackupConfig
-  ): Promise<void> {
+  public async configureVssBackup(config: VssBackupConfig): Promise<void> {
     await this.rnBinding.configureVssBackup(config);
   }
 
@@ -109,9 +110,7 @@ export class WalletManager extends BaseWalletManager {
    * @param config - VSS backup configuration
    * @returns Backup info: backupExists, serverVersion, backupRequired
    */
-  public async vssBackupInfo(
-    config: VssBackupConfig
-  ): Promise<VssBackupInfo> {
+  public async vssBackupInfo(config: VssBackupConfig): Promise<VssBackupInfo> {
     return this.rnBinding.vssBackupInfo(config);
   }
 

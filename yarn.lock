@@ -1635,10 +1635,10 @@
     "@typescript-eslint/types" "8.55.0"
     eslint-visitor-keys "^4.2.1"
 
-"@utexo/rgb-sdk-core@1.0.0-beta.2":
-  version "1.0.0-beta.2"
-  resolved "https://registry.npmjs.org/@utexo/rgb-sdk-core/-/rgb-sdk-core-1.0.0-beta.2.tgz"
-  integrity sha512-GgzfpP3r8IbK/29xP/ifUYtjEg7+zcJkRorVPe7F1UMOj4sHKQnrTse5FTmmSKvKhWNHYrx/uJWIyGjpgFbK1Q==
+"@utexo/rgb-sdk-core@1.0.0-beta.3":
+  version "1.0.0-beta.3"
+  resolved "https://registry.npmjs.org/@utexo/rgb-sdk-core/-/rgb-sdk-core-1.0.0-beta.3.tgz"
+  integrity sha512-TlHnTOp2/sHmjspXI6XYgt/ca3wDtOMXGESdACDY0ocGu6WyGHgI3ia1a5eRwq7H4Q+6Zjx4vT2rurujFKjNdA==
   dependencies:
     "@noble/hashes" "^2.0.1"
     "@noble/secp256k1" "3.0.0"

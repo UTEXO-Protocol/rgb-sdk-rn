@@ -4,7 +4,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const URL =
-  'https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/download/0.3.0-beta.14/rgb_libFFI.xcframework.zip';
+  'https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/download/0.3.0-beta.18/rgb_libFFI.xcframework.zip';
 const IOS_DIR = path.join(__dirname, '..', 'ios');
 const ZIP_FILE = path.join(IOS_DIR, 'rgb_libFFI.xcframework.zip');
 const XCFRAMEWORK_DIR = path.join(IOS_DIR, 'rgb_libFFI.xcframework');

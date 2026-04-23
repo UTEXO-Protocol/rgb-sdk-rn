@@ -80,6 +80,23 @@ The primary wallet class is **`UTEXOWallet`**: construct it with a mnemonic (or 
 
 Use **`WalletManager`** when you only need one RGB wallet instance (one network) and not the extra Lightning and onchain methods on **`UTEXOWallet`**. It exposes the same RGB/PSBT/VSS **per wallet** methods, but VSS and backups apply to **that** instance only—not the full layer1 + UTEXO pair. Prefer **`UTEXOWallet`** for production UTEXO apps and for VSS/file backup that must cover both stores.
 
+`WalletManager` now supports a gradual RLN integration mode through `bindingMode`:
+
+```ts
+import { createWalletManager } from '@utexo/rgb-sdk-rn';
+
+const wm = createWalletManager({
+  xpubVan,
+  xpubCol,
+  masterFingerprint,
+  mnemonic,
+  network: 'testnet',
+  bindingMode: 'rln', // default is 'rgb'
+});
+```
+
+For `bindingMode: 'rln'`, protocol methods are expected to be provided by an adapter (`rlnProtocolAdapter`) and currently throw explicit `not implemented yet` errors when not wired.
+
 ### Standalone helpers
 
 | Function | Description |

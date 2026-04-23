@@ -40,6 +40,58 @@ export interface SendBeginResult {
 }
 
 export interface Spec extends TurboModule {
+  // ── RLN native node methods (rgb_lightning_node) ───────────────────────────
+  rlnCreateNode(
+    storageDirPath: string,
+    daemonListeningPort: number,
+    ldkPeerListeningPort: number,
+    network: string,
+    maxMediaUploadSizeMb: number,
+    enableVirtualChannelsV0: boolean | null
+  ): Promise<number>;
+  rlnInitNode(nodeId: number, password: string, mnemonic?: string | null): Promise<string>;
+  rlnUnlockNode(
+    nodeId: number,
+    password: string,
+    bitcoindRpcUsername: string,
+    bitcoindRpcPassword: string,
+    bitcoindRpcHost: string,
+    bitcoindRpcPort: number,
+    indexerUrl: string | null,
+    proxyEndpoint: string | null,
+    announceAddresses: string[],
+    announceAlias: string | null
+  ): Promise<void>;
+  rlnDestroyNode(nodeId: number): Promise<void>;
+  rlnNodeInfo(nodeId: number): Promise<object>;
+  rlnNetworkInfo(nodeId: number): Promise<object>;
+  rlnListPeers(nodeId: number): Promise<object[]>;
+  rlnConnectPeer(nodeId: number, peerPubkeyAndAddr: string): Promise<void>;
+  rlnDisconnectPeer(nodeId: number, peerPubkey: string): Promise<void>;
+  rlnListChannels(nodeId: number): Promise<object[]>;
+  rlnOpenChannel(
+    nodeId: number,
+    peerPubkeyAndOptAddr: string,
+    capacitySat: number,
+    pushMsat: number,
+    publicChannel: boolean,
+    withAnchors: boolean,
+    feeBaseMsat: number | null,
+    feeProportionalMillionths: number | null,
+    temporaryChannelId: string | null,
+    assetId: string | null,
+    assetAmount: number | null,
+    pushAssetAmount: number | null,
+    virtualOpenMode: string | null
+  ): Promise<object>;
+  rlnCloseChannel(
+    nodeId: number,
+    channelId: string,
+    peerPubkey: string,
+    force: boolean
+  ): Promise<void>;
+  rlnListPayments(nodeId: number): Promise<object[]>;
+
   generateKeys(bitcoinNetwork: NativeRgbBitcoinNetwork): Promise<{
     mnemonic: string;
     xpub: string;

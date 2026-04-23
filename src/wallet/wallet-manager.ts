@@ -10,8 +10,10 @@ import type {
   RestoreWalletRequestModel,
   VssBackupConfig,
   VssBackupInfo,
+  IUTEXOProtocol,
 } from '@utexo/rgb-sdk-core';
 import { RNRgbLibBinding } from '../binding/RNRgbLibBinding';
+import { RLNRgbLibBinding } from '../binding/RLNRgbLibBinding';
 import { RNSigner } from '../signer/RNSigner';
 import { BitcoinNetwork } from '../binding/Interfaces';
 import {
@@ -20,7 +22,12 @@ import {
   restoreFromVss as nativeRestoreFromVss,
 } from '../binding';
 
+export type WalletManagerBindingMode = 'rgb' | 'rln';
 export type { WalletInitParams };
+export type WalletManagerInitParams = WalletInitParams & {
+  bindingMode?: WalletManagerBindingMode;
+  rlnProtocolAdapter?: Partial<IUTEXOProtocol>;
+};
 
 export const restoreFromBackup = async (
   params: RestoreWalletRequestModel
@@ -58,10 +65,14 @@ export const restoreFromVss = async (
 };
 
 export class WalletManager extends BaseWalletManager {
-  private readonly rnBinding: RNRgbLibBinding;
+  private readonly rnBinding: RNRgbLibBinding | RLNRgbLibBinding;
 
-  constructor(params: WalletInitParams) {
-    const binding = new RNRgbLibBinding(params);
+  constructor(params: WalletManagerInitParams) {
+    const bindingMode = params.bindingMode ?? 'rgb';
+    const binding =
+      bindingMode === 'rln'
+        ? new RLNRgbLibBinding(params, params.rlnProtocolAdapter)
+        : new RNRgbLibBinding(params);
     super(params, binding, new RNSigner());
     this.rnBinding = binding;
   }
@@ -120,6 +131,109 @@ export class WalletManager extends BaseWalletManager {
   public async disableVssAutoBackup(): Promise<void> {
     await this.rnBinding.disableVssAutoBackup();
   }
+
+  private getRlnBinding(): RLNRgbLibBinding {
+    if (!(this.rnBinding instanceof RLNRgbLibBinding)) {
+      throw new ValidationError(
+        'RLN methods require WalletManager with bindingMode: "rln"',
+        'bindingMode'
+      );
+    }
+    return this.rnBinding;
+  }
+
+  public async rlnCreateNode(request: {
+    storageDirPath: string;
+    daemonListeningPort: number;
+    ldkPeerListeningPort: number;
+    network: string;
+    maxMediaUploadSizeMb: number;
+    enableVirtualChannelsV0?: boolean | null;
+  }): Promise<number> {
+    return this.getRlnBinding().rlnCreateNode(request);
+  }
+
+  public async rlnInitNode(
+    password: string,
+    mnemonic?: string
+  ): Promise<string> {
+    return this.getRlnBinding().rlnInitNode(password, mnemonic);
+  }
+
+  public async rlnUnlockNode(request: {
+    password: string;
+    bitcoindRpcUsername: string;
+    bitcoindRpcPassword: string;
+    bitcoindRpcHost: string;
+    bitcoindRpcPort: number;
+    indexerUrl?: string | null;
+    proxyEndpoint?: string | null;
+    announceAddresses?: string[];
+    announceAlias?: string | null;
+  }): Promise<void> {
+    return this.getRlnBinding().rlnUnlockNode(request);
+  }
+
+  public consumeRlnUnlockConflictNormalized(): boolean {
+    return this.getRlnBinding().consumeUnlockConflictNormalized();
+  }
+
+  public async rlnDestroyNode(): Promise<void> {
+    return this.getRlnBinding().rlnDestroyNode();
+  }
+
+  public async rlnNodeInfo(): Promise<object> {
+    return this.getRlnBinding().rlnNodeInfo();
+  }
+
+  public async rlnNetworkInfo(): Promise<object> {
+    return this.getRlnBinding().rlnNetworkInfo();
+  }
+
+  public async rlnConnectPeer(peerPubkeyAndAddr: string): Promise<void> {
+    return this.getRlnBinding().rlnConnectPeer(peerPubkeyAndAddr);
+  }
+
+  public async rlnListPeers(): Promise<object[]> {
+    return this.getRlnBinding().rlnListPeers();
+  }
+
+  public async rlnDisconnectPeer(peerPubkey: string): Promise<void> {
+    return this.getRlnBinding().rlnDisconnectPeer(peerPubkey);
+  }
+
+  public async rlnListChannels(): Promise<object[]> {
+    return this.getRlnBinding().rlnListChannels();
+  }
+
+  public async rlnOpenChannel(request: {
+    peerPubkeyAndOptAddr: string;
+    capacitySat: number;
+    pushMsat: number;
+    public: boolean;
+    withAnchors: boolean;
+    feeBaseMsat?: number | null;
+    feeProportionalMillionths?: number | null;
+    temporaryChannelId?: string | null;
+    assetId?: string | null;
+    assetAmount?: number | null;
+    pushAssetAmount?: number | null;
+    virtualOpenMode?: string | null;
+  }): Promise<object> {
+    return this.getRlnBinding().rlnOpenChannel(request);
+  }
+
+  public async rlnCloseChannel(
+    channelId: string,
+    peerPubkey: string,
+    force: boolean
+  ): Promise<void> {
+    return this.getRlnBinding().rlnCloseChannel(channelId, peerPubkey, force);
+  }
+
+  public async rlnListPayments(): Promise<object[]> {
+    return this.getRlnBinding().rlnListPayments();
+  }
 }
 
 let _wallet: WalletManager | null = null;
@@ -137,6 +251,8 @@ export const wallet = new Proxy({} as WalletManager, {
   },
 });
 
-export function createWalletManager(params: WalletInitParams): WalletManager {
+export function createWalletManager(
+  params: WalletManagerInitParams
+): WalletManager {
   return new WalletManager(params);
 }

@@ -2264,4 +2264,259 @@ public class RgbSwiftHelper: NSObject {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
   }
+
+  // MARK: - RLN native node bridge
+
+  @objc(_rlnCreateNode:)
+  public static func _rlnCreateNode(_ request: NSDictionary) -> NSDictionary {
+    do {
+      guard let storageDirPath = request["storageDirPath"] as? String,
+            let daemonListeningPort = request["daemonListeningPort"] as? NSNumber,
+            let ldkPeerListeningPort = request["ldkPeerListeningPort"] as? NSNumber,
+            let network = request["network"] as? String,
+            let maxMediaUploadSizeMb = request["maxMediaUploadSizeMb"] as? NSNumber else {
+        return ["error": "Invalid rlnCreateNode request"] as NSDictionary
+      }
+      let initReq = SdkInitRequest(
+        storageDirPath: storageDirPath,
+        daemonListeningPort: UInt16(truncating: daemonListeningPort),
+        ldkPeerListeningPort: UInt16(truncating: ldkPeerListeningPort),
+        network: network,
+        maxMediaUploadSizeMb: UInt16(truncating: maxMediaUploadSizeMb),
+        enableVirtualChannelsV0: request["enableVirtualChannelsV0"] as? Bool,
+        virtualPeerPubkeys: nil
+      )
+      let node = try SdkNode.create(request: initReq)
+      let nodeId = RlnNodeStore.shared.create(node: node)
+      return ["nodeId": nodeId] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnInitNode:password:mnemonic:)
+  public static func _rlnInitNode(_ nodeId: NSNumber, password: String, mnemonic: String?) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let pubkey = try node.init(password: password, mnemonic: mnemonic)
+      return ["pubkey": pubkey] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnUnlockNode:password:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:)
+  public static func _rlnUnlockNode(
+    _ nodeId: NSNumber,
+    password: String,
+    bitcoindRpcUsername: String,
+    bitcoindRpcPassword: String,
+    bitcoindRpcHost: String,
+    bitcoindRpcPort: NSNumber,
+    indexerUrl: String?,
+    proxyEndpoint: String?,
+    announceAddresses: [String],
+    announceAlias: String?
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.unlock(
+        request: SdkUnlockRequest(
+          password: password,
+          bitcoindRpcUsername: bitcoindRpcUsername,
+          bitcoindRpcPassword: bitcoindRpcPassword,
+          bitcoindRpcHost: bitcoindRpcHost,
+          bitcoindRpcPort: UInt16(truncating: bitcoindRpcPort),
+          indexerUrl: indexerUrl,
+          proxyEndpoint: proxyEndpoint,
+          announceAddresses: announceAddresses,
+          announceAlias: announceAlias
+        )
+      )
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnDestroyNode:)
+  public static func _rlnDestroyNode(_ nodeId: NSNumber) -> NSDictionary {
+    RlnNodeStore.shared.remove(id: nodeId.intValue)
+    return [:] as NSDictionary
+  }
+
+  @objc(_rlnNodeInfo:)
+  public static func _rlnNodeInfo(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let info = try node.nodeInfo()
+      return [
+        "pubkey": info.pubkey,
+        "numChannels": NSNumber(value: info.numChannels),
+        "numUsableChannels": NSNumber(value: info.numUsableChannels),
+        "localBalanceSat": NSNumber(value: info.localBalanceSat),
+        "numPeers": NSNumber(value: info.numPeers),
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnNetworkInfo:)
+  public static func _rlnNetworkInfo(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let info = try node.networkInfo()
+      return [
+        "network": info.network,
+        "height": NSNumber(value: info.height),
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListPeers:)
+  public static func _rlnListPeers(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let peers = try node.listPeers().map { ["pubkey": $0.pubkey] as NSDictionary }
+      return ["peers": peers] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnConnectPeer:peerPubkeyAndAddr:)
+  public static func _rlnConnectPeer(_ nodeId: NSNumber, peerPubkeyAndAddr: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.connectpeer(peerPubkeyAndAddr: peerPubkeyAndAddr)
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnDisconnectPeer:peerPubkey:)
+  public static func _rlnDisconnectPeer(_ nodeId: NSNumber, peerPubkey: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.disconnectpeer(request: SdkDisconnectPeerRequest(peerPubkey: peerPubkey))
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListChannels:)
+  public static func _rlnListChannels(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let channels = try node.listChannels().map { c in
+        [
+          "channelId": c.channelId,
+          "peerPubkey": c.peerPubkey,
+          "ready": c.ready,
+          "capacitySat": NSNumber(value: c.capacitySat),
+          "public": c.public,
+          "assetId": c.assetId as Any,
+        ] as NSDictionary
+      }
+      return ["channels": channels] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnOpenChannel:request:)
+  public static func _rlnOpenChannel(_ nodeId: NSNumber, request: NSDictionary) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      guard let peer = request["peerPubkeyAndOptAddr"] as? String,
+            let capacitySat = request["capacitySat"] as? NSNumber,
+            let pushMsat = request["pushMsat"] as? NSNumber,
+            let isPublic = request["public"] as? Bool,
+            let withAnchors = request["withAnchors"] as? Bool else {
+        return ["error": "Invalid rlnOpenChannel request"] as NSDictionary
+      }
+      let req = SdkOpenChannelRequest(
+        peerPubkeyAndOptAddr: peer,
+        capacitySat: UInt64(truncating: capacitySat),
+        pushMsat: UInt64(truncating: pushMsat),
+        public: isPublic,
+        withAnchors: withAnchors,
+        feeBaseMsat: (request["feeBaseMsat"] as? NSNumber).map { UInt32(truncating: $0) },
+        feeProportionalMillionths: (request["feeProportionalMillionths"] as? NSNumber).map { UInt32(truncating: $0) },
+        temporaryChannelId: request["temporaryChannelId"] as? String,
+        assetId: request["assetId"] as? String,
+        assetAmount: (request["assetAmount"] as? NSNumber).map { UInt64(truncating: $0) },
+        pushAssetAmount: (request["pushAssetAmount"] as? NSNumber).map { UInt64(truncating: $0) },
+        virtualOpenMode: request["virtualOpenMode"] as? String
+      )
+      let response = try node.openchannel(request: req)
+      return ["temporaryChannelId": response.temporaryChannelId] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnCloseChannel:request:)
+  public static func _rlnCloseChannel(_ nodeId: NSNumber, request: NSDictionary) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      guard let channelId = request["channelId"] as? String,
+            let peerPubkey = request["peerPubkey"] as? String,
+            let force = request["force"] as? Bool else {
+        return ["error": "Invalid rlnCloseChannel request"] as NSDictionary
+      }
+      try node.closechannel(request: SdkCloseChannelRequest(channelId: channelId, peerPubkey: peerPubkey, force: force))
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListPayments:)
+  public static func _rlnListPayments(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let payments = try node.listPayments().map { p in
+        [
+          "paymentHash": p.paymentHash,
+          "assetId": p.assetId as Any,
+          "amtMsat": p.amtMsat.map { NSNumber(value: $0) } as Any,
+          "assetAmount": p.assetAmount.map { NSNumber(value: $0) } as Any,
+          "createdAt": NSNumber(value: p.createdAt),
+          "updatedAt": NSNumber(value: p.updatedAt),
+          "payeePubkey": p.payeePubkey,
+        ] as NSDictionary
+      }
+      return ["payments": payments] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
 }

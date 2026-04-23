@@ -33,6 +33,12 @@ import com.facebook.react.bridge.ReadableType
 import com.utexo.Token
 import com.utexo.Invoice
 import com.utexo.SinglesigKeys
+import org.utexo.rgblightningnode.SdkCloseChannelRequest
+import org.utexo.rgblightningnode.SdkDisconnectPeerRequest
+import org.utexo.rgblightningnode.SdkInitRequest
+import org.utexo.rgblightningnode.SdkNode
+import org.utexo.rgblightningnode.SdkOpenChannelRequest
+import org.utexo.rgblightningnode.SdkUnlockRequest
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -46,6 +52,325 @@ class RgbModule(reactContext: ReactApplicationContext) :
 
   override fun getName(): String {
     return NAME
+  }
+
+  // ── RLN native node bridge ─────────────────────────────────────────────────
+
+  override fun rlnCreateNode(
+    storageDirPath: String,
+    daemonListeningPort: Double,
+    ldkPeerListeningPort: Double,
+    network: String,
+    maxMediaUploadSizeMb: Double,
+    enableVirtualChannelsV0: Boolean?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val initRequest = SdkInitRequest(
+          storageDirPath = storageDirPath,
+          daemonListeningPort = daemonListeningPort.toInt().toUShort(),
+          ldkPeerListeningPort = ldkPeerListeningPort.toInt().toUShort(),
+          network = network,
+          maxMediaUploadSizeMb = maxMediaUploadSizeMb.toInt().toUShort(),
+          enableVirtualChannelsV0 = enableVirtualChannelsV0,
+          virtualPeerPubkeys = null
+        )
+        val node = SdkNode.create(initRequest)
+        val nodeId = RlnNodeStore.create(node)
+        withContext(Dispatchers.Main) { promise.resolve(nodeId) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnInitNode(nodeId: Double, password: String, mnemonic: String?, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val nodePubkey = node.init(password, mnemonic)
+        withContext(Dispatchers.Main) { promise.resolve(nodePubkey) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnUnlockNode(
+    nodeId: Double,
+    password: String,
+    bitcoindRpcUsername: String,
+    bitcoindRpcPassword: String,
+    bitcoindRpcHost: String,
+    bitcoindRpcPort: Double,
+    indexerUrl: String?,
+    proxyEndpoint: String?,
+    announceAddresses: ReadableArray,
+    announceAlias: String?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val announceAddressesList = mutableListOf<String>()
+        for (i in 0 until announceAddresses.size()) {
+          announceAddressesList.add(announceAddresses.getString(i) ?: "")
+        }
+        node.unlock(
+          SdkUnlockRequest(
+            password = password,
+            bitcoindRpcUsername = bitcoindRpcUsername,
+            bitcoindRpcPassword = bitcoindRpcPassword,
+            bitcoindRpcHost = bitcoindRpcHost,
+            bitcoindRpcPort = bitcoindRpcPort.toInt().toUShort(),
+            indexerUrl = indexerUrl,
+            proxyEndpoint = proxyEndpoint,
+            announceAddresses = announceAddressesList,
+            announceAlias = announceAlias
+          )
+        )
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnDestroyNode(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        RlnNodeStore.remove(nodeId.toInt())
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnNodeInfo(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val info = node.nodeInfo()
+        val map = Arguments.createMap()
+        map.putString("pubkey", info.pubkey)
+        map.putDouble("numChannels", info.numChannels.toDouble())
+        map.putDouble("numUsableChannels", info.numUsableChannels.toDouble())
+        map.putDouble("localBalanceSat", info.localBalanceSat.toDouble())
+        map.putDouble("numPeers", info.numPeers.toDouble())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnNetworkInfo(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val info = node.networkInfo()
+        val map = Arguments.createMap()
+        map.putString("network", info.network)
+        map.putDouble("height", info.height.toDouble())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnListPeers(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val peers = node.listPeers()
+        val arr = Arguments.createArray()
+        peers.forEach {
+          val map = Arguments.createMap()
+          map.putString("pubkey", it.pubkey)
+          arr.pushMap(map)
+        }
+        withContext(Dispatchers.Main) { promise.resolve(arr) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnConnectPeer(nodeId: Double, peerPubkeyAndAddr: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.connectpeer(peerPubkeyAndAddr)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnDisconnectPeer(nodeId: Double, peerPubkey: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.disconnectpeer(SdkDisconnectPeerRequest(peerPubkey))
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnListChannels(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val channels = node.listChannels()
+        val arr = Arguments.createArray()
+        channels.forEach { ch ->
+          val map = Arguments.createMap()
+          map.putString("channelId", ch.channelId)
+          map.putString("peerPubkey", ch.peerPubkey)
+          map.putBoolean("ready", ch.ready)
+          map.putDouble("capacitySat", ch.capacitySat.toDouble())
+          map.putBoolean("public", ch.public)
+          ch.assetId?.let { map.putString("assetId", it) }
+          arr.pushMap(map)
+        }
+        withContext(Dispatchers.Main) { promise.resolve(arr) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnOpenChannel(
+    nodeId: Double,
+    peerPubkeyAndOptAddr: String,
+    capacitySat: Double,
+    pushMsat: Double,
+    publicChannel: Boolean,
+    withAnchors: Boolean,
+    feeBaseMsat: Double?,
+    feeProportionalMillionths: Double?,
+    temporaryChannelId: String?,
+    assetId: String?,
+    assetAmount: Double?,
+    pushAssetAmount: Double?,
+    virtualOpenMode: String?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val req = SdkOpenChannelRequest(
+          peerPubkeyAndOptAddr = peerPubkeyAndOptAddr,
+          capacitySat = capacitySat.toULong(),
+          pushMsat = pushMsat.toULong(),
+          public = publicChannel,
+          withAnchors = withAnchors,
+          feeBaseMsat = feeBaseMsat?.toInt()?.toUInt(),
+          feeProportionalMillionths = feeProportionalMillionths?.toInt()?.toUInt(),
+          temporaryChannelId = temporaryChannelId,
+          assetId = assetId,
+          assetAmount = assetAmount?.toULong(),
+          pushAssetAmount = pushAssetAmount?.toULong(),
+          virtualOpenMode = virtualOpenMode
+        )
+        val opened = node.openchannel(req)
+        val map = Arguments.createMap()
+        map.putString("temporaryChannelId", opened.temporaryChannelId)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnCloseChannel(
+    nodeId: Double,
+    channelId: String,
+    peerPubkey: String,
+    force: Boolean,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val req = SdkCloseChannelRequest(
+          channelId = channelId,
+          peerPubkey = peerPubkey,
+          force = force
+        )
+        node.closechannel(req)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnListPayments(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val payments = node.listPayments()
+        val arr = Arguments.createArray()
+        payments.forEach { p ->
+          val map = Arguments.createMap()
+          p.assetId?.let { map.putString("assetId", it) }
+          map.putString("paymentHash", p.paymentHash)
+          map.putDouble("createdAt", p.createdAt.toDouble())
+          map.putDouble("updatedAt", p.updatedAt.toDouble())
+          map.putString("payeePubkey", p.payeePubkey)
+          p.amtMsat?.let { map.putDouble("amtMsat", it.toDouble()) }
+          p.assetAmount?.let { map.putDouble("assetAmount", it.toDouble()) }
+          arr.pushMap(map)
+        }
+        withContext(Dispatchers.Main) { promise.resolve(arr) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
   }
 
   companion object {

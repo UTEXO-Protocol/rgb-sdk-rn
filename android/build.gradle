@@ -75,6 +75,9 @@ dependencies {
   implementation "com.facebook.react:react-android"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
   implementation("com.utexo:rgb-lib-android:0.3.0-beta.18")
+  // UniFFI-generated RLN Kotlin bindings require JNA. Use Android AAR artifact
+  // explicitly to avoid Gradle resolving both .aar and .jar variants.
+  implementation "net.java.dev.jna:jna:5.17.0@aar"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
 }

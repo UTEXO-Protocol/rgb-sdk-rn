@@ -2001,6 +2001,270 @@ expirationTimestamp:(NSNumber *)expirationTimestamp
     });
 }
 
+- (void)rlnCreateNode:(NSString *)storageDirPath
+ daemonListeningPort:(double)daemonListeningPort
+ldkPeerListeningPort:(double)ldkPeerListeningPort
+              network:(NSString *)network
+  maxMediaUploadSizeMb:(double)maxMediaUploadSizeMb
+enableVirtualChannelsV0:(NSNumber * _Nullable)enableVirtualChannelsV0
+              resolve:(RCTPromiseResolveBlock)resolve
+               reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *request = @{
+            @"storageDirPath": storageDirPath ?: @"",
+            @"daemonListeningPort": @(daemonListeningPort),
+            @"ldkPeerListeningPort": @(ldkPeerListeningPort),
+            @"network": network ?: @"",
+            @"maxMediaUploadSizeMb": @(maxMediaUploadSizeMb),
+            @"enableVirtualChannelsV0": enableVirtualChannelsV0 ?: [NSNull null],
+        };
+        NSDictionary *result = [RgbSwiftHelper _rlnCreateNode:request];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_CREATE_NODE_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"nodeId"]);
+        }
+    });
+}
+
+- (void)rlnInitNode:(double)nodeId
+           password:(NSString *)password
+           mnemonic:(NSString * _Nullable)mnemonic
+            resolve:(RCTPromiseResolveBlock)resolve
+             reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnInitNode:@(nodeId) password:password mnemonic:mnemonic];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_INIT_NODE_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"pubkey"]);
+        }
+    });
+}
+
+- (void)rlnUnlockNode:(double)nodeId
+             password:(NSString *)password
+  bitcoindRpcUsername:(NSString *)bitcoindRpcUsername
+  bitcoindRpcPassword:(NSString *)bitcoindRpcPassword
+      bitcoindRpcHost:(NSString *)bitcoindRpcHost
+      bitcoindRpcPort:(double)bitcoindRpcPort
+            indexerUrl:(NSString * _Nullable)indexerUrl
+         proxyEndpoint:(NSString * _Nullable)proxyEndpoint
+     announceAddresses:(NSArray<NSString *> *)announceAddresses
+         announceAlias:(NSString * _Nullable)announceAlias
+               resolve:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnUnlockNode:@(nodeId)
+                                                      password:password
+                                           bitcoindRpcUsername:bitcoindRpcUsername
+                                           bitcoindRpcPassword:bitcoindRpcPassword
+                                               bitcoindRpcHost:bitcoindRpcHost
+                                               bitcoindRpcPort:@(bitcoindRpcPort)
+                                                     indexerUrl:indexerUrl
+                                                  proxyEndpoint:proxyEndpoint
+                                              announceAddresses:announceAddresses
+                                                  announceAlias:announceAlias];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_UNLOCK_NODE_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnDestroyNode:(double)nodeId
+               resolve:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnDestroyNode:@(nodeId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_DESTROY_NODE_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnNodeInfo:(double)nodeId
+            resolve:(RCTPromiseResolveBlock)resolve
+             reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnNodeInfo:@(nodeId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_NODE_INFO_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
+- (void)rlnNetworkInfo:(double)nodeId
+               resolve:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnNetworkInfo:@(nodeId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_NETWORK_INFO_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
+- (void)rlnListPeers:(double)nodeId
+             resolve:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnListPeers:@(nodeId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_LIST_PEERS_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"peers"] ?: @[]);
+        }
+    });
+}
+
+- (void)rlnConnectPeer:(double)nodeId
+      peerPubkeyAndAddr:(NSString *)peerPubkeyAndAddr
+                resolve:(RCTPromiseResolveBlock)resolve
+                 reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnConnectPeer:@(nodeId) peerPubkeyAndAddr:peerPubkeyAndAddr];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_CONNECT_PEER_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnDisconnectPeer:(double)nodeId
+                peerPubkey:(NSString *)peerPubkey
+                   resolve:(RCTPromiseResolveBlock)resolve
+                    reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnDisconnectPeer:@(nodeId) peerPubkey:peerPubkey];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_DISCONNECT_PEER_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnListChannels:(double)nodeId
+                resolve:(RCTPromiseResolveBlock)resolve
+                 reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnListChannels:@(nodeId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_LIST_CHANNELS_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"channels"] ?: @[]);
+        }
+    });
+}
+
+- (void)rlnOpenChannel:(double)nodeId
+   peerPubkeyAndOptAddr:(NSString *)peerPubkeyAndOptAddr
+            capacitySat:(double)capacitySat
+               pushMsat:(double)pushMsat
+          publicChannel:(BOOL)publicChannel
+            withAnchors:(BOOL)withAnchors
+            feeBaseMsat:(NSNumber * _Nullable)feeBaseMsat
+feeProportionalMillionths:(NSNumber * _Nullable)feeProportionalMillionths
+  temporaryChannelId:(NSString * _Nullable)temporaryChannelId
+             assetId:(NSString * _Nullable)assetId
+         assetAmount:(NSNumber * _Nullable)assetAmount
+     pushAssetAmount:(NSNumber * _Nullable)pushAssetAmount
+      virtualOpenMode:(NSString * _Nullable)virtualOpenMode
+             resolve:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *request = @{
+            @"peerPubkeyAndOptAddr": peerPubkeyAndOptAddr ?: @"",
+            @"capacitySat": @(capacitySat),
+            @"pushMsat": @(pushMsat),
+            @"public": @(publicChannel),
+            @"withAnchors": @(withAnchors),
+            @"feeBaseMsat": feeBaseMsat ?: [NSNull null],
+            @"feeProportionalMillionths": feeProportionalMillionths ?: [NSNull null],
+            @"temporaryChannelId": temporaryChannelId ?: [NSNull null],
+            @"assetId": assetId ?: [NSNull null],
+            @"assetAmount": assetAmount ?: [NSNull null],
+            @"pushAssetAmount": pushAssetAmount ?: [NSNull null],
+            @"virtualOpenMode": virtualOpenMode ?: [NSNull null],
+        };
+        NSDictionary *result = [RgbSwiftHelper _rlnOpenChannel:@(nodeId) request:request];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_OPEN_CHANNEL_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
+- (void)rlnCloseChannel:(double)nodeId
+              channelId:(NSString *)channelId
+             peerPubkey:(NSString *)peerPubkey
+                  force:(BOOL)force
+                resolve:(RCTPromiseResolveBlock)resolve
+                 reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *request = @{
+            @"channelId": channelId ?: @"",
+            @"peerPubkey": peerPubkey ?: @"",
+            @"force": @(force),
+        };
+        NSDictionary *result = [RgbSwiftHelper _rlnCloseChannel:@(nodeId) request:request];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_CLOSE_CHANNEL_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnListPayments:(double)nodeId
+                resolve:(RCTPromiseResolveBlock)resolve
+                 reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnListPayments:@(nodeId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_LIST_PAYMENTS_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"payments"] ?: @[]);
+        }
+    });
+}
+
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {

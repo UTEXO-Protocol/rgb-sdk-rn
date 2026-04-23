@@ -119,9 +119,14 @@ export class RNRgbLibBinding implements IRgbLibBinding {
       accountXpubColored: params.xpubCol,
       masterFingerprint: params.masterFingerprint,
     };
-    this.maxAllocationsPerUtxo = params.maxAllocationsPerUtxo ?? 1;
-    this.vanillaKeychain = params.vanillaKeychain ?? 0;
-    this.reuseAddresses = params.reuseAddresses ?? false;
+    const extendedParams = params as WalletInitParams & {
+      maxAllocationsPerUtxo?: number;
+      vanillaKeychain?: number;
+      reuseAddresses?: boolean;
+    };
+    this.maxAllocationsPerUtxo = extendedParams.maxAllocationsPerUtxo ?? 1;
+    this.vanillaKeychain = extendedParams.vanillaKeychain ?? 0;
+    this.reuseAddresses = extendedParams.reuseAddresses ?? false;
   }
 
   private async ensureInitialized(): Promise<void> {

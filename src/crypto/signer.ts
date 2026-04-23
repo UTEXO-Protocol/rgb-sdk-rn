@@ -35,7 +35,6 @@ function toBDKNetwork(network: Network): BDKNetwork {
     case 'testnet':
       return NetworkEnum.Testnet;
     case 'signet':
-    case 'utexo':
       return NetworkEnum.Signet;
     case 'regtest':
       return NetworkEnum.Regtest;
@@ -57,8 +56,7 @@ export async function signPsbt(
     // utexo shares BDK's signet parameters — toBDKNetwork handles the mapping
     const bdkNetwork = toBDKNetwork(normalizedNetwork);
     // utexo and signet share the same BIP32 derivation paths
-    const bip32Network: Network =
-      normalizedNetwork === 'utexo' ? 'signet' : normalizedNetwork;
+    const bip32Network: Network = normalizedNetwork;
 
     const seed = bip39.mnemonicToSeedSync(mnemonic.trim());
     const rootNode = bip32Factory().fromSeed(

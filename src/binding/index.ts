@@ -2,6 +2,8 @@ import Rgb from './NativeRgb';
 import type { Keys, BitcoinNetwork as RNBitcoinNetwork } from './Interfaces';
 import { toNativeNetwork } from './Interfaces';
 import type { InvoiceData } from '@utexo/rgb-sdk-core';
+export { RLNRgbLibBinding } from './RLNRgbLibBinding';
+export type * from './rln-types';
 
 // ── Standalone functions (mirrors NodeRgbLibBinding exports) ─────────────────
 

@@ -17,7 +17,10 @@ Pod::Spec.new do |s|
   s.private_header_files = "ios/**/*.h"
     
   s.vendored_frameworks = "ios/rgb_libFFI.xcframework"
-  s.preserve_paths = "ios/rgb_libFFI.xcframework"
+  s.preserve_paths = [
+    "ios/rgb_libFFI.xcframework",
+    "ios/RGBLightningNode.xcframework"
+  ]
 
   install_modules_dependencies(s)
 end

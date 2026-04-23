@@ -36,7 +36,7 @@
     "dev": "tsc -w",
     "clean": "del-cli android/build ios/build lib",
     "prepare": "bob build",
-    "postinstall": "node scripts/download-rgb-lib-ios.js && node scripts/build-uniffi-bindgen-react-native.js",
+    "postinstall": "node scripts/download-rgb-lib-ios.js && node scripts/setup-rln-bindings.js && node scripts/build-uniffi-bindgen-react-native.js",
     "typecheck": "tsc",
     "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/binding/NativeRgb.ts && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgbsdkrn",
     "build": "bob build",
@@ -85,7 +85,7 @@
     "prettier": "^3.0.0"
   },
   "dependencies": {
-    "@utexo/rgb-sdk-core": "1.0.0-beta.3",
+    "@utexo/rgb-sdk-core": "file:../rgb-sdk-core",
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "3.0.0",
     "@scure/base": "^2.0.0",

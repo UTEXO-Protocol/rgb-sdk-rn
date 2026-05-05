@@ -1,4 +1,0 @@
-module RGBLightningNodeFFI {
-    header "RGBLightningNodeFFI.h"
-    export *
-}

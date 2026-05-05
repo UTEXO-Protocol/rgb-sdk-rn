@@ -47,9 +47,12 @@ export class RLNRgbLibBinding
   extends RNRgbLibBinding
   implements IUTEXOProtocol
 {
+  private nodeOperationQueue: Promise<void> = Promise.resolve();
   private readonly protocolAdapter?: Partial<IUTEXOProtocol>;
   private rlnNodeId: number | null = null;
   private unlockConflictNormalized = false;
+  private lifecycleState: 'idle' | 'active' | 'shutting_down' | 'destroying' =
+    'idle';
 
   constructor(
     params: WalletInitParams,
@@ -155,22 +158,30 @@ export class RLNRgbLibBinding
     maxMediaUploadSizeMb: number;
     enableVirtualChannelsV0?: boolean | null;
   }): Promise<number> {
-    const nodeId = await Rgb.rlnCreateNode(
-      request.storageDirPath,
-      request.daemonListeningPort,
-      request.ldkPeerListeningPort,
-      request.network,
-      request.maxMediaUploadSizeMb,
-      request.enableVirtualChannelsV0 ?? null
-    );
-    this.rlnNodeId = nodeId;
-    return nodeId;
+    return this.withNodeQueue(async () => {
+      if (this.rlnNodeId != null) {
+        throw new WalletError('RLN node is already created');
+      }
+      const nodeId = await Rgb.rlnCreateNode(
+        request.storageDirPath,
+        request.daemonListeningPort,
+        request.ldkPeerListeningPort,
+        request.network,
+        request.maxMediaUploadSizeMb,
+        request.enableVirtualChannelsV0 ?? null
+      );
+      this.rlnNodeId = nodeId;
+      this.lifecycleState = 'active';
+      return nodeId;
+    });
   }
 
   async rlnInitNode(password: string, mnemonic?: string): Promise<string> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    return Rgb.rlnInitNode(this.rlnNodeId, password, mnemonic ?? null);
+    return this.withNodeQueue(async () => {
+      const nodeId = this.requireNodeId();
+      this.assertRegularOpsAllowed();
+      return Rgb.rlnInitNode(nodeId, password, mnemonic ?? null);
+    });
   }
 
   async rlnUnlockNode(request: {
@@ -184,32 +195,59 @@ export class RLNRgbLibBinding
     announceAddresses?: string[];
     announceAlias?: string | null;
   }): Promise<void> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    this.unlockConflictNormalized = false;
-    try {
-      await Rgb.rlnUnlockNode(
-        this.rlnNodeId,
-        request.password,
-        request.bitcoindRpcUsername,
-        request.bitcoindRpcPassword,
-        request.bitcoindRpcHost,
-        request.bitcoindRpcPort,
-        request.indexerUrl ?? null,
-        request.proxyEndpoint ?? null,
-        request.announceAddresses ?? [],
-        request.announceAlias ?? null
-      );
-    } catch (error) {
-      if (!this.isConflictError(error)) {
-        throw error;
+    await this.withNodeQueue(async () => {
+      const nodeId = this.requireNodeId();
+      this.assertRegularOpsAllowed();
+      this.unlockConflictNormalized = false;
+
+      // Treat unlock as idempotent: if node is already ready, skip native unlock.
+      const alreadyReady = await this.probeNodeReady(nodeId, 3, 300);
+      if (alreadyReady) {
+        return;
       }
-      const ready = await this.probeNodeReady();
-      if (!ready) {
-        throw error;
+
+      const unlockOnce = () =>
+        Rgb.rlnUnlockNode(
+          nodeId,
+          request.password,
+          request.bitcoindRpcUsername,
+          request.bitcoindRpcPassword,
+          request.bitcoindRpcHost,
+          request.bitcoindRpcPort,
+          request.indexerUrl ?? null,
+          request.proxyEndpoint ?? null,
+          request.announceAddresses ?? [],
+          request.announceAlias ?? null
+        );
+
+      const maxConflictRetries = 4;
+      let lastConflictError: unknown = null;
+      for (let attempt = 1; attempt <= maxConflictRetries; attempt += 1) {
+        try {
+          await unlockOnce();
+          return;
+        } catch (error) {
+          if (!this.isConflictError(error)) {
+            throw error;
+          }
+          // In practice RLN can return Conflict while switching internal state.
+          // Probe first; if not ready yet, retry unlock a few times with backoff.
+          const ready = await this.probeNodeReady(nodeId, 12, 500);
+          if (ready) {
+            this.unlockConflictNormalized = true;
+            return;
+          }
+          lastConflictError = error;
+          if (attempt < maxConflictRetries) {
+            await new Promise((resolve) =>
+              globalThis.setTimeout(resolve, 400 * attempt)
+            );
+            continue;
+          }
+        }
       }
-      this.unlockConflictNormalized = true;
-    }
+      throw lastConflictError;
+    });
   }
 
   public consumeUnlockConflictNormalized(): boolean {
@@ -246,12 +284,15 @@ export class RLNRgbLibBinding
   }
 
   private async probeNodeReady(
-    attempts: number = 20,
-    delayMs: number = 500
+    nodeId: number,
+    attempts: number = 30,
+    delayMs: number = 750
   ): Promise<boolean> {
+    // Give native unlock state a short settling window before probing.
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 500));
     for (let i = 0; i < attempts; i += 1) {
       try {
-        await this.rlnNodeInfo();
+        await Rgb.rlnNodeInfo(nodeId);
         return true;
       } catch (error) {
         // During unlock-after-conflict, RLN can briefly return NotInitialized
@@ -270,45 +311,46 @@ export class RLNRgbLibBinding
   }
 
   async rlnDestroyNode(): Promise<void> {
-    if (this.rlnNodeId == null) return;
-    await Rgb.rlnDestroyNode(this.rlnNodeId);
-    this.rlnNodeId = null;
+    await this.withNodeQueue(async () => {
+      if (this.rlnNodeId == null) return;
+      this.lifecycleState = 'destroying';
+      try {
+        await Rgb.rlnDestroyNode(this.rlnNodeId);
+        this.rlnNodeId = null;
+        this.lifecycleState = 'idle';
+      } catch (error) {
+        this.lifecycleState = 'active';
+        throw error;
+      }
+    });
   }
 
   async rlnNodeInfo(): Promise<object> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    return Rgb.rlnNodeInfo(this.rlnNodeId);
+    return this.withNodeOperation((nodeId) => Rgb.rlnNodeInfo(nodeId));
   }
 
   async rlnNetworkInfo(): Promise<object> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    return Rgb.rlnNetworkInfo(this.rlnNodeId);
+    return this.withNodeOperation((nodeId) => Rgb.rlnNetworkInfo(nodeId));
   }
 
   async rlnConnectPeer(peerPubkeyAndAddr: string): Promise<void> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    await Rgb.rlnConnectPeer(this.rlnNodeId, peerPubkeyAndAddr);
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnConnectPeer(nodeId, peerPubkeyAndAddr)
+    );
   }
 
   async rlnListPeers(): Promise<object[]> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    return Rgb.rlnListPeers(this.rlnNodeId);
+    return this.withNodeOperation((nodeId) => Rgb.rlnListPeers(nodeId));
   }
 
   async rlnDisconnectPeer(peerPubkey: string): Promise<void> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    await Rgb.rlnDisconnectPeer(this.rlnNodeId, peerPubkey);
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnDisconnectPeer(nodeId, peerPubkey)
+    );
   }
 
   async rlnListChannels(): Promise<object[]> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    return Rgb.rlnListChannels(this.rlnNodeId);
+    return this.withNodeOperation((nodeId) => Rgb.rlnListChannels(nodeId));
   }
 
   async rlnOpenChannel(request: {
@@ -325,22 +367,22 @@ export class RLNRgbLibBinding
     pushAssetAmount?: number | null;
     virtualOpenMode?: string | null;
   }): Promise<object> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    return Rgb.rlnOpenChannel(
-      this.rlnNodeId,
-      request.peerPubkeyAndOptAddr,
-      request.capacitySat,
-      request.pushMsat,
-      request.public,
-      request.withAnchors,
-      request.feeBaseMsat ?? null,
-      request.feeProportionalMillionths ?? null,
-      request.temporaryChannelId ?? null,
-      request.assetId ?? null,
-      request.assetAmount ?? null,
-      request.pushAssetAmount ?? null,
-      request.virtualOpenMode ?? null
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnOpenChannel(
+        nodeId,
+        request.peerPubkeyAndOptAddr,
+        request.capacitySat,
+        request.pushMsat,
+        request.public,
+        request.withAnchors,
+        request.feeBaseMsat ?? null,
+        request.feeProportionalMillionths ?? null,
+        request.temporaryChannelId ?? null,
+        request.assetId ?? null,
+        request.assetAmount ?? null,
+        request.pushAssetAmount ?? null,
+        request.virtualOpenMode ?? null
+      )
     );
   }
 
@@ -349,14 +391,316 @@ export class RLNRgbLibBinding
     peerPubkey: string,
     force: boolean
   ): Promise<void> {
-    if (this.rlnNodeId == null)
-      throw new WalletError('RLN node is not created');
-    await Rgb.rlnCloseChannel(this.rlnNodeId, channelId, peerPubkey, force);
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnCloseChannel(nodeId, channelId, peerPubkey, force)
+    );
   }
 
   async rlnListPayments(): Promise<object[]> {
-    if (this.rlnNodeId == null)
+    return this.withNodeOperation((nodeId) => Rgb.rlnListPayments(nodeId));
+  }
+
+  async rlnAddress(): Promise<object> {
+    return this.withNodeOperation((nodeId) => Rgb.rlnAddress(nodeId));
+  }
+
+  async rlnAssetBalance(assetId: string): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnAssetBalance(nodeId, assetId)
+    );
+  }
+
+  async rlnBackup(backupPath: string, password: string): Promise<void> {
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnBackup(nodeId, backupPath, password)
+    );
+  }
+
+  async rlnBtcBalance(skipSync: boolean = false): Promise<object> {
+    return this.withNodeOperation((nodeId) => Rgb.rlnBtcBalance(nodeId, skipSync));
+  }
+
+  async rlnCheckIndexerUrl(indexerUrl: string): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnCheckIndexerUrl(nodeId, indexerUrl)
+    );
+  }
+
+  async rlnCheckProxyEndpoint(proxyEndpoint: string): Promise<void> {
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnCheckProxyEndpoint(nodeId, proxyEndpoint)
+    );
+  }
+
+  async rlnCreateUtxos(
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<void> {
+    await this.withNodeOperation(async (nodeId) => {
+      const maxConflictRetries = 20;
+      let lastConflictError: unknown = null;
+      for (let attempt = 1; attempt <= maxConflictRetries; attempt += 1) {
+        try {
+          await Rgb.rlnCreateUtxos(nodeId, upTo, num, size, feeRate, skipSync);
+          return;
+        } catch (error) {
+          if (!this.isConflictError(error)) {
+            throw error;
+          }
+          // Same normalization strategy as unlock: RLN can temporarily reject
+          // operations while transitioning internal state.
+          const ready = await this.probeNodeReady(nodeId, 8, 500);
+          if (ready) {
+            await new Promise((resolve) =>
+              globalThis.setTimeout(resolve, 250 * attempt)
+            );
+          }
+          lastConflictError = error;
+          if (attempt < maxConflictRetries) {
+            await new Promise((resolve) =>
+              globalThis.setTimeout(resolve, 600)
+            );
+            continue;
+          }
+        }
+      }
+      throw lastConflictError;
+    });
+  }
+
+  async rlnDecodeLnInvoice(invoice: string): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnDecodeLnInvoice(nodeId, invoice)
+    );
+  }
+
+  async rlnDecodeRgbInvoice(invoice: string): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnDecodeRgbInvoice(nodeId, invoice)
+    );
+  }
+
+  async rlnEstimateFee(blocks: number): Promise<object> {
+    return this.withNodeOperation((nodeId) => Rgb.rlnEstimateFee(nodeId, blocks));
+  }
+
+  async rlnFailTransfers(
+    batchTransferIdx: number | null,
+    noAssetOnly: boolean,
+    skipSync: boolean
+  ): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnFailTransfers(
+        nodeId,
+        batchTransferIdx,
+        noAssetOnly,
+        skipSync
+      )
+    );
+  }
+
+  async rlnGetChannelId(temporaryChannelId: string): Promise<string> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnGetChannelId(nodeId, temporaryChannelId)
+    );
+  }
+
+  async rlnGetPayment(paymentHash: string): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnGetPayment(nodeId, paymentHash)
+    );
+  }
+
+  async rlnInvoiceStatus(invoice: string): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnInvoiceStatus(nodeId, invoice)
+    );
+  }
+
+  async rlnKeysend(
+    destPubkey: string,
+    amtMsat: number,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnKeysend(
+        nodeId,
+        destPubkey,
+        amtMsat,
+        assetId,
+        assetAmount
+      )
+    );
+  }
+
+  async rlnListAssets(filterAssetSchemas: string[]): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnListAssets(nodeId, filterAssetSchemas)
+    );
+  }
+
+  async rlnListTransactions(skipSync: boolean): Promise<object[]> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnListTransactions(nodeId, skipSync)
+    );
+  }
+
+  async rlnListTransfers(assetId: string): Promise<object[]> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnListTransfers(nodeId, assetId)
+    );
+  }
+
+  async rlnListUnspents(skipSync: boolean): Promise<object[]> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnListUnspents(nodeId, skipSync)
+    );
+  }
+
+  async rlnLnInvoice(
+    amtMsat: number | null,
+    expirySec: number,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnLnInvoice(
+        nodeId,
+        amtMsat,
+        expirySec,
+        assetId,
+        assetAmount
+      )
+    );
+  }
+
+  async rlnRefreshTransfers(skipSync: boolean): Promise<void> {
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnRefreshTransfers(nodeId, skipSync)
+    );
+  }
+
+  async rlnRgbInvoice(
+    assetId: string | null,
+    assignmentAmount: number | null,
+    durationSeconds: number | null,
+    minConfirmations: number,
+    witness: boolean
+  ): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnRgbInvoice(
+        nodeId,
+        assetId,
+        assignmentAmount,
+        durationSeconds,
+        minConfirmations,
+        witness
+      )
+    );
+  }
+
+  async rlnSendBtc(
+    amount: number,
+    address: string,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnSendBtc(nodeId, amount, address, feeRate, skipSync)
+    );
+  }
+
+  async rlnSendPayment(
+    invoice: string,
+    amtMsat: number | null,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnSendPayment(
+        nodeId,
+        invoice,
+        amtMsat,
+        assetId,
+        assetAmount
+      )
+    );
+  }
+
+  async rlnSendRgb(
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number,
+    skipSync: boolean
+  ): Promise<object> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnSendRgb(
+        nodeId,
+        donation,
+        feeRate,
+        minConfirmations,
+        skipSync
+      )
+    );
+  }
+
+  async rlnShutdown(): Promise<void> {
+    await this.withNodeQueue(async () => {
+      const nodeId = this.requireNodeId();
+      this.lifecycleState = 'shutting_down';
+      try {
+        await Rgb.rlnShutdown(nodeId);
+      } catch (error) {
+        this.lifecycleState = 'active';
+        throw error;
+      }
+    });
+  }
+
+  async rlnSync(): Promise<void> {
+    await this.withNodeOperation((nodeId) => Rgb.rlnSync(nodeId));
+  }
+
+  private requireNodeId(): number {
+    if (this.rlnNodeId == null) {
       throw new WalletError('RLN node is not created');
-    return Rgb.rlnListPayments(this.rlnNodeId);
+    }
+    return this.rlnNodeId;
+  }
+
+  private assertRegularOpsAllowed() {
+    if (
+      this.lifecycleState === 'shutting_down' ||
+      this.lifecycleState === 'destroying'
+    ) {
+      throw new WalletError(
+        `RLN node is ${this.lifecycleState}; non-lifecycle operations are blocked`
+      );
+    }
+  }
+
+  private async withNodeOperation<T>(op: (nodeId: number) => Promise<T>): Promise<T> {
+    return this.withNodeQueue(async () => {
+      const nodeId = this.requireNodeId();
+      this.assertRegularOpsAllowed();
+      return op(nodeId);
+    });
+  }
+
+  private async withNodeQueue<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.nodeOperationQueue
+      .catch(() => {
+        // Keep queue moving even if a previous op failed.
+      })
+      .then(op);
+    this.nodeOperationQueue = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
   }
 }

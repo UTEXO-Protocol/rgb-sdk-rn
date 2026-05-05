@@ -889,7 +889,7 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_rgb_lightning_node_fn_method_sdknode_get_channel_id(`ptr`: Pointer,`temporaryChannelId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    fun uniffi_rgb_lightning_node_fn_method_sdknode_get_payment(`ptr`: Pointer,`paymentHash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    fun uniffi_rgb_lightning_node_fn_method_sdknode_get_payment(`ptr`: Pointer,`paymentHash`: RustBuffer.ByValue,`paymentType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_rgb_lightning_node_fn_method_sdknode_get_swap(`ptr`: Pointer,`paymentHash`: RustBuffer.ByValue,`taker`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1261,7 +1261,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_rgb_lightning_node_checksum_method_sdknode_get_channel_id() != 4729.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_rgb_lightning_node_checksum_method_sdknode_get_payment() != 24759.toShort()) {
+    if (lib.uniffi_rgb_lightning_node_checksum_method_sdknode_get_payment() != 29999.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_rgb_lightning_node_checksum_method_sdknode_get_swap() != 13160.toShort()) {
@@ -1860,7 +1860,7 @@ public interface SdkNodeInterface {
     
     fun `getChannelId`(`temporaryChannelId`: ChannelId): ChannelId
     
-    fun `getPayment`(`paymentHash`: PaymentHash): Payment
+    fun `getPayment`(`paymentHash`: PaymentHash, `paymentType`: PaymentType): Payment
     
     fun `getSwap`(`paymentHash`: PaymentHash, `taker`: kotlin.Boolean): Swap
     
@@ -2245,12 +2245,12 @@ open class SdkNode: Disposable, AutoCloseable, SdkNodeInterface {
     
 
     
-    @Throws(RlnException::class)override fun `getPayment`(`paymentHash`: PaymentHash): Payment {
+    @Throws(RlnException::class)override fun `getPayment`(`paymentHash`: PaymentHash, `paymentType`: PaymentType): Payment {
             return FfiConverterTypePayment.lift(
     callWithPointer {
     uniffiRustCallWithError(RlnException) { _status ->
     UniffiLib.INSTANCE.uniffi_rgb_lightning_node_fn_method_sdknode_get_payment(
-        it, FfiConverterTypePaymentHash.lower(`paymentHash`),_status)
+        it, FfiConverterTypePaymentHash.lower(`paymentHash`),FfiConverterTypePaymentType.lower(`paymentType`),_status)
 }
     }
     )

@@ -2287,7 +2287,7 @@ public class RgbSwiftHelper: NSObject {
         virtualPeerPubkeys: nil
       )
       let node = try SdkNode.create(request: initReq)
-      let nodeId = RlnNodeStore.shared.create(node: node)
+      let nodeId = try RlnNodeStore.shared.create(node: node, storageDirPath: storageDirPath)
       return ["nodeId": nodeId] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -2515,6 +2515,483 @@ public class RgbSwiftHelper: NSObject {
         ] as NSDictionary
       }
       return ["payments": payments] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnAddress:)
+  public static func _rlnAddress(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let address = try node.address()
+      return ["address": address.address] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnAssetBalance:assetId:)
+  public static func _rlnAssetBalance(_ nodeId: NSNumber, assetId: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let b = try node.assetBalance(assetId: assetId)
+      return [
+        "settled": NSNumber(value: b.settled),
+        "future": NSNumber(value: b.future),
+        "spendable": NSNumber(value: b.spendable),
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnBackup:backupPath:password:)
+  public static func _rlnBackup(_ nodeId: NSNumber, backupPath: String, password: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.backup(backupPath: backupPath, password: password)
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnBtcBalance:skipSync:)
+  public static func _rlnBtcBalance(_ nodeId: NSNumber, skipSync: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let b = try node.btcBalance(skipSync: skipSync.boolValue)
+      return [
+        "vanilla": NSNumber(value: b.vanilla),
+        "colored": NSNumber(value: b.colored),
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnCheckIndexerUrl:indexerUrl:)
+  public static func _rlnCheckIndexerUrl(_ nodeId: NSNumber, indexerUrl: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.checkIndexerUrl(indexerUrl: indexerUrl)
+      return ["indexerUrl": res.indexerUrl] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnCheckProxyEndpoint:proxyEndpoint:)
+  public static func _rlnCheckProxyEndpoint(_ nodeId: NSNumber, proxyEndpoint: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.checkProxyEndpoint(proxyEndpoint: proxyEndpoint)
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnCreateUtxos:request:)
+  public static func _rlnCreateUtxos(_ nodeId: NSNumber, request: NSDictionary) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.createutxos(
+        request: SdkCreateUtxosRequest(
+          upTo: (request["upTo"] as? NSNumber)?.boolValue ?? false,
+          num: (request["num"] as? NSNumber).map { UInt8(truncating: $0) },
+          size: (request["size"] as? NSNumber).map { UInt64(truncating: $0) },
+          feeRate: UInt64(truncating: (request["feeRate"] as? NSNumber) ?? 0),
+          skipSync: (request["skipSync"] as? NSNumber)?.boolValue ?? false
+        )
+      )
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnDecodeLnInvoice:invoice:)
+  public static func _rlnDecodeLnInvoice(_ nodeId: NSNumber, invoice: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.decodeLnInvoice(invoice: invoice)
+      return ["value": "\(res)"] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnDecodeRgbInvoice:invoice:)
+  public static func _rlnDecodeRgbInvoice(_ nodeId: NSNumber, invoice: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.decodeRgbInvoice(invoice: invoice)
+      return ["value": "\(res)"] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnEstimateFee:blocks:)
+  public static func _rlnEstimateFee(_ nodeId: NSNumber, blocks: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.estimateFee(blocks: UInt16(truncating: blocks))
+      return ["value": "\(res)"] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnGetChannelId:temporaryChannelId:)
+  public static func _rlnGetChannelId(_ nodeId: NSNumber, temporaryChannelId: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      return ["channelId": try node.getChannelId(temporaryChannelId: temporaryChannelId)] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnGetPayment:paymentHash:)
+  public static func _rlnGetPayment(_ nodeId: NSNumber, paymentHash: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let p = try node.getPayment(paymentHash: paymentHash)
+      return ["paymentHash": p.paymentHash] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnInvoiceStatus:invoice:)
+  public static func _rlnInvoiceStatus(_ nodeId: NSNumber, invoice: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      return ["value": "\(try node.invoiceStatus(invoice: invoice))"] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnFailTransfers:batchTransferIdx:noAssetOnly:skipSync:)
+  public static func _rlnFailTransfers(
+    _ nodeId: NSNumber,
+    batchTransferIdx: NSNumber?,
+    noAssetOnly: Bool,
+    skipSync: Bool
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.failtransfers(
+        request: SdkFailTransfersRequest(
+          batchTransferIdx: batchTransferIdx?.intValue,
+          noAssetOnly: noAssetOnly,
+          skipSync: skipSync
+        )
+      )
+      return ["transfersChanged": res.transfersChanged] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnKeysend:destPubkey:amtMsat:assetId:assetAmount:)
+  public static func _rlnKeysend(
+    _ nodeId: NSNumber,
+    destPubkey: String,
+    amtMsat: NSNumber,
+    assetId: String?,
+    assetAmount: NSNumber?
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.keysend(
+        request: SdkKeysendRequest(
+          destPubkey: destPubkey,
+          amtMsat: UInt64(truncating: amtMsat),
+          assetId: assetId,
+          assetAmount: assetAmount.map { UInt64(truncating: $0) }
+        )
+      )
+      return [
+        "paymentHash": res.paymentHash,
+        "paymentPreimage": res.paymentPreimage,
+        "status": "\(res.status)",
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListAssets:filterAssetSchemas:)
+  public static func _rlnListAssets(_ nodeId: NSNumber, filterAssetSchemas: [String]) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.listAssets(filterAssetSchemas: filterAssetSchemas)
+      return ["value": "\(res)"] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListTransactions:skipSync:)
+  public static func _rlnListTransactions(_ nodeId: NSNumber, skipSync: Bool) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let txs = try node.listTransactions(skipSync: skipSync).map { ["txid": $0.txid] as NSDictionary }
+      return ["transactions": txs] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListTransfers:assetId:)
+  public static func _rlnListTransfers(_ nodeId: NSNumber, assetId: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let transfers = try node.listTransfers(assetId: assetId).map {
+        ["idx": NSNumber(value: $0.idx), "status": "\($0.status)"] as NSDictionary
+      }
+      return ["transfers": transfers] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListUnspents:skipSync:)
+  public static func _rlnListUnspents(_ nodeId: NSNumber, skipSync: Bool) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let unspents = try node.listUnspents(skipSync: skipSync).map {
+        ["txid": $0.utxo.outpoint.txid, "vout": NSNumber(value: $0.utxo.outpoint.vout)] as NSDictionary
+      }
+      return ["unspents": unspents] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnLnInvoice:amtMsat:expirySec:assetId:assetAmount:)
+  public static func _rlnLnInvoice(
+    _ nodeId: NSNumber,
+    amtMsat: NSNumber?,
+    expirySec: NSNumber,
+    assetId: String?,
+    assetAmount: NSNumber?
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.lnInvoice(
+        request: LnInvoiceRequest(
+          amtMsat: amtMsat.map { UInt64(truncating: $0) },
+          expirySec: UInt32(truncating: expirySec),
+          assetId: assetId,
+          assetAmount: assetAmount.map { UInt64(truncating: $0) },
+          paymentHash: nil,
+          descriptionHash: nil
+        )
+      )
+      return ["invoice": res.invoice] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnRefreshTransfers:skipSync:)
+  public static func _rlnRefreshTransfers(_ nodeId: NSNumber, skipSync: Bool) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.refreshtransfers(request: SdkRefreshTransfersRequest(skipSync: skipSync))
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnRgbInvoice:assetId:assignmentAmount:durationSeconds:minConfirmations:witness:)
+  public static func _rlnRgbInvoice(
+    _ nodeId: NSNumber,
+    assetId: String?,
+    assignmentAmount: NSNumber?,
+    durationSeconds: NSNumber?,
+    minConfirmations: NSNumber,
+    witness: Bool
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.rgbinvoice(
+        request: SdkRgbInvoiceRequest(
+          assetId: assetId,
+          assignmentKind: nil,
+          assignmentAmount: assignmentAmount.map { UInt64(truncating: $0) },
+          durationSeconds: durationSeconds.map { UInt32(truncating: $0) },
+          minConfirmations: UInt8(truncating: minConfirmations),
+          witness: witness
+        )
+      )
+      return [
+        "invoice": res.invoice,
+        "batchTransferIdx": NSNumber(value: res.batchTransferIdx),
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnSendBtc:amount:address:feeRate:skipSync:)
+  public static func _rlnSendBtc(
+    _ nodeId: NSNumber,
+    amount: NSNumber,
+    address: String,
+    feeRate: NSNumber,
+    skipSync: Bool
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.sendbtc(
+        request: SdkSendBtcRequest(
+          amount: UInt64(truncating: amount),
+          address: address,
+          feeRate: UInt64(truncating: feeRate),
+          skipSync: skipSync
+        )
+      )
+      return ["txid": res.txid] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnSendPayment:invoice:amtMsat:assetId:assetAmount:)
+  public static func _rlnSendPayment(
+    _ nodeId: NSNumber,
+    invoice: String,
+    amtMsat: NSNumber?,
+    assetId: String?,
+    assetAmount: NSNumber?
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.sendpayment(
+        request: SdkSendPaymentRequest(
+          invoice: invoice,
+          amtMsat: amtMsat.map { UInt64(truncating: $0) },
+          assetId: assetId,
+          assetAmount: assetAmount.map { UInt64(truncating: $0) }
+        )
+      )
+      return [
+        "paymentId": res.paymentId,
+        "paymentHash": res.paymentHash as Any,
+        "status": "\(res.status)",
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnSendRgb:donation:feeRate:minConfirmations:skipSync:)
+  public static func _rlnSendRgb(
+    _ nodeId: NSNumber,
+    donation: Bool,
+    feeRate: NSNumber,
+    minConfirmations: NSNumber,
+    skipSync: Bool
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.sendRgb(
+        request: SendRgbRequest(
+          donation: donation,
+          feeRate: UInt64(truncating: feeRate),
+          minConfirmations: UInt8(truncating: minConfirmations),
+          skipSync: skipSync,
+          recipientGroups: []
+        )
+      )
+      return [
+        "txid": res.txid,
+        "batchTransferIdx": NSNumber(value: res.batchTransferIdx),
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnShutdown:)
+  public static func _rlnShutdown(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      node.shutdown()
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnSync:)
+  public static func _rlnSync(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.sync()
+      return [:] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }

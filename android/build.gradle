@@ -33,6 +33,7 @@ android {
   defaultConfig {
     minSdkVersion getExtOrIntegerDefault("minSdkVersion")
     targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
   }
 
   buildFeatures {
@@ -80,5 +81,8 @@ dependencies {
   implementation "net.java.dev.jna:jna:5.17.0@aar"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+
+  androidTestImplementation "androidx.test:runner:1.6.2"
+  androidTestImplementation "androidx.test.ext:junit:1.2.1"
 }
 

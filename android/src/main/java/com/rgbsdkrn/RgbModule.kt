@@ -10,6 +10,7 @@ import com.facebook.react.module.annotations.ReactModule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.utexo.AssetSchema
@@ -34,11 +35,21 @@ import com.utexo.Token
 import com.utexo.Invoice
 import com.utexo.SinglesigKeys
 import org.utexo.rgblightningnode.SdkCloseChannelRequest
+import org.utexo.rgblightningnode.SdkCreateUtxosRequest
 import org.utexo.rgblightningnode.SdkDisconnectPeerRequest
+import org.utexo.rgblightningnode.SdkFailTransfersRequest
 import org.utexo.rgblightningnode.SdkInitRequest
+import org.utexo.rgblightningnode.SdkKeysendRequest
+import org.utexo.rgblightningnode.LnInvoiceRequest
 import org.utexo.rgblightningnode.SdkNode
 import org.utexo.rgblightningnode.SdkOpenChannelRequest
+import org.utexo.rgblightningnode.SdkRefreshTransfersRequest
+import org.utexo.rgblightningnode.SdkRgbInvoiceRequest
+import org.utexo.rgblightningnode.SdkSendBtcRequest
+import org.utexo.rgblightningnode.SdkSendPaymentRequest
+import org.utexo.rgblightningnode.SendRgbRequest
 import org.utexo.rgblightningnode.SdkUnlockRequest
+import org.utexo.rgblightningnode.PaymentType
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -77,7 +88,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           virtualPeerPubkeys = null
         )
         val node = SdkNode.create(initRequest)
-        val nodeId = RlnNodeStore.create(node)
+        val nodeId = RlnNodeStore.create(node, storageDirPath)
         withContext(Dispatchers.Main) { promise.resolve(nodeId) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -89,12 +100,32 @@ class RgbModule(reactContext: ReactApplicationContext) :
 
   override fun rlnInitNode(nodeId: Double, password: String, mnemonic: String?, promise: Promise) {
     coroutineScope.launch(Dispatchers.IO) {
+      val intNodeId = nodeId.toInt()
       try {
-        val node = RlnNodeStore.get(nodeId.toInt())
+        val node = RlnNodeStore.get(intNodeId)
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val state = RlnNodeStore.getState(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        if (state != RlnNodeStore.NodeLifecycleState.CREATED) {
+          throw IllegalStateException("RLN init is not allowed while node is in state: $state")
+        }
         val nodePubkey = node.init(password, mnemonic)
+        RlnNodeStore.markInitialized(intNodeId)
         withContext(Dispatchers.Main) { promise.resolve(nodePubkey) }
       } catch (e: Exception) {
+        val node = RlnNodeStore.get(intNodeId)
+        if (node != null && isConflictLike(e)) {
+          // RLN may already be initialized on disk after restart/recreate.
+          // Keep RN lifecycle state in sync so subsequent unlock is allowed.
+          RlnNodeStore.markInitialized(intNodeId)
+          val recoveredPubkey = try {
+            node.nodeInfo().pubkey
+          } catch (_: Exception) {
+            ""
+          }
+          withContext(Dispatchers.Main) { promise.resolve(recoveredPubkey) }
+          return@launch
+        }
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }
@@ -116,9 +147,28 @@ class RgbModule(reactContext: ReactApplicationContext) :
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
+      val intNodeId = nodeId.toInt()
       try {
-        val node = RlnNodeStore.get(nodeId.toInt())
+        val node = RlnNodeStore.get(intNodeId)
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val currentState = RlnNodeStore.getState(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        when (RlnNodeStore.beginUnlock(intNodeId)) {
+          RlnNodeStore.NodeLifecycleState.UNLOCKED -> {
+            // Unlock is idempotent if the node is already unlocked and responsive.
+            if (probeNodeReady(node, attempts = 3, delayMs = 200L)) {
+              withContext(Dispatchers.Main) { promise.resolve(null) }
+              return@launch
+            }
+            throw IllegalStateException("RLN node is marked unlocked but nodeInfo is not available")
+          }
+          RlnNodeStore.NodeLifecycleState.UNLOCKING -> Unit
+          RlnNodeStore.NodeLifecycleState.CREATED,
+          RlnNodeStore.NodeLifecycleState.INITIALIZED,
+          RlnNodeStore.NodeLifecycleState.SHUTDOWN -> {
+            throw IllegalStateException("Unexpected RLN node state before unlock")
+          }
+        }
         val announceAddressesList = mutableListOf<String>()
         for (i in 0 until announceAddresses.size()) {
           announceAddressesList.add(announceAddresses.getString(i) ?: "")
@@ -136,8 +186,16 @@ class RgbModule(reactContext: ReactApplicationContext) :
             announceAlias = announceAlias
           )
         )
+        RlnNodeStore.markUnlocked(intNodeId)
         withContext(Dispatchers.Main) { promise.resolve(null) }
       } catch (e: Exception) {
+        val node = RlnNodeStore.get(intNodeId)
+        if (node != null && isConflictLike(e) && probeNodeReady(node, attempts = 12, delayMs = 500L)) {
+          RlnNodeStore.markUnlocked(intNodeId)
+          withContext(Dispatchers.Main) { promise.resolve(null) }
+          return@launch
+        }
+        RlnNodeStore.rollbackUnlock(intNodeId)
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }
@@ -373,6 +431,602 @@ class RgbModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun rlnAddress(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val address = node.address()
+        val map = Arguments.createMap()
+        map.putString("address", address.address)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnAssetBalance(nodeId: Double, assetId: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val b = node.assetBalance(assetId)
+        val map = Arguments.createMap()
+        map.putDouble("settled", b.settled.toDouble())
+        map.putDouble("future", b.future.toDouble())
+        map.putDouble("spendable", b.spendable.toDouble())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnBackup(nodeId: Double, backupPath: String, password: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        // Some generated RLN artifacts do not expose backup() on SdkNode yet.
+        // Keep bridge callable and return a clear runtime error instead.
+        withContext(Dispatchers.Main) {
+          promise.reject(
+            "UnsupportedOperationException",
+            "rlnBackup is not available in current Android RLN bindings"
+          )
+        }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnBtcBalance(nodeId: Double, skipSync: Boolean, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val b = node.btcBalance(skipSync)
+        val map = Arguments.createMap()
+        map.putString("vanilla", b.vanilla.toString())
+        map.putString("colored", b.colored.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnCheckIndexerUrl(nodeId: Double, indexerUrl: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.checkIndexerUrl(indexerUrl)
+        val map = Arguments.createMap()
+        map.putString("value", res.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnCheckProxyEndpoint(nodeId: Double, proxyEndpoint: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.checkProxyEndpoint(proxyEndpoint)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnCreateUtxos(
+    nodeId: Double,
+    upTo: Boolean,
+    num: Double?,
+    size: Double?,
+    feeRate: Double,
+    skipSync: Boolean,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.createutxos(
+          SdkCreateUtxosRequest(
+            upTo = upTo,
+            num = num?.toInt()?.toUByte(),
+            size = size?.toInt()?.toUInt(),
+            feeRate = feeRate.toULong(),
+            skipSync = skipSync
+          )
+        )
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnDecodeLnInvoice(nodeId: Double, invoice: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.decodeLnInvoice(invoice)
+        val map = Arguments.createMap()
+        map.putString("value", res.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnDecodeRgbInvoice(nodeId: Double, invoice: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.decodeRgbInvoice(invoice)
+        val map = Arguments.createMap()
+        map.putString("value", res.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnEstimateFee(nodeId: Double, blocks: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.estimateFee(blocks.toInt().toUShort())
+        val map = Arguments.createMap()
+        map.putString("value", res.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnGetChannelId(nodeId: Double, temporaryChannelId: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        withContext(Dispatchers.Main) { promise.resolve(node.getChannelId(temporaryChannelId)) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnGetPayment(nodeId: Double, paymentHash: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val p = node.getPayment(paymentHash, PaymentType.OUTBOUND)
+        val map = Arguments.createMap()
+        map.putString("paymentHash", p.paymentHash)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnInvoiceStatus(nodeId: Double, invoice: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.invoiceStatus(invoice)
+        val map = Arguments.createMap()
+        map.putString("value", res.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnFailTransfers(
+    nodeId: Double,
+    batchTransferIdx: Double?,
+    noAssetOnly: Boolean,
+    skipSync: Boolean,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.failtransfers(
+          SdkFailTransfersRequest(
+            batchTransferIdx = batchTransferIdx?.toInt(),
+            noAssetOnly = noAssetOnly,
+            skipSync = skipSync
+          )
+        )
+        val map = Arguments.createMap()
+        map.putBoolean("transfersChanged", res.transfersChanged)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnKeysend(
+    nodeId: Double,
+    destPubkey: String,
+    amtMsat: Double,
+    assetId: String?,
+    assetAmount: Double?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.keysend(
+          SdkKeysendRequest(
+            destPubkey = destPubkey,
+            amtMsat = amtMsat.toULong(),
+            assetId = assetId,
+            assetAmount = assetAmount?.toULong()
+          )
+        )
+        val map = Arguments.createMap()
+        map.putString("paymentHash", res.paymentHash)
+        map.putString("paymentPreimage", res.paymentPreimage)
+        map.putString("status", res.status.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnListAssets(nodeId: Double, filterAssetSchemas: ReadableArray, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val schemas = mutableListOf<String>()
+        for (i in 0 until filterAssetSchemas.size()) {
+          schemas.add(filterAssetSchemas.getString(i) ?: "")
+        }
+        val res = node.listAssets(schemas)
+        val map = Arguments.createMap()
+        map.putString("value", res.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnListTransactions(nodeId: Double, skipSync: Boolean, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val txs = node.listTransactions(skipSync)
+        val arr = Arguments.createArray()
+        txs.forEach { tx ->
+          val map = Arguments.createMap()
+          map.putString("txid", tx.txid)
+          arr.pushMap(map)
+        }
+        withContext(Dispatchers.Main) { promise.resolve(arr) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnListTransfers(nodeId: Double, assetId: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val transfers = node.listTransfers(assetId)
+        val arr = Arguments.createArray()
+        transfers.forEach { transfer ->
+          val map = Arguments.createMap()
+          map.putInt("idx", transfer.idx)
+          map.putString("status", transfer.status.toString())
+          arr.pushMap(map)
+        }
+        withContext(Dispatchers.Main) { promise.resolve(arr) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnListUnspents(nodeId: Double, skipSync: Boolean, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val unspents = node.listUnspents(skipSync)
+        val arr = Arguments.createArray()
+        unspents.forEach { unspent ->
+          val map = Arguments.createMap()
+          map.putString("value", unspent.toString())
+          arr.pushMap(map)
+        }
+        withContext(Dispatchers.Main) { promise.resolve(arr) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnLnInvoice(
+    nodeId: Double,
+    amtMsat: Double?,
+    expirySec: Double,
+    assetId: String?,
+    assetAmount: Double?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.lnInvoice(
+          LnInvoiceRequest(
+            amtMsat = amtMsat?.toULong(),
+            expirySec = expirySec.toInt().toUInt(),
+            assetId = assetId,
+            assetAmount = assetAmount?.toULong(),
+            paymentHash = null,
+            descriptionHash = null
+          )
+        )
+        val map = Arguments.createMap()
+        map.putString("invoice", res.invoice)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnRefreshTransfers(nodeId: Double, skipSync: Boolean, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.refreshtransfers(SdkRefreshTransfersRequest(skipSync = skipSync))
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnRgbInvoice(
+    nodeId: Double,
+    assetId: String?,
+    assignmentAmount: Double?,
+    durationSeconds: Double?,
+    minConfirmations: Double,
+    witness: Boolean,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.rgbinvoice(
+          SdkRgbInvoiceRequest(
+            assetId = assetId,
+            assignmentKind = null,
+            assignmentAmount = assignmentAmount?.toULong(),
+            durationSeconds = durationSeconds?.toInt()?.toUInt(),
+            minConfirmations = minConfirmations.toInt().toUByte(),
+            witness = witness
+          )
+        )
+        val map = Arguments.createMap()
+        map.putString("invoice", res.invoice)
+        map.putDouble("batchTransferIdx", res.batchTransferIdx.toDouble())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnSendBtc(
+    nodeId: Double,
+    amount: Double,
+    address: String,
+    feeRate: Double,
+    skipSync: Boolean,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.sendbtc(
+          SdkSendBtcRequest(
+            amount = amount.toULong(),
+            address = address,
+            feeRate = feeRate.toULong(),
+            skipSync = skipSync
+          )
+        )
+        val map = Arguments.createMap()
+        map.putString("txid", res.txid)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnSendPayment(
+    nodeId: Double,
+    invoice: String,
+    amtMsat: Double?,
+    assetId: String?,
+    assetAmount: Double?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.sendpayment(
+          SdkSendPaymentRequest(
+            invoice = invoice,
+            amtMsat = amtMsat?.toULong(),
+            assetId = assetId,
+            assetAmount = assetAmount?.toULong()
+          )
+        )
+        val map = Arguments.createMap()
+        map.putString("paymentId", res.paymentId)
+        map.putString("paymentHash", res.paymentHash)
+        map.putString("status", res.status.toString())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnSendRgb(
+    nodeId: Double,
+    donation: Boolean,
+    feeRate: Double,
+    minConfirmations: Double,
+    skipSync: Boolean,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.sendRgb(
+          SendRgbRequest(
+            donation = donation,
+            feeRate = feeRate.toULong(),
+            minConfirmations = minConfirmations.toInt().toUByte(),
+            skipSync = skipSync,
+            recipientGroups = emptyList()
+          )
+        )
+        val map = Arguments.createMap()
+        map.putString("txid", res.txid)
+        map.putDouble("batchTransferIdx", res.batchTransferIdx.toDouble())
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnShutdown(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val intNodeId = nodeId.toInt()
+        val node = RlnNodeStore.get(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.shutdown()
+        RlnNodeStore.markShutdown(intNodeId)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnSync(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.sync()
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
   companion object {
     const val NAME = "Rgb"
   }
@@ -400,6 +1054,32 @@ class RgbModule(reactContext: ReactApplicationContext) :
     } else {
       message
     }
+  }
+
+  private fun isConflictLike(error: Throwable): Boolean {
+    val loweredMessage = (error.message ?: "").lowercase()
+    return loweredMessage.contains("conflict")
+  }
+
+  private suspend fun probeNodeReady(
+    node: SdkNode,
+    attempts: Int,
+    delayMs: Long
+  ): Boolean {
+    repeat(attempts) { index ->
+      try {
+        val info = node.nodeInfo()
+        if (info.pubkey.isNotBlank()) {
+          return true
+        }
+      } catch (_: Exception) {
+        // Keep polling through transient transition states.
+      }
+      if (index < attempts - 1) {
+        delay(delayMs)
+      }
+    }
+    return false
   }
 
   override fun generateKeys(bitcoinNetwork: String, promise: Promise) {

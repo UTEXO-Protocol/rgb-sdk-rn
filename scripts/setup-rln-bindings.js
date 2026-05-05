@@ -10,6 +10,7 @@ const IOS_DIR = path.join(ROOT, 'ios');
 const IOS_FRAMEWORK_DIR = path.join(IOS_DIR, 'RGBLightningNode.xcframework');
 
 const ANDROID_ZIP = path.join(SRC_BINDINGS, 'kotlin-android-jni.zip');
+const EXTRACTED_ANDROID_DIR = path.join(SRC_BINDINGS, 'extracted-android');
 const ANDROID_DIR = path.join(ROOT, 'android');
 const ANDROID_JNI_DIR = path.join(ANDROID_DIR, 'src', 'main', 'jniLibs');
 const ANDROID_KT_OUT_DIR = path.join(
@@ -55,45 +56,66 @@ function setupIos() {
 }
 
 function setupAndroid() {
-  if (!fs.existsSync(ANDROID_ZIP)) {
-    console.log('[rln-bindings] Android zip not found, skipping.');
-    return;
-  }
-
-  const tempDir = path.join(SRC_BINDINGS, '.tmp-rln-android');
-  removeIfExists(tempDir);
-  ensureDir(tempDir);
-
-  unzip(ANDROID_ZIP, tempDir);
-
-  const extractedJniDir = path.join(tempDir, 'jniLibs');
-  const extractedKt = path.join(
-    tempDir,
+  const extractedJniTarget = path.join(EXTRACTED_ANDROID_DIR, 'jniLibs');
+  const extractedKtTarget = path.join(
+    EXTRACTED_ANDROID_DIR,
     'org',
     'utexo',
     'rgblightningnode',
     'rgb_lightning_node.kt'
   );
 
-  if (!fs.existsSync(extractedJniDir)) {
-    throw new Error('Android jniLibs not found in artifact');
+  // If the artifact zip exists, refresh checked-in extracted-android first.
+  // Android setup below always copies from extracted-android so both paths stay in sync.
+  if (fs.existsSync(ANDROID_ZIP)) {
+    const tempDir = path.join(SRC_BINDINGS, '.tmp-rln-android');
+    removeIfExists(tempDir);
+    ensureDir(tempDir);
+
+    unzip(ANDROID_ZIP, tempDir);
+
+    const extractedJniDir = path.join(tempDir, 'jniLibs');
+    const extractedKt = path.join(
+      tempDir,
+      'org',
+      'utexo',
+      'rgblightningnode',
+      'rgb_lightning_node.kt'
+    );
+
+    if (!fs.existsSync(extractedJniDir)) {
+      throw new Error('Android jniLibs not found in artifact');
+    }
+    if (!fs.existsSync(extractedKt)) {
+      throw new Error('Android Kotlin wrapper not found in artifact');
+    }
+
+    removeIfExists(EXTRACTED_ANDROID_DIR);
+    ensureDir(EXTRACTED_ANDROID_DIR);
+    fs.cpSync(tempDir, EXTRACTED_ANDROID_DIR, { recursive: true });
+    removeIfExists(tempDir);
   }
-  if (!fs.existsSync(extractedKt)) {
-    throw new Error('Android Kotlin wrapper not found in artifact');
+
+  if (!fs.existsSync(extractedJniTarget) || !fs.existsSync(extractedKtTarget)) {
+    console.log(
+      '[rln-bindings] Android bindings not found (missing extracted-android and zip), skipping.'
+    );
+    return;
   }
 
   removeIfExists(ANDROID_JNI_DIR);
   ensureDir(path.dirname(ANDROID_JNI_DIR));
-  fs.cpSync(extractedJniDir, ANDROID_JNI_DIR, { recursive: true });
+  fs.cpSync(extractedJniTarget, ANDROID_JNI_DIR, { recursive: true });
 
   ensureDir(ANDROID_KT_OUT_DIR);
   fs.copyFileSync(
-    extractedKt,
+    extractedKtTarget,
     path.join(ANDROID_KT_OUT_DIR, 'rgb_lightning_node.kt')
   );
 
-  removeIfExists(tempDir);
-  console.log('[rln-bindings] Android JNI + Kotlin wrapper ready.');
+  console.log(
+    '[rln-bindings] Android JNI + Kotlin wrapper ready (source: src/bindings/extracted-android).'
+  );
 }
 
 try {

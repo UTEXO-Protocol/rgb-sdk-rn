@@ -91,6 +91,82 @@ export interface Spec extends TurboModule {
     force: boolean
   ): Promise<void>;
   rlnListPayments(nodeId: number): Promise<object[]>;
+  rlnAddress(nodeId: number): Promise<object>;
+  rlnAssetBalance(nodeId: number, assetId: string): Promise<object>;
+  rlnBackup(nodeId: number, backupPath: string, password: string): Promise<void>;
+  rlnBtcBalance(nodeId: number, skipSync: boolean): Promise<object>;
+  rlnCheckIndexerUrl(nodeId: number, indexerUrl: string): Promise<object>;
+  rlnCheckProxyEndpoint(nodeId: number, proxyEndpoint: string): Promise<void>;
+  rlnCreateUtxos(
+    nodeId: number,
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<void>;
+  rlnDecodeLnInvoice(nodeId: number, invoice: string): Promise<object>;
+  rlnDecodeRgbInvoice(nodeId: number, invoice: string): Promise<object>;
+  rlnEstimateFee(nodeId: number, blocks: number): Promise<object>;
+  rlnFailTransfers(
+    nodeId: number,
+    batchTransferIdx: number | null,
+    noAssetOnly: boolean,
+    skipSync: boolean
+  ): Promise<object>;
+  rlnGetChannelId(nodeId: number, temporaryChannelId: string): Promise<string>;
+  rlnGetPayment(nodeId: number, paymentHash: string): Promise<object>;
+  rlnInvoiceStatus(nodeId: number, invoice: string): Promise<object>;
+  rlnKeysend(
+    nodeId: number,
+    destPubkey: string,
+    amtMsat: number,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object>;
+  rlnListAssets(nodeId: number, filterAssetSchemas: string[]): Promise<object>;
+  rlnListTransactions(nodeId: number, skipSync: boolean): Promise<object[]>;
+  rlnListTransfers(nodeId: number, assetId: string): Promise<object[]>;
+  rlnListUnspents(nodeId: number, skipSync: boolean): Promise<object[]>;
+  rlnLnInvoice(
+    nodeId: number,
+    amtMsat: number | null,
+    expirySec: number,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object>;
+  rlnRefreshTransfers(nodeId: number, skipSync: boolean): Promise<void>;
+  rlnRgbInvoice(
+    nodeId: number,
+    assetId: string | null,
+    assignmentAmount: number | null,
+    durationSeconds: number | null,
+    minConfirmations: number,
+    witness: boolean
+  ): Promise<object>;
+  rlnSendBtc(
+    nodeId: number,
+    amount: number,
+    address: string,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<object>;
+  rlnSendPayment(
+    nodeId: number,
+    invoice: string,
+    amtMsat: number | null,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object>;
+  rlnSendRgb(
+    nodeId: number,
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number,
+    skipSync: boolean
+  ): Promise<object>;
+  rlnShutdown(nodeId: number): Promise<void>;
+  rlnSync(nodeId: number): Promise<void>;
 
   generateKeys(bitcoinNetwork: NativeRgbBitcoinNetwork): Promise<{
     mnemonic: string;

@@ -234,6 +234,191 @@ export class WalletManager extends BaseWalletManager {
   public async rlnListPayments(): Promise<object[]> {
     return this.getRlnBinding().rlnListPayments();
   }
+
+  public async rlnAddress(): Promise<object> {
+    return this.getRlnBinding().rlnAddress();
+  }
+
+  public async rlnAssetBalance(assetId: string): Promise<object> {
+    return this.getRlnBinding().rlnAssetBalance(assetId);
+  }
+
+  public async rlnBackup(backupPath: string, password: string): Promise<void> {
+    return this.getRlnBinding().rlnBackup(backupPath, password);
+  }
+
+  public async rlnBtcBalance(skipSync: boolean = false): Promise<object> {
+    return this.getRlnBinding().rlnBtcBalance(skipSync);
+  }
+
+  public async rlnCheckIndexerUrl(indexerUrl: string): Promise<object> {
+    return this.getRlnBinding().rlnCheckIndexerUrl(indexerUrl);
+  }
+
+  public async rlnCheckProxyEndpoint(proxyEndpoint: string): Promise<void> {
+    return this.getRlnBinding().rlnCheckProxyEndpoint(proxyEndpoint);
+  }
+
+  public async rlnCreateUtxos(
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<void> {
+    return this.getRlnBinding().rlnCreateUtxos(
+      upTo,
+      num,
+      size,
+      feeRate,
+      skipSync
+    );
+  }
+
+  public async rlnDecodeLnInvoice(invoice: string): Promise<object> {
+    return this.getRlnBinding().rlnDecodeLnInvoice(invoice);
+  }
+
+  public async rlnDecodeRgbInvoice(invoice: string): Promise<object> {
+    return this.getRlnBinding().rlnDecodeRgbInvoice(invoice);
+  }
+
+  public async rlnEstimateFee(blocks: number): Promise<object> {
+    return this.getRlnBinding().rlnEstimateFee(blocks);
+  }
+
+  public async rlnFailTransfers(
+    batchTransferIdx: number | null,
+    noAssetOnly: boolean,
+    skipSync: boolean
+  ): Promise<object> {
+    return this.getRlnBinding().rlnFailTransfers(
+      batchTransferIdx,
+      noAssetOnly,
+      skipSync
+    );
+  }
+
+  public async rlnGetChannelId(temporaryChannelId: string): Promise<string> {
+    return this.getRlnBinding().rlnGetChannelId(temporaryChannelId);
+  }
+
+  public async rlnGetPayment(paymentHash: string): Promise<object> {
+    return this.getRlnBinding().rlnGetPayment(paymentHash);
+  }
+
+  public async rlnInvoiceStatus(invoice: string): Promise<object> {
+    return this.getRlnBinding().rlnInvoiceStatus(invoice);
+  }
+
+  public async rlnKeysend(
+    destPubkey: string,
+    amtMsat: number,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object> {
+    return this.getRlnBinding().rlnKeysend(
+      destPubkey,
+      amtMsat,
+      assetId,
+      assetAmount
+    );
+  }
+
+  public async rlnListAssets(filterAssetSchemas: string[]): Promise<object> {
+    return this.getRlnBinding().rlnListAssets(filterAssetSchemas);
+  }
+
+  public async rlnListTransactions(skipSync: boolean): Promise<object[]> {
+    return this.getRlnBinding().rlnListTransactions(skipSync);
+  }
+
+  public async rlnListTransfers(assetId: string): Promise<object[]> {
+    return this.getRlnBinding().rlnListTransfers(assetId);
+  }
+
+  public async rlnListUnspents(skipSync: boolean): Promise<object[]> {
+    return this.getRlnBinding().rlnListUnspents(skipSync);
+  }
+
+  public async rlnLnInvoice(
+    amtMsat: number | null,
+    expirySec: number,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object> {
+    return this.getRlnBinding().rlnLnInvoice(
+      amtMsat,
+      expirySec,
+      assetId,
+      assetAmount
+    );
+  }
+
+  public async rlnRefreshTransfers(skipSync: boolean): Promise<void> {
+    return this.getRlnBinding().rlnRefreshTransfers(skipSync);
+  }
+
+  public async rlnRgbInvoice(
+    assetId: string | null,
+    assignmentAmount: number | null,
+    durationSeconds: number | null,
+    minConfirmations: number,
+    witness: boolean
+  ): Promise<object> {
+    return this.getRlnBinding().rlnRgbInvoice(
+      assetId,
+      assignmentAmount,
+      durationSeconds,
+      minConfirmations,
+      witness
+    );
+  }
+
+  public async rlnSendBtc(
+    amount: number,
+    address: string,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<object> {
+    return this.getRlnBinding().rlnSendBtc(amount, address, feeRate, skipSync);
+  }
+
+  public async rlnSendPayment(
+    invoice: string,
+    amtMsat: number | null,
+    assetId: string | null,
+    assetAmount: number | null
+  ): Promise<object> {
+    return this.getRlnBinding().rlnSendPayment(
+      invoice,
+      amtMsat,
+      assetId,
+      assetAmount
+    );
+  }
+
+  public async rlnSendRgb(
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number,
+    skipSync: boolean
+  ): Promise<object> {
+    return this.getRlnBinding().rlnSendRgb(
+      donation,
+      feeRate,
+      minConfirmations,
+      skipSync
+    );
+  }
+
+  public async rlnShutdown(): Promise<void> {
+    return this.getRlnBinding().rlnShutdown();
+  }
+
+  public async rlnSync(): Promise<void> {
+    return this.getRlnBinding().rlnSync();
+  }
 }
 
 let _wallet: WalletManager | null = null;

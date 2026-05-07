@@ -2965,10 +2965,13 @@ public class RgbSwiftHelper: NSObject {
           witness: witness
         )
       )
-      return [
+      var dict: [String: Any] = [
+        "recipientId": res.recipientId,
         "invoice": res.invoice,
         "batchTransferIdx": NSNumber(value: res.batchTransferIdx),
-      ] as NSDictionary
+      ]
+      if let ts = res.expirationTimestamp { dict["expirationTimestamp"] = NSNumber(value: ts) }
+      return dict as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }

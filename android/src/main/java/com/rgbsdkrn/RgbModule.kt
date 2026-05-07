@@ -1116,8 +1116,10 @@ class RgbModule(reactContext: ReactApplicationContext) :
           )
         )
         val map = Arguments.createMap()
+        map.putString("recipientId", res.recipientId)
         map.putString("invoice", res.invoice)
         map.putDouble("batchTransferIdx", res.batchTransferIdx.toDouble())
+        res.expirationTimestamp?.let { map.putDouble("expirationTimestamp", it.toDouble()) }
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {

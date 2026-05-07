@@ -41,15 +41,24 @@ import org.utexo.rgblightningnode.SdkFailTransfersRequest
 import org.utexo.rgblightningnode.SdkInitRequest
 import org.utexo.rgblightningnode.SdkKeysendRequest
 import org.utexo.rgblightningnode.LnInvoiceRequest
+import org.utexo.rgblightningnode.NativeExternalSigner
+import org.utexo.rgblightningnode.SdkExternalSignerBootstrap
 import org.utexo.rgblightningnode.SdkNode
 import org.utexo.rgblightningnode.SdkOpenChannelRequest
 import org.utexo.rgblightningnode.SdkRefreshTransfersRequest
 import org.utexo.rgblightningnode.SdkRgbInvoiceRequest
 import org.utexo.rgblightningnode.SdkSendBtcRequest
 import org.utexo.rgblightningnode.SdkSendPaymentRequest
+import org.utexo.rgblightningnode.AssignmentKind
+import org.utexo.rgblightningnode.AssetRecipients
+import org.utexo.rgblightningnode.RgbRecipient
 import org.utexo.rgblightningnode.SendRgbRequest
 import org.utexo.rgblightningnode.SdkUnlockRequest
 import org.utexo.rgblightningnode.PaymentType
+import org.utexo.rgblightningnode.SdkIssueAssetCfaRequest
+import org.utexo.rgblightningnode.SdkIssueAssetIfaRequest
+import org.utexo.rgblightningnode.SdkIssueAssetNiaRequest
+import org.utexo.rgblightningnode.SdkIssueAssetUdaRequest
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -85,7 +94,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
           network = network,
           maxMediaUploadSizeMb = maxMediaUploadSizeMb.toInt().toUShort(),
           enableVirtualChannelsV0 = enableVirtualChannelsV0,
-          virtualPeerPubkeys = null
+          virtualPeerPubkeys = null,
+          lspBaseUrl = "",
+          lspBearerToken = ""
         )
         val node = SdkNode.create(initRequest)
         val nodeId = RlnNodeStore.create(node, storageDirPath)
@@ -126,6 +137,54 @@ class RgbModule(reactContext: ReactApplicationContext) :
           withContext(Dispatchers.Main) { promise.resolve(recoveredPubkey) }
           return@launch
         }
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnInitNodeWithExternalSigner(
+    nodeId: Double,
+    nodePublicKeyHex: String,
+    accountXpubVanilla: String,
+    accountXpubColored: String,
+    masterFingerprint: String,
+    protocolVersion: String,
+    apiLevel: Double,
+    ldkInboundPaymentKeyHex: String,
+    ldkPeerStorageKeyHex: String,
+    ldkReceiveAuthKeyHex: String,
+    asyncPaymentsRootSeedHex: String,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      val intNodeId = nodeId.toInt()
+      try {
+        val node = RlnNodeStore.get(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val state = RlnNodeStore.getState(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        if (state != RlnNodeStore.NodeLifecycleState.CREATED) {
+          throw IllegalStateException("RLN init is not allowed while node is in state: $state")
+        }
+        node.initWithExternalSigner(
+          SdkExternalSignerBootstrap(
+            nodeId = nodePublicKeyHex,
+            accountXpubVanilla = accountXpubVanilla,
+            accountXpubColored = accountXpubColored,
+            masterFingerprint = masterFingerprint,
+            protocolVersion = protocolVersion,
+            apiLevel = apiLevel.toInt().toUInt(),
+            ldkInboundPaymentKeyHex = ldkInboundPaymentKeyHex,
+            ldkPeerStorageKeyHex = ldkPeerStorageKeyHex,
+            ldkReceiveAuthKeyHex = ldkReceiveAuthKeyHex,
+            asyncPaymentsRootSeedHex = asyncPaymentsRootSeedHex
+          )
+        )
+        RlnNodeStore.markInitialized(intNodeId)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }
@@ -196,6 +255,132 @@ class RgbModule(reactContext: ReactApplicationContext) :
           return@launch
         }
         RlnNodeStore.rollbackUnlock(intNodeId)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnCreateNativeExternalSigner(seedHex: String, network: String, permissivePolicy: Boolean, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val signer = NativeExternalSigner(seedHex, network, permissivePolicy)
+        val signerId = RlnNodeStore.createSigner(signer)
+        withContext(Dispatchers.Main) { promise.resolve(signerId.toDouble()) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnInitNodeWithNativeExternalSigner(nodeId: Double, signerId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      val intNodeId = nodeId.toInt()
+      try {
+        val node = RlnNodeStore.get(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val state = RlnNodeStore.getState(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        if (state != RlnNodeStore.NodeLifecycleState.CREATED) {
+          throw IllegalStateException("RLN init is not allowed while node is in state: $state")
+        }
+        val signer = RlnNodeStore.getSigner(signerId.toInt())
+          ?: throw IllegalStateException("Native signer with id $signerId not found")
+        node.initWithNativeExternalSigner(signer)
+        RlnNodeStore.markInitialized(intNodeId)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnAttachNativeExternalSigner(nodeId: Double, signerId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      val intNodeId = nodeId.toInt()
+      try {
+        val node = RlnNodeStore.get(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val signer = RlnNodeStore.getSigner(signerId.toInt())
+          ?: throw IllegalStateException("Native signer with id $signerId not found")
+        node.attachNativeExternalSigner(signer)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnUnlockNodeWithNativeExternalSigner(
+    nodeId: Double,
+    signerId: Double,
+    bitcoindRpcUsername: String,
+    bitcoindRpcPassword: String,
+    bitcoindRpcHost: String,
+    bitcoindRpcPort: Double,
+    indexerUrl: String?,
+    proxyEndpoint: String?,
+    announceAddresses: ReadableArray,
+    announceAlias: String?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      val intNodeId = nodeId.toInt()
+      try {
+        val node = RlnNodeStore.get(intNodeId)
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val signer = RlnNodeStore.getSigner(signerId.toInt())
+          ?: throw IllegalStateException("Native signer with id $signerId not found")
+        when (RlnNodeStore.beginUnlock(intNodeId)) {
+          RlnNodeStore.NodeLifecycleState.UNLOCKED -> {
+            if (probeNodeReady(node, attempts = 3, delayMs = 200L)) {
+              withContext(Dispatchers.Main) { promise.resolve(null) }
+              return@launch
+            }
+            throw IllegalStateException("RLN node is marked unlocked but nodeInfo is not available")
+          }
+          RlnNodeStore.NodeLifecycleState.UNLOCKING -> Unit
+          else -> throw IllegalStateException("Unexpected RLN node state before unlock")
+        }
+        val announceAddressesList = mutableListOf<String>()
+        for (i in 0 until announceAddresses.size()) {
+          announceAddressesList.add(announceAddresses.getString(i) ?: "")
+        }
+        node.unlockWithNativeExternalSigner(
+          signer = signer,
+          bitcoindRpcUsername = bitcoindRpcUsername,
+          bitcoindRpcPassword = bitcoindRpcPassword,
+          bitcoindRpcHost = bitcoindRpcHost,
+          bitcoindRpcPort = bitcoindRpcPort.toInt().toUShort(),
+          indexerUrl = indexerUrl,
+          proxyEndpoint = proxyEndpoint,
+          announceAddresses = announceAddressesList,
+          announceAlias = announceAlias
+        )
+        RlnNodeStore.markUnlocked(intNodeId)
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        RlnNodeStore.rollbackUnlock(intNodeId)
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnDestroyNativeExternalSigner(signerId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        RlnNodeStore.removeSigner(signerId.toInt())
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }
@@ -318,9 +503,16 @@ class RgbModule(reactContext: ReactApplicationContext) :
           map.putString("channelId", ch.channelId)
           map.putString("peerPubkey", ch.peerPubkey)
           map.putBoolean("ready", ch.ready)
+          map.putBoolean("isUsable", ch.isUsable)
           map.putDouble("capacitySat", ch.capacitySat.toDouble())
+          map.putDouble("localBalanceSat", ch.localBalanceSat.toDouble())
+          map.putDouble("outboundBalanceMsat", ch.outboundBalanceMsat.toDouble())
+          map.putDouble("inboundBalanceMsat", ch.inboundBalanceMsat.toDouble())
           map.putBoolean("public", ch.public)
+          ch.fundingTxid?.let { map.putString("fundingTxid", it) }
           ch.assetId?.let { map.putString("assetId", it) }
+          ch.assetLocalAmount?.let { map.putDouble("assetLocalAmount", it.toDouble()) }
+          ch.assetRemoteAmount?.let { map.putDouble("assetRemoteAmount", it.toDouble()) }
           arr.pushMap(map)
         }
         withContext(Dispatchers.Main) { promise.resolve(arr) }
@@ -415,11 +607,14 @@ class RgbModule(reactContext: ReactApplicationContext) :
           val map = Arguments.createMap()
           p.assetId?.let { map.putString("assetId", it) }
           map.putString("paymentHash", p.paymentHash)
+          map.putString("status", p.status.name)
+          map.putString("paymentType", p.paymentType.name)
           map.putDouble("createdAt", p.createdAt.toDouble())
           map.putDouble("updatedAt", p.updatedAt.toDouble())
           map.putString("payeePubkey", p.payeePubkey)
           p.amtMsat?.let { map.putDouble("amtMsat", it.toDouble()) }
           p.assetAmount?.let { map.putDouble("assetAmount", it.toDouble()) }
+          p.preimage?.let { map.putString("preimage", it) }
           arr.pushMap(map)
         }
         withContext(Dispatchers.Main) { promise.resolve(arr) }
@@ -495,8 +690,16 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val b = node.btcBalance(skipSync)
         val map = Arguments.createMap()
-        map.putString("vanilla", b.vanilla.toString())
-        map.putString("colored", b.colored.toString())
+        val vanillaMap = Arguments.createMap()
+        vanillaMap.putDouble("settled", b.vanilla.settled.toDouble())
+        vanillaMap.putDouble("future", b.vanilla.future.toDouble())
+        vanillaMap.putDouble("spendable", b.vanilla.spendable.toDouble())
+        map.putMap("vanilla", vanillaMap)
+        val coloredMap = Arguments.createMap()
+        coloredMap.putDouble("settled", b.colored.settled.toDouble())
+        coloredMap.putDouble("future", b.colored.future.toDouble())
+        coloredMap.putDouble("spendable", b.colored.spendable.toDouble())
+        map.putMap("colored", coloredMap)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -576,7 +779,15 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val res = node.decodeLnInvoice(invoice)
         val map = Arguments.createMap()
-        map.putString("value", res.toString())
+        res.amtMsat?.let { map.putDouble("amtMsat", it.toDouble()) }
+        map.putDouble("expirySec", res.expirySec.toDouble())
+        map.putDouble("timestamp", res.timestamp.toDouble())
+        res.assetId?.let { map.putString("assetId", it) }
+        res.assetAmount?.let { map.putDouble("assetAmount", it.toDouble()) }
+        map.putString("paymentHash", res.paymentHash)
+        map.putString("paymentSecret", res.paymentSecret)
+        res.payeePubkey?.let { map.putString("payeePubkey", it) }
+        map.putString("network", res.network)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -593,7 +804,16 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val res = node.decodeRgbInvoice(invoice)
         val map = Arguments.createMap()
-        map.putString("value", res.toString())
+        map.putString("recipientId", res.recipientId)
+        map.putString("recipientType", res.recipientType)
+        res.assetSchema?.let { map.putString("assetSchema", it) }
+        res.assetId?.let { map.putString("assetId", it) }
+        map.putString("assignment", res.assignment)
+        map.putString("network", res.network)
+        res.expirationTimestamp?.let { map.putDouble("expirationTimestamp", it.toDouble()) }
+        val endpointsArr = Arguments.createArray()
+        res.transportEndpoints.forEach { endpointsArr.pushString(it) }
+        map.putArray("transportEndpoints", endpointsArr)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -642,6 +862,15 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val p = node.getPayment(paymentHash, PaymentType.OUTBOUND)
         val map = Arguments.createMap()
         map.putString("paymentHash", p.paymentHash)
+        map.putString("status", p.status.name)
+        map.putString("paymentType", p.paymentType.name)
+        map.putDouble("createdAt", p.createdAt.toDouble())
+        map.putDouble("updatedAt", p.updatedAt.toDouble())
+        map.putString("payeePubkey", p.payeePubkey)
+        p.assetId?.let { map.putString("assetId", it) }
+        p.amtMsat?.let { map.putDouble("amtMsat", it.toDouble()) }
+        p.assetAmount?.let { map.putDouble("assetAmount", it.toDouble()) }
+        p.preimage?.let { map.putString("preimage", it) }
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -968,19 +1197,37 @@ class RgbModule(reactContext: ReactApplicationContext) :
     feeRate: Double,
     minConfirmations: Double,
     skipSync: Boolean,
+    assetId: String,
+    recipientId: String,
+    amount: Double,
+    transportEndpoints: ReadableArray,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
       try {
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val endpoints = (0 until transportEndpoints.size()).map { transportEndpoints.getString(it) ?: "" }
         val res = node.sendRgb(
           SendRgbRequest(
             donation = donation,
             feeRate = feeRate.toULong(),
             minConfirmations = minConfirmations.toInt().toUByte(),
             skipSync = skipSync,
-            recipientGroups = emptyList()
+            recipientGroups = listOf(
+              AssetRecipients(
+                assetId = assetId,
+                recipients = listOf(
+                  RgbRecipient(
+                    recipientId = recipientId,
+                    witnessData = null,
+                    assignmentKind = AssignmentKind.FUNGIBLE,
+                    assignmentAmount = amount.toULong(),
+                    transportEndpoints = endpoints,
+                  )
+                )
+              )
+            )
           )
         )
         val map = Arguments.createMap()
@@ -1019,6 +1266,136 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         node.sync()
         withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnIssueAssetNia(
+    nodeId: Double,
+    ticker: String,
+    name: String,
+    precision: Double,
+    amounts: ReadableArray,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val amountsList = mutableListOf<ULong>()
+        for (i in 0 until amounts.size()) amountsList.add(amounts.getDouble(i).toULong())
+        val asset = node.issueassetnia(SdkIssueAssetNiaRequest(
+          amounts = amountsList,
+          ticker = ticker,
+          name = name,
+          precision = precision.toLong().toUByte()
+        ))
+        withContext(Dispatchers.Main) { promise.resolve(rlnAssetNiaToMap(asset)) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnIssueAssetCfa(
+    nodeId: Double,
+    name: String,
+    details: String?,
+    precision: Double,
+    amounts: ReadableArray,
+    fileDigest: String?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val amountsList = mutableListOf<ULong>()
+        for (i in 0 until amounts.size()) amountsList.add(amounts.getDouble(i).toULong())
+        val asset = node.issueassetcfa(SdkIssueAssetCfaRequest(
+          amounts = amountsList,
+          name = name,
+          details = details,
+          precision = precision.toLong().toUByte(),
+          fileDigest = fileDigest
+        ))
+        withContext(Dispatchers.Main) { promise.resolve(rlnAssetCfaToMap(asset)) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnIssueAssetIfa(
+    nodeId: Double,
+    ticker: String,
+    name: String,
+    precision: Double,
+    amounts: ReadableArray,
+    inflationAmounts: ReadableArray,
+    rejectListUrl: String?,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val amountsList = mutableListOf<ULong>()
+        for (i in 0 until amounts.size()) amountsList.add(amounts.getDouble(i).toULong())
+        val inflationList = mutableListOf<ULong>()
+        for (i in 0 until inflationAmounts.size()) inflationList.add(inflationAmounts.getDouble(i).toULong())
+        val asset = node.issueassetifa(SdkIssueAssetIfaRequest(
+          amounts = amountsList,
+          inflationAmounts = inflationList,
+          ticker = ticker,
+          name = name,
+          precision = precision.toLong().toUByte(),
+          rejectListUrl = rejectListUrl
+        ))
+        withContext(Dispatchers.Main) { promise.resolve(rlnAssetIfaToMap(asset)) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnIssueAssetUda(
+    nodeId: Double,
+    ticker: String,
+    name: String,
+    details: String?,
+    precision: Double,
+    mediaFileDigest: String?,
+    attachmentsFileDigests: ReadableArray,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val digestsList = mutableListOf<String>()
+        for (i in 0 until attachmentsFileDigests.size()) {
+          attachmentsFileDigests.getString(i)?.let { digestsList.add(it) }
+        }
+        val asset = node.issueassetuda(SdkIssueAssetUdaRequest(
+          ticker = ticker,
+          name = name,
+          details = details,
+          precision = precision.toLong().toUByte(),
+          mediaFileDigest = mediaFileDigest,
+          attachmentsFileDigests = digestsList
+        ))
+        withContext(Dispatchers.Main) { promise.resolve(rlnAssetUdaToMap(asset)) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
@@ -1579,6 +1956,105 @@ class RgbModule(reactContext: ReactApplicationContext) :
         token.putMap("media", mediaMap)
       }
 
+      val attachmentsArray = Arguments.createArray()
+      tokenLight.attachments.forEach { (key, media) ->
+        val attachmentMap = Arguments.createMap()
+        attachmentMap.putInt("key", key.toInt())
+        attachmentMap.putString("filePath", media.filePath)
+        attachmentMap.putString("mime", media.mime)
+        attachmentMap.putString("digest", media.digest)
+        attachmentsArray.pushMap(attachmentMap)
+      }
+      token.putArray("attachments", attachmentsArray)
+      token.putBoolean("reserves", tokenLight.reserves)
+      map.putMap("token", token)
+    }
+    return map
+  }
+
+  private fun rlnAssetBalanceInfoToMap(balance: org.utexo.rgblightningnode.AssetBalanceInfo): WritableMap {
+    val map = Arguments.createMap()
+    map.putDouble("settled", balance.settled.toDouble())
+    map.putDouble("future", balance.future.toDouble())
+    map.putDouble("spendable", balance.spendable.toDouble())
+    map.putDouble("offchainOutbound", balance.offchainOutbound.toDouble())
+    map.putDouble("offchainInbound", balance.offchainInbound.toDouble())
+    return map
+  }
+
+  private fun rlnMediaToMap(media: org.utexo.rgblightningnode.Media): WritableMap {
+    val map = Arguments.createMap()
+    map.putString("filePath", media.filePath)
+    map.putString("mime", media.mime)
+    map.putString("digest", media.digest)
+    return map
+  }
+
+  private fun rlnAssetNiaToMap(asset: org.utexo.rgblightningnode.AssetNia): WritableMap {
+    val map = Arguments.createMap()
+    map.putString("assetId", asset.assetId)
+    map.putString("ticker", asset.ticker)
+    map.putString("name", asset.name)
+    asset.details?.let { map.putString("details", it) }
+    map.putInt("precision", asset.precision.toInt())
+    map.putDouble("issuedSupply", asset.issuedSupply.toDouble())
+    map.putDouble("timestamp", asset.timestamp.toDouble())
+    map.putDouble("addedAt", asset.addedAt.toDouble())
+    map.putMap("balance", rlnAssetBalanceInfoToMap(asset.balance))
+    asset.media?.let { map.putMap("media", rlnMediaToMap(it)) }
+    return map
+  }
+
+  private fun rlnAssetCfaToMap(asset: org.utexo.rgblightningnode.AssetCfa): WritableMap {
+    val map = Arguments.createMap()
+    map.putString("assetId", asset.assetId)
+    map.putString("name", asset.name)
+    asset.details?.let { map.putString("details", it) }
+    map.putInt("precision", asset.precision.toInt())
+    map.putDouble("issuedSupply", asset.issuedSupply.toDouble())
+    map.putDouble("timestamp", asset.timestamp.toDouble())
+    map.putDouble("addedAt", asset.addedAt.toDouble())
+    map.putMap("balance", rlnAssetBalanceInfoToMap(asset.balance))
+    asset.media?.let { map.putMap("media", rlnMediaToMap(it)) }
+    return map
+  }
+
+  private fun rlnAssetIfaToMap(asset: org.utexo.rgblightningnode.AssetIfa): WritableMap {
+    val map = Arguments.createMap()
+    map.putString("assetId", asset.assetId)
+    map.putString("ticker", asset.ticker)
+    map.putString("name", asset.name)
+    asset.details?.let { map.putString("details", it) }
+    map.putInt("precision", asset.precision.toInt())
+    map.putDouble("initialSupply", asset.initialSupply.toDouble())
+    map.putDouble("maxSupply", asset.maxSupply.toDouble())
+    map.putDouble("knownCirculatingSupply", asset.knownCirculatingSupply.toDouble())
+    map.putDouble("timestamp", asset.timestamp.toDouble())
+    map.putDouble("addedAt", asset.addedAt.toDouble())
+    map.putMap("balance", rlnAssetBalanceInfoToMap(asset.balance))
+    asset.media?.let { map.putMap("media", rlnMediaToMap(it)) }
+    asset.rejectListUrl?.let { map.putString("rejectListUrl", it) }
+    return map
+  }
+
+  private fun rlnAssetUdaToMap(asset: org.utexo.rgblightningnode.AssetUda): WritableMap {
+    val map = Arguments.createMap()
+    map.putString("assetId", asset.assetId)
+    map.putString("ticker", asset.ticker)
+    map.putString("name", asset.name)
+    asset.details?.let { map.putString("details", it) }
+    map.putInt("precision", asset.precision.toInt())
+    map.putDouble("timestamp", asset.timestamp.toDouble())
+    map.putDouble("addedAt", asset.addedAt.toDouble())
+    map.putMap("balance", rlnAssetBalanceInfoToMap(asset.balance))
+    asset.token?.let { tokenLight ->
+      val token = Arguments.createMap()
+      token.putInt("index", tokenLight.index.toInt())
+      tokenLight.ticker?.let { token.putString("ticker", it) }
+      tokenLight.name?.let { token.putString("name", it) }
+      tokenLight.details?.let { token.putString("details", it) }
+      token.putBoolean("embeddedMedia", tokenLight.embeddedMedia)
+      tokenLight.media?.let { token.putMap("media", rlnMediaToMap(it)) }
       val attachmentsArray = Arguments.createArray()
       tokenLight.attachments.forEach { (key, media) ->
         val attachmentMap = Arguments.createMap()

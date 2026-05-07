@@ -39,3 +39,15 @@ android/keystores/debug.keystore
 # OSX
 #
 .DS_Store
+
+
+src/bindings/extracted-android/
+src/bindings/
+android/src/main/jniLibs/                                        
+android/src/main/java/org/utexo/                                 
+ios/RGBLightningNode.xcframework/                                
+                                                                   
+# UniFFI auto-generated bindings                                 
+ios/RGBLightningNode.swift
+ios/RGBLightningNodeFFI.h                                                                                    
+ios/RGBLightningNodeFFI.modulemap

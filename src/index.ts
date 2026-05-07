@@ -10,8 +10,10 @@ export {
 export type {
   WalletInitParams,
   WalletManagerInitParams,
-  WalletManagerBindingMode,
 } from './wallet/wallet-manager';
+
+// RLN node manager
+export { RLNManager, createRLNManager } from './wallet/rln-manager';
 
 // UTEXO module (Lightning + on-chain bridge transfers)
 export { UTEXOWallet } from './utexo/utexo-wallet';
@@ -19,9 +21,18 @@ export type { ConfigOptions } from './utexo/utexo-wallet';
 
 // Binding and signer (for advanced / testing use)
 export { RNRgbLibBinding } from './binding/RNRgbLibBinding';
-export { RLNRgbLibBinding } from './binding/RLNRgbLibBinding';
+export { RLNBinding } from './binding/RLNBinding';
 export { RNSigner } from './signer/RNSigner';
 export type * from './binding/rln-types';
+export type {
+  IRLN,
+  IRLNNodeCreateParams,
+  IRLNUnlockParams,
+  IRLNExternalSignerBootstrap,
+} from './binding/IRLN';
+
+/** @deprecated Use RLNManager + RLNBinding instead. */
+export { RLNRgbLibBinding } from './binding/RLNRgbLibBinding';
 
 // Crypto — PSBT signing (RN-specific, uses bdk-rn)
 export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';

@@ -50,6 +50,39 @@ export interface Spec extends TurboModule {
     enableVirtualChannelsV0: boolean | null
   ): Promise<number>;
   rlnInitNode(nodeId: number, password: string, mnemonic?: string | null): Promise<string>;
+  rlnCreateNativeExternalSigner(
+    seedHex: string,
+    network: string,
+    permissivePolicy: boolean
+  ): Promise<number>;
+  rlnInitNodeWithNativeExternalSigner(nodeId: number, signerId: number): Promise<void>;
+  rlnAttachNativeExternalSigner(nodeId: number, signerId: number): Promise<void>;
+  rlnUnlockNodeWithNativeExternalSigner(
+    nodeId: number,
+    signerId: number,
+    bitcoindRpcUsername: string,
+    bitcoindRpcPassword: string,
+    bitcoindRpcHost: string,
+    bitcoindRpcPort: number,
+    indexerUrl: string | null,
+    proxyEndpoint: string | null,
+    announceAddresses: string[],
+    announceAlias: string | null
+  ): Promise<void>;
+  rlnDestroyNativeExternalSigner(signerId: number): Promise<void>;
+  rlnInitNodeWithExternalSigner(
+    nodeId: number,
+    nodePublicKeyHex: string,
+    accountXpubVanilla: string,
+    accountXpubColored: string,
+    masterFingerprint: string,
+    protocolVersion: string,
+    apiLevel: number,
+    ldkInboundPaymentKeyHex: string,
+    ldkPeerStorageKeyHex: string,
+    ldkReceiveAuthKeyHex: string,
+    asyncPaymentsRootSeedHex: string
+  ): Promise<void>;
   rlnUnlockNode(
     nodeId: number,
     password: string,
@@ -163,7 +196,11 @@ export interface Spec extends TurboModule {
     donation: boolean,
     feeRate: number,
     minConfirmations: number,
-    skipSync: boolean
+    skipSync: boolean,
+    assetId: string,
+    recipientId: string,
+    amount: number,
+    transportEndpoints: string[]
   ): Promise<object>;
   rlnShutdown(nodeId: number): Promise<void>;
   rlnSync(nodeId: number): Promise<void>;
@@ -390,6 +427,39 @@ export interface Spec extends TurboModule {
       mime: string;
     }>;
   }>;
+  rlnIssueAssetNia(
+    nodeId: number,
+    ticker: string,
+    name: string,
+    precision: number,
+    amounts: number[]
+  ): Promise<any>;
+  rlnIssueAssetCfa(
+    nodeId: number,
+    name: string,
+    details: string | null,
+    precision: number,
+    amounts: number[],
+    fileDigest: string | null
+  ): Promise<any>;
+  rlnIssueAssetIfa(
+    nodeId: number,
+    ticker: string,
+    name: string,
+    precision: number,
+    amounts: number[],
+    inflationAmounts: number[],
+    rejectListUrl: string | null
+  ): Promise<any>;
+  rlnIssueAssetUda(
+    nodeId: number,
+    ticker: string,
+    name: string,
+    details: string | null,
+    precision: number,
+    mediaFileDigest: string | null,
+    attachmentsFileDigests: string[]
+  ): Promise<any>;
   listAssets(
     walletId: number,
     filterAssetSchemas: string[]

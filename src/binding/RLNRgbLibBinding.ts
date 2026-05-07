@@ -1,3 +1,7 @@
+/**
+ * @deprecated Use {@link RLNManager} with {@link RLNBinding} instead.
+ * RLNRgbLibBinding will be removed in a future release.
+ */
 import type { WalletInitParams, IUTEXOProtocol } from '@utexo/rgb-sdk-core';
 import { WalletError } from '@utexo/rgb-sdk-core';
 import Rgb from './NativeRgb';
@@ -181,6 +185,100 @@ export class RLNRgbLibBinding
       const nodeId = this.requireNodeId();
       this.assertRegularOpsAllowed();
       return Rgb.rlnInitNode(nodeId, password, mnemonic ?? null);
+    });
+  }
+
+  async rlnCreateNativeExternalSigner(
+    seedHex: string,
+    network: string,
+    permissivePolicy: boolean = true
+  ): Promise<number> {
+    return this.withNodeQueue(async () => {
+      return Rgb.rlnCreateNativeExternalSigner(seedHex, network, permissivePolicy);
+    });
+  }
+
+  async rlnInitNodeWithNativeExternalSigner(signerId: number): Promise<void> {
+    return this.withNodeQueue(async () => {
+      const nodeId = this.requireNodeId();
+      this.assertRegularOpsAllowed();
+      return Rgb.rlnInitNodeWithNativeExternalSigner(nodeId, signerId);
+    });
+  }
+
+  async rlnAttachNativeExternalSigner(signerId: number): Promise<void> {
+    return this.withNodeQueue(async () => {
+      const nodeId = this.requireNodeId();
+      this.assertRegularOpsAllowed();
+      return Rgb.rlnAttachNativeExternalSigner(nodeId, signerId);
+    });
+  }
+
+  async rlnUnlockNodeWithNativeExternalSigner(
+    signerId: number,
+    request: {
+      bitcoindRpcUsername: string;
+      bitcoindRpcPassword: string;
+      bitcoindRpcHost: string;
+      bitcoindRpcPort: number;
+      indexerUrl?: string | null;
+      proxyEndpoint?: string | null;
+      announceAddresses?: string[];
+      announceAlias?: string | null;
+    }
+  ): Promise<void> {
+    return this.withNodeQueue(async () => {
+      const nodeId = this.requireNodeId();
+      this.assertRegularOpsAllowed();
+      return Rgb.rlnUnlockNodeWithNativeExternalSigner(
+        nodeId,
+        signerId,
+        request.bitcoindRpcUsername,
+        request.bitcoindRpcPassword,
+        request.bitcoindRpcHost,
+        request.bitcoindRpcPort,
+        request.indexerUrl ?? null,
+        request.proxyEndpoint ?? null,
+        request.announceAddresses ?? [],
+        request.announceAlias ?? null
+      );
+    });
+  }
+
+  async rlnDestroyNativeExternalSigner(signerId: number): Promise<void> {
+    return this.withNodeQueue(async () => {
+      return Rgb.rlnDestroyNativeExternalSigner(signerId);
+    });
+  }
+
+  async rlnInitNodeWithExternalSigner(request: {
+    nodePublicKeyHex: string;
+    accountXpubVanilla: string;
+    accountXpubColored: string;
+    masterFingerprint: string;
+    protocolVersion: string;
+    apiLevel: number;
+    ldkInboundPaymentKeyHex: string;
+    ldkPeerStorageKeyHex: string;
+    ldkReceiveAuthKeyHex: string;
+    asyncPaymentsRootSeedHex?: string;
+  }): Promise<void> {
+    return this.withNodeQueue(async () => {
+      const nodeId = this.requireNodeId();
+      this.assertRegularOpsAllowed();
+      return Rgb.rlnInitNodeWithExternalSigner(
+        nodeId,
+        request.nodePublicKeyHex,
+        request.accountXpubVanilla,
+        request.accountXpubColored,
+        request.masterFingerprint,
+        request.protocolVersion,
+        request.apiLevel,
+        request.ldkInboundPaymentKeyHex,
+        request.ldkPeerStorageKeyHex,
+        request.ldkReceiveAuthKeyHex,
+        request.asyncPaymentsRootSeedHex ?? ''
+      );
     });
   }
 
@@ -635,7 +733,11 @@ export class RLNRgbLibBinding
     donation: boolean,
     feeRate: number,
     minConfirmations: number,
-    skipSync: boolean
+    skipSync: boolean,
+    assetId: string,
+    recipientId: string,
+    amount: number,
+    transportEndpoints: string[]
   ): Promise<object> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnSendRgb(
@@ -643,7 +745,11 @@ export class RLNRgbLibBinding
         donation,
         feeRate,
         minConfirmations,
-        skipSync
+        skipSync,
+        assetId,
+        recipientId,
+        amount,
+        transportEndpoints
       )
     );
   }

@@ -572,6 +572,304 @@ private struct FfiConverterString: FfiConverter {
     }
 }
 
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return try Data(readBytes(&buf, count: Int(len)))
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
+    }
+}
+
+public protocol ExternalSignerHost: AnyObject {
+    func call(request: Data) throws -> Data
+}
+
+open class ExternalSignerHostImpl:
+    ExternalSignerHost
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    // Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_rgb_lightning_node_fn_clone_externalsignerhost(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_rgb_lightning_node_fn_free_externalsignerhost(pointer, $0) }
+    }
+
+    open func call(request: Data) throws -> Data {
+        return try FfiConverterData.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_externalsignerhost_call(self.uniffiClonePointer(),
+                                                                        FfiConverterData.lower(request), $0)
+        })
+    }
+}
+
+/// Magic number for the Rust proxy to call using the same mechanism as every other method,
+/// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
+
+/// Put the implementation in a struct so we don't pollute the top-level namespace
+private enum UniffiCallbackInterfaceExternalSignerHost {
+    /// Create the VTable using a series of closures.
+    /// Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceExternalSignerHost = .init(
+        call: { (
+            uniffiHandle: UInt64,
+            request: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Data in
+                guard let uniffiObj = try? FfiConverterTypeExternalSignerHost.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.call(
+                    request: FfiConverterData.lift(request)
+                )
+            }
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeRlnError.lower
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) in
+            let result = try? FfiConverterTypeExternalSignerHost.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface ExternalSignerHost: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitExternalSignerHost() {
+    uniffi_rgb_lightning_node_fn_init_callback_vtable_externalsignerhost(&UniffiCallbackInterfaceExternalSignerHost.vtable)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExternalSignerHost: FfiConverter {
+    fileprivate static var handleMap = UniffiHandleMap<ExternalSignerHost>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ExternalSignerHost
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ExternalSignerHost {
+        return ExternalSignerHostImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ExternalSignerHost) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExternalSignerHost {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ExternalSignerHost, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExternalSignerHost_lift(_ pointer: UnsafeMutableRawPointer) throws -> ExternalSignerHost {
+    return try FfiConverterTypeExternalSignerHost.lift(pointer)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExternalSignerHost_lower(_ value: ExternalSignerHost) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeExternalSignerHost.lower(value)
+}
+
+public protocol NativeExternalSignerProtocol: AnyObject {
+    func bootstrap() throws -> SdkExternalSignerBootstrap
+}
+
+open class NativeExternalSigner:
+    NativeExternalSignerProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    // Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_rgb_lightning_node_fn_clone_nativeexternalsigner(self.pointer, $0) }
+    }
+
+    public convenience init(seedHex: String, network: String, permissivePolicy: Bool?) throws {
+        let pointer =
+            try rustCallWithError(FfiConverterTypeRlnError.lift) {
+                uniffi_rgb_lightning_node_fn_constructor_nativeexternalsigner_new(
+                    FfiConverterString.lower(seedHex),
+                    FfiConverterString.lower(network),
+                    FfiConverterOptionBool.lower(permissivePolicy), $0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_rgb_lightning_node_fn_free_nativeexternalsigner(pointer, $0) }
+    }
+
+    open func bootstrap() throws -> SdkExternalSignerBootstrap {
+        return try FfiConverterTypeSdkExternalSignerBootstrap.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_nativeexternalsigner_bootstrap(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNativeExternalSigner: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = NativeExternalSigner
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NativeExternalSigner {
+        return NativeExternalSigner(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: NativeExternalSigner) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NativeExternalSigner {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: NativeExternalSigner, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNativeExternalSigner_lift(_ pointer: UnsafeMutableRawPointer) throws -> NativeExternalSigner {
+    return try FfiConverterTypeNativeExternalSigner.lift(pointer)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNativeExternalSigner_lower(_ value: NativeExternalSigner) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeNativeExternalSigner.lower(value)
+}
+
 public protocol SdkNodeProtocol: AnyObject {
     func address() throws -> AddressInfo
 
@@ -609,13 +907,15 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func getChannelId(temporaryChannelId: ChannelId) throws -> ChannelId
 
-    func getPayment(paymentHash: PaymentHash) throws -> Payment
+    func getPayment(paymentHash: PaymentHash, paymentType: PaymentType) throws -> Payment
 
     func getSwap(paymentHash: PaymentHash, taker: Bool) throws -> Swap
 
     func inflate(request: InflateRequest) throws -> InflateResponse
 
     func `init`(password: String, mnemonic: String?) throws -> String
+
+    func initWithExternalSigner(bootstrap: SdkExternalSignerBootstrap) throws
 
     func invoiceStatus(invoice: Bolt11Invoice) throws -> InvoiceStatus
 
@@ -680,6 +980,18 @@ public protocol SdkNodeProtocol: AnyObject {
     func taker(request: SdkTakerRequest) throws
 
     func unlock(request: SdkUnlockRequest) throws
+
+    func attachExternalSigner(host: ExternalSignerHost, bootstrap: SdkExternalSignerBootstrap) throws
+
+    func attachNativeExternalSigner(signer: NativeExternalSigner) throws
+
+    func detachExternalSigner()
+
+    func initWithNativeExternalSigner(signer: NativeExternalSigner) throws
+
+    func unlockWithAttachedExternalSigner(bootstrap: SdkExternalSignerBootstrap, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+
+    func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 }
 
 open class SdkNode:
@@ -864,10 +1176,11 @@ open class SdkNode:
         })
     }
 
-    open func getPayment(paymentHash: PaymentHash) throws -> Payment {
+    open func getPayment(paymentHash: PaymentHash, paymentType: PaymentType) throws -> Payment {
         return try FfiConverterTypePayment.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_get_payment(self.uniffiClonePointer(),
-                                                                    FfiConverterTypePaymentHash.lower(paymentHash), $0)
+                                                                    FfiConverterTypePaymentHash.lower(paymentHash),
+                                                                    FfiConverterTypePaymentType.lower(paymentType), $0)
         })
     }
 
@@ -892,6 +1205,13 @@ open class SdkNode:
                                                              FfiConverterString.lower(password),
                                                              FfiConverterOptionString.lower(mnemonic), $0)
         })
+    }
+
+    open func initWithExternalSigner(bootstrap: SdkExternalSignerBootstrap) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_init_with_external_signer(self.uniffiClonePointer(),
+                                                                                  FfiConverterTypeSdkExternalSignerBootstrap.lower(bootstrap), $0)
+        }
     }
 
     open func invoiceStatus(invoice: Bolt11Invoice) throws -> InvoiceStatus {
@@ -1107,6 +1427,64 @@ open class SdkNode:
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock(self.uniffiClonePointer(),
                                                                FfiConverterTypeSdkUnlockRequest.lower(request), $0)
+        }
+    }
+
+    open func attachExternalSigner(host: ExternalSignerHost, bootstrap: SdkExternalSignerBootstrap) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_attach_external_signer(self.uniffiClonePointer(),
+                                                                               FfiConverterTypeExternalSignerHost.lower(host),
+                                                                               FfiConverterTypeSdkExternalSignerBootstrap.lower(bootstrap), $0)
+        }
+    }
+
+    open func attachNativeExternalSigner(signer: NativeExternalSigner) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_attach_native_external_signer(self.uniffiClonePointer(),
+                                                                                      FfiConverterTypeNativeExternalSigner.lower(signer), $0)
+        }
+    }
+
+    open func detachExternalSigner() {
+        try! rustCall {
+            uniffi_rgb_lightning_node_fn_method_sdknode_detach_external_signer(self.uniffiClonePointer(), $0)
+        }
+    }
+
+    open func initWithNativeExternalSigner(signer: NativeExternalSigner) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_init_with_native_external_signer(self.uniffiClonePointer(),
+                                                                                         FfiConverterTypeNativeExternalSigner.lower(signer), $0)
+        }
+    }
+
+    open func unlockWithAttachedExternalSigner(bootstrap: SdkExternalSignerBootstrap, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_attached_external_signer(self.uniffiClonePointer(),
+                                                                                             FfiConverterTypeSdkExternalSignerBootstrap.lower(bootstrap),
+                                                                                             FfiConverterString.lower(bitcoindRpcUsername),
+                                                                                             FfiConverterString.lower(bitcoindRpcPassword),
+                                                                                             FfiConverterString.lower(bitcoindRpcHost),
+                                                                                             FfiConverterUInt16.lower(bitcoindRpcPort),
+                                                                                             FfiConverterOptionString.lower(indexerUrl),
+                                                                                             FfiConverterOptionString.lower(proxyEndpoint),
+                                                                                             FfiConverterSequenceString.lower(announceAddresses),
+                                                                                             FfiConverterOptionString.lower(announceAlias), $0)
+        }
+    }
+
+    open func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_native_external_signer(self.uniffiClonePointer(),
+                                                                                           FfiConverterTypeNativeExternalSigner.lower(signer),
+                                                                                           FfiConverterString.lower(bitcoindRpcUsername),
+                                                                                           FfiConverterString.lower(bitcoindRpcPassword),
+                                                                                           FfiConverterString.lower(bitcoindRpcHost),
+                                                                                           FfiConverterUInt16.lower(bitcoindRpcPort),
+                                                                                           FfiConverterOptionString.lower(indexerUrl),
+                                                                                           FfiConverterOptionString.lower(proxyEndpoint),
+                                                                                           FfiConverterSequenceString.lower(announceAddresses),
+                                                                                           FfiConverterOptionString.lower(announceAlias), $0)
         }
     }
 }
@@ -4324,6 +4702,138 @@ public func FfiConverterTypeSdkDisconnectPeerRequest_lower(_ value: SdkDisconnec
     return FfiConverterTypeSdkDisconnectPeerRequest.lower(value)
 }
 
+public struct SdkExternalSignerBootstrap {
+    public var nodeId: String
+    public var accountXpubVanilla: String
+    public var accountXpubColored: String
+    public var masterFingerprint: String
+    public var protocolVersion: String
+    public var apiLevel: UInt32
+    public var ldkInboundPaymentKeyHex: String
+    public var ldkPeerStorageKeyHex: String
+    public var ldkReceiveAuthKeyHex: String
+    /**
+     * Empty = legacy async preimage seed; otherwise 64 hex chars = same 32-byte LDK/VLS node seed as the host.
+     */
+    public var asyncPaymentsRootSeedHex: String
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(nodeId: String, accountXpubVanilla: String, accountXpubColored: String, masterFingerprint: String, protocolVersion: String, apiLevel: UInt32, ldkInboundPaymentKeyHex: String, ldkPeerStorageKeyHex: String, ldkReceiveAuthKeyHex: String,
+                /* 
+                    * Empty = legacy async preimage seed; otherwise 64 hex chars = same 32-byte LDK/VLS node seed as the host.
+                    */ asyncPaymentsRootSeedHex: String)
+    {
+        self.nodeId = nodeId
+        self.accountXpubVanilla = accountXpubVanilla
+        self.accountXpubColored = accountXpubColored
+        self.masterFingerprint = masterFingerprint
+        self.protocolVersion = protocolVersion
+        self.apiLevel = apiLevel
+        self.ldkInboundPaymentKeyHex = ldkInboundPaymentKeyHex
+        self.ldkPeerStorageKeyHex = ldkPeerStorageKeyHex
+        self.ldkReceiveAuthKeyHex = ldkReceiveAuthKeyHex
+        self.asyncPaymentsRootSeedHex = asyncPaymentsRootSeedHex
+    }
+}
+
+extension SdkExternalSignerBootstrap: Equatable, Hashable {
+    public static func == (lhs: SdkExternalSignerBootstrap, rhs: SdkExternalSignerBootstrap) -> Bool {
+        if lhs.nodeId != rhs.nodeId {
+            return false
+        }
+        if lhs.accountXpubVanilla != rhs.accountXpubVanilla {
+            return false
+        }
+        if lhs.accountXpubColored != rhs.accountXpubColored {
+            return false
+        }
+        if lhs.masterFingerprint != rhs.masterFingerprint {
+            return false
+        }
+        if lhs.protocolVersion != rhs.protocolVersion {
+            return false
+        }
+        if lhs.apiLevel != rhs.apiLevel {
+            return false
+        }
+        if lhs.ldkInboundPaymentKeyHex != rhs.ldkInboundPaymentKeyHex {
+            return false
+        }
+        if lhs.ldkPeerStorageKeyHex != rhs.ldkPeerStorageKeyHex {
+            return false
+        }
+        if lhs.ldkReceiveAuthKeyHex != rhs.ldkReceiveAuthKeyHex {
+            return false
+        }
+        if lhs.asyncPaymentsRootSeedHex != rhs.asyncPaymentsRootSeedHex {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(nodeId)
+        hasher.combine(accountXpubVanilla)
+        hasher.combine(accountXpubColored)
+        hasher.combine(masterFingerprint)
+        hasher.combine(protocolVersion)
+        hasher.combine(apiLevel)
+        hasher.combine(ldkInboundPaymentKeyHex)
+        hasher.combine(ldkPeerStorageKeyHex)
+        hasher.combine(ldkReceiveAuthKeyHex)
+        hasher.combine(asyncPaymentsRootSeedHex)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkExternalSignerBootstrap: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkExternalSignerBootstrap {
+        return
+            try SdkExternalSignerBootstrap(
+                nodeId: FfiConverterString.read(from: &buf),
+                accountXpubVanilla: FfiConverterString.read(from: &buf),
+                accountXpubColored: FfiConverterString.read(from: &buf),
+                masterFingerprint: FfiConverterString.read(from: &buf),
+                protocolVersion: FfiConverterString.read(from: &buf),
+                apiLevel: FfiConverterUInt32.read(from: &buf),
+                ldkInboundPaymentKeyHex: FfiConverterString.read(from: &buf),
+                ldkPeerStorageKeyHex: FfiConverterString.read(from: &buf),
+                ldkReceiveAuthKeyHex: FfiConverterString.read(from: &buf),
+                asyncPaymentsRootSeedHex: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: SdkExternalSignerBootstrap, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.nodeId, into: &buf)
+        FfiConverterString.write(value.accountXpubVanilla, into: &buf)
+        FfiConverterString.write(value.accountXpubColored, into: &buf)
+        FfiConverterString.write(value.masterFingerprint, into: &buf)
+        FfiConverterString.write(value.protocolVersion, into: &buf)
+        FfiConverterUInt32.write(value.apiLevel, into: &buf)
+        FfiConverterString.write(value.ldkInboundPaymentKeyHex, into: &buf)
+        FfiConverterString.write(value.ldkPeerStorageKeyHex, into: &buf)
+        FfiConverterString.write(value.ldkReceiveAuthKeyHex, into: &buf)
+        FfiConverterString.write(value.asyncPaymentsRootSeedHex, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkExternalSignerBootstrap_lift(_ buf: RustBuffer) throws -> SdkExternalSignerBootstrap {
+    return try FfiConverterTypeSdkExternalSignerBootstrap.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkExternalSignerBootstrap_lower(_ value: SdkExternalSignerBootstrap) -> RustBuffer {
+    return FfiConverterTypeSdkExternalSignerBootstrap.lower(value)
+}
+
 public struct SdkFailTransfersRequest {
     public var batchTransferIdx: Int32?
     public var noAssetOnly: Bool
@@ -4454,10 +4964,12 @@ public struct SdkInitRequest {
     public var maxMediaUploadSizeMb: UInt16
     public var enableVirtualChannelsV0: Bool?
     public var virtualPeerPubkeys: [PublicKey]?
+    public var lspBaseUrl: String?
+    public var lspBearerToken: String?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(storageDirPath: String, daemonListeningPort: UInt16, ldkPeerListeningPort: UInt16, network: String, maxMediaUploadSizeMb: UInt16, enableVirtualChannelsV0: Bool?, virtualPeerPubkeys: [PublicKey]?) {
+    public init(storageDirPath: String, daemonListeningPort: UInt16, ldkPeerListeningPort: UInt16, network: String, maxMediaUploadSizeMb: UInt16, enableVirtualChannelsV0: Bool?, virtualPeerPubkeys: [PublicKey]?, lspBaseUrl: String?, lspBearerToken: String?) {
         self.storageDirPath = storageDirPath
         self.daemonListeningPort = daemonListeningPort
         self.ldkPeerListeningPort = ldkPeerListeningPort
@@ -4465,6 +4977,8 @@ public struct SdkInitRequest {
         self.maxMediaUploadSizeMb = maxMediaUploadSizeMb
         self.enableVirtualChannelsV0 = enableVirtualChannelsV0
         self.virtualPeerPubkeys = virtualPeerPubkeys
+        self.lspBaseUrl = lspBaseUrl
+        self.lspBearerToken = lspBearerToken
     }
 }
 
@@ -4491,6 +5005,12 @@ extension SdkInitRequest: Equatable, Hashable {
         if lhs.virtualPeerPubkeys != rhs.virtualPeerPubkeys {
             return false
         }
+        if lhs.lspBaseUrl != rhs.lspBaseUrl {
+            return false
+        }
+        if lhs.lspBearerToken != rhs.lspBearerToken {
+            return false
+        }
         return true
     }
 
@@ -4502,6 +5022,8 @@ extension SdkInitRequest: Equatable, Hashable {
         hasher.combine(maxMediaUploadSizeMb)
         hasher.combine(enableVirtualChannelsV0)
         hasher.combine(virtualPeerPubkeys)
+        hasher.combine(lspBaseUrl)
+        hasher.combine(lspBearerToken)
     }
 }
 
@@ -4518,7 +5040,9 @@ public struct FfiConverterTypeSdkInitRequest: FfiConverterRustBuffer {
                 network: FfiConverterString.read(from: &buf),
                 maxMediaUploadSizeMb: FfiConverterUInt16.read(from: &buf),
                 enableVirtualChannelsV0: FfiConverterOptionBool.read(from: &buf),
-                virtualPeerPubkeys: FfiConverterOptionSequenceTypePublicKey.read(from: &buf)
+                virtualPeerPubkeys: FfiConverterOptionSequenceTypePublicKey.read(from: &buf),
+                lspBaseUrl: FfiConverterOptionString.read(from: &buf),
+                lspBearerToken: FfiConverterOptionString.read(from: &buf)
             )
     }
 
@@ -4530,6 +5054,8 @@ public struct FfiConverterTypeSdkInitRequest: FfiConverterRustBuffer {
         FfiConverterUInt16.write(value.maxMediaUploadSizeMb, into: &buf)
         FfiConverterOptionBool.write(value.enableVirtualChannelsV0, into: &buf)
         FfiConverterOptionSequenceTypePublicKey.write(value.virtualPeerPubkeys, into: &buf)
+        FfiConverterOptionString.write(value.lspBaseUrl, into: &buf)
+        FfiConverterOptionString.write(value.lspBearerToken, into: &buf)
     }
 }
 
@@ -9494,7 +10020,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_get_channel_id() != 4729 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_get_payment() != 24759 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_get_payment() != 29999 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_get_swap() != 13160 {
@@ -9504,6 +10030,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_init() != 33213 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_init_with_external_signer() != 5809 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_invoice_status() != 27929 {
@@ -9602,10 +10131,38 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock() != 60312 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_attach_external_signer() != 568 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_attach_native_external_signer() != 15009 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_detach_external_signer() != 37779 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_init_with_native_external_signer() != 35000 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 51964 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 58434 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_externalsignerhost_call() != 9685 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_nativeexternalsigner_bootstrap() != 37782 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_constructor_sdknode_create() != 63797 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_constructor_nativeexternalsigner_new() != 50694 {
+        return InitializationResult.apiChecksumMismatch
+    }
 
+    uniffiCallbackInitExternalSignerHost()
     return InitializationResult.ok
 }()
 

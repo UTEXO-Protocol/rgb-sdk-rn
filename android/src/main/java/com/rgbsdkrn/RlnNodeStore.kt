@@ -3,6 +3,7 @@ package com.rgbsdkrn
 import android.util.Log
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.utexo.rgblightningnode.NativeExternalSigner
 import org.utexo.rgblightningnode.SdkNode
 
 object RlnNodeStore {
@@ -12,6 +13,8 @@ object RlnNodeStore {
   private val states = mutableMapOf<Int, NodeLifecycleState>()
   private val storageDirByNodeId = mutableMapOf<Int, String>()
   private var nextId = 1
+  private val signers = mutableMapOf<Int, NativeExternalSigner>()
+  private var nextSignerId = 1
 
   enum class NodeLifecycleState {
     CREATED,
@@ -96,4 +99,14 @@ object RlnNodeStore {
     storageDirByNodeId.remove(id)
     Log.d(TAG, "Removed RLN node session with id: $id")
   }
+
+  suspend fun createSigner(signer: NativeExternalSigner): Int = mutex.withLock {
+    val id = nextSignerId++
+    signers[id] = signer
+    id
+  }
+
+  suspend fun getSigner(id: Int): NativeExternalSigner? = mutex.withLock { signers[id] }
+
+  suspend fun removeSigner(id: Int) = mutex.withLock { signers.remove(id) }
 }

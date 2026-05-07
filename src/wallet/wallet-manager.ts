@@ -10,10 +10,8 @@ import type {
   RestoreWalletRequestModel,
   VssBackupConfig,
   VssBackupInfo,
-  IUTEXOProtocol,
 } from '@utexo/rgb-sdk-core';
 import { RNRgbLibBinding } from '../binding/RNRgbLibBinding';
-import { RLNRgbLibBinding } from '../binding/RLNRgbLibBinding';
 import { RNSigner } from '../signer/RNSigner';
 import { BitcoinNetwork } from '../binding/Interfaces';
 import {
@@ -22,12 +20,8 @@ import {
   restoreFromVss as nativeRestoreFromVss,
 } from '../binding';
 
-export type WalletManagerBindingMode = 'rgb' | 'rln';
 export type { WalletInitParams };
-export type WalletManagerInitParams = WalletInitParams & {
-  bindingMode?: WalletManagerBindingMode;
-  rlnProtocolAdapter?: Partial<IUTEXOProtocol>;
-};
+export type WalletManagerInitParams = WalletInitParams;
 
 export const restoreFromBackup = async (
   params: RestoreWalletRequestModel
@@ -50,9 +44,6 @@ export const createWallet = async (network: string = 'regtest') => {
 /**
  * Restore a wallet from a VSS cloud backup into targetDir.
  * This should be called before creating a WalletManager instance.
- * @param config - VSS backup configuration (server URL, store ID, signing key, etc.)
- * @param targetDir - Directory where the wallet will be restored
- * @returns Absolute path to the restored wallet directory
  */
 export const restoreFromVss = async (
   config: VssBackupConfig,
@@ -65,14 +56,10 @@ export const restoreFromVss = async (
 };
 
 export class WalletManager extends BaseWalletManager {
-  private readonly rnBinding: RNRgbLibBinding | RLNRgbLibBinding;
+  private readonly rnBinding: RNRgbLibBinding;
 
   constructor(params: WalletManagerInitParams) {
-    const bindingMode = params.bindingMode ?? 'rgb';
-    const binding =
-      bindingMode === 'rln'
-        ? new RLNRgbLibBinding(params, params.rlnProtocolAdapter)
-        : new RNRgbLibBinding(params);
+    const binding = new RNRgbLibBinding(params);
     super(params, binding, new RNSigner());
     this.rnBinding = binding;
   }
@@ -99,325 +86,20 @@ export class WalletManager extends BaseWalletManager {
     return { address, btcBalance };
   }
 
-  /**
-   * Configures automatic VSS cloud backup for the open wallet.
-   * @param config - VSS backup configuration
-   */
   public async configureVssBackup(config: VssBackupConfig): Promise<void> {
     await this.rnBinding.configureVssBackup(config);
   }
 
-  /**
-   * Uploads a VSS cloud backup of the current wallet state.
-   * @param config - VSS backup configuration
-   * @returns Server-side version number after successful upload
-   */
   public async vssBackup(config: VssBackupConfig): Promise<number> {
     return this.rnBinding.vssBackup(config);
   }
 
-  /**
-   * Queries the VSS server for this wallet's backup status.
-   * @param config - VSS backup configuration
-   * @returns Backup info: backupExists, serverVersion, backupRequired
-   */
   public async vssBackupInfo(config: VssBackupConfig): Promise<VssBackupInfo> {
     return this.rnBinding.vssBackupInfo(config);
   }
 
-  /**
-   * Disables automatic VSS backup for the open wallet.
-   */
   public async disableVssAutoBackup(): Promise<void> {
     await this.rnBinding.disableVssAutoBackup();
-  }
-
-  private getRlnBinding(): RLNRgbLibBinding {
-    if (!(this.rnBinding instanceof RLNRgbLibBinding)) {
-      throw new ValidationError(
-        'RLN methods require WalletManager with bindingMode: "rln"',
-        'bindingMode'
-      );
-    }
-    return this.rnBinding;
-  }
-
-  public async rlnCreateNode(request: {
-    storageDirPath: string;
-    daemonListeningPort: number;
-    ldkPeerListeningPort: number;
-    network: string;
-    maxMediaUploadSizeMb: number;
-    enableVirtualChannelsV0?: boolean | null;
-  }): Promise<number> {
-    return this.getRlnBinding().rlnCreateNode(request);
-  }
-
-  public async rlnInitNode(
-    password: string,
-    mnemonic?: string
-  ): Promise<string> {
-    return this.getRlnBinding().rlnInitNode(password, mnemonic);
-  }
-
-  public async rlnUnlockNode(request: {
-    password: string;
-    bitcoindRpcUsername: string;
-    bitcoindRpcPassword: string;
-    bitcoindRpcHost: string;
-    bitcoindRpcPort: number;
-    indexerUrl?: string | null;
-    proxyEndpoint?: string | null;
-    announceAddresses?: string[];
-    announceAlias?: string | null;
-  }): Promise<void> {
-    return this.getRlnBinding().rlnUnlockNode(request);
-  }
-
-  public consumeRlnUnlockConflictNormalized(): boolean {
-    return this.getRlnBinding().consumeUnlockConflictNormalized();
-  }
-
-  public async rlnDestroyNode(): Promise<void> {
-    return this.getRlnBinding().rlnDestroyNode();
-  }
-
-  public async rlnNodeInfo(): Promise<object> {
-    return this.getRlnBinding().rlnNodeInfo();
-  }
-
-  public async rlnNetworkInfo(): Promise<object> {
-    return this.getRlnBinding().rlnNetworkInfo();
-  }
-
-  public async rlnConnectPeer(peerPubkeyAndAddr: string): Promise<void> {
-    return this.getRlnBinding().rlnConnectPeer(peerPubkeyAndAddr);
-  }
-
-  public async rlnListPeers(): Promise<object[]> {
-    return this.getRlnBinding().rlnListPeers();
-  }
-
-  public async rlnDisconnectPeer(peerPubkey: string): Promise<void> {
-    return this.getRlnBinding().rlnDisconnectPeer(peerPubkey);
-  }
-
-  public async rlnListChannels(): Promise<object[]> {
-    return this.getRlnBinding().rlnListChannels();
-  }
-
-  public async rlnOpenChannel(request: {
-    peerPubkeyAndOptAddr: string;
-    capacitySat: number;
-    pushMsat: number;
-    public: boolean;
-    withAnchors: boolean;
-    feeBaseMsat?: number | null;
-    feeProportionalMillionths?: number | null;
-    temporaryChannelId?: string | null;
-    assetId?: string | null;
-    assetAmount?: number | null;
-    pushAssetAmount?: number | null;
-    virtualOpenMode?: string | null;
-  }): Promise<object> {
-    return this.getRlnBinding().rlnOpenChannel(request);
-  }
-
-  public async rlnCloseChannel(
-    channelId: string,
-    peerPubkey: string,
-    force: boolean
-  ): Promise<void> {
-    return this.getRlnBinding().rlnCloseChannel(channelId, peerPubkey, force);
-  }
-
-  public async rlnListPayments(): Promise<object[]> {
-    return this.getRlnBinding().rlnListPayments();
-  }
-
-  public async rlnAddress(): Promise<object> {
-    return this.getRlnBinding().rlnAddress();
-  }
-
-  public async rlnAssetBalance(assetId: string): Promise<object> {
-    return this.getRlnBinding().rlnAssetBalance(assetId);
-  }
-
-  public async rlnBackup(backupPath: string, password: string): Promise<void> {
-    return this.getRlnBinding().rlnBackup(backupPath, password);
-  }
-
-  public async rlnBtcBalance(skipSync: boolean = false): Promise<object> {
-    return this.getRlnBinding().rlnBtcBalance(skipSync);
-  }
-
-  public async rlnCheckIndexerUrl(indexerUrl: string): Promise<object> {
-    return this.getRlnBinding().rlnCheckIndexerUrl(indexerUrl);
-  }
-
-  public async rlnCheckProxyEndpoint(proxyEndpoint: string): Promise<void> {
-    return this.getRlnBinding().rlnCheckProxyEndpoint(proxyEndpoint);
-  }
-
-  public async rlnCreateUtxos(
-    upTo: boolean,
-    num: number | null,
-    size: number | null,
-    feeRate: number,
-    skipSync: boolean
-  ): Promise<void> {
-    return this.getRlnBinding().rlnCreateUtxos(
-      upTo,
-      num,
-      size,
-      feeRate,
-      skipSync
-    );
-  }
-
-  public async rlnDecodeLnInvoice(invoice: string): Promise<object> {
-    return this.getRlnBinding().rlnDecodeLnInvoice(invoice);
-  }
-
-  public async rlnDecodeRgbInvoice(invoice: string): Promise<object> {
-    return this.getRlnBinding().rlnDecodeRgbInvoice(invoice);
-  }
-
-  public async rlnEstimateFee(blocks: number): Promise<object> {
-    return this.getRlnBinding().rlnEstimateFee(blocks);
-  }
-
-  public async rlnFailTransfers(
-    batchTransferIdx: number | null,
-    noAssetOnly: boolean,
-    skipSync: boolean
-  ): Promise<object> {
-    return this.getRlnBinding().rlnFailTransfers(
-      batchTransferIdx,
-      noAssetOnly,
-      skipSync
-    );
-  }
-
-  public async rlnGetChannelId(temporaryChannelId: string): Promise<string> {
-    return this.getRlnBinding().rlnGetChannelId(temporaryChannelId);
-  }
-
-  public async rlnGetPayment(paymentHash: string): Promise<object> {
-    return this.getRlnBinding().rlnGetPayment(paymentHash);
-  }
-
-  public async rlnInvoiceStatus(invoice: string): Promise<object> {
-    return this.getRlnBinding().rlnInvoiceStatus(invoice);
-  }
-
-  public async rlnKeysend(
-    destPubkey: string,
-    amtMsat: number,
-    assetId: string | null,
-    assetAmount: number | null
-  ): Promise<object> {
-    return this.getRlnBinding().rlnKeysend(
-      destPubkey,
-      amtMsat,
-      assetId,
-      assetAmount
-    );
-  }
-
-  public async rlnListAssets(filterAssetSchemas: string[]): Promise<object> {
-    return this.getRlnBinding().rlnListAssets(filterAssetSchemas);
-  }
-
-  public async rlnListTransactions(skipSync: boolean): Promise<object[]> {
-    return this.getRlnBinding().rlnListTransactions(skipSync);
-  }
-
-  public async rlnListTransfers(assetId: string): Promise<object[]> {
-    return this.getRlnBinding().rlnListTransfers(assetId);
-  }
-
-  public async rlnListUnspents(skipSync: boolean): Promise<object[]> {
-    return this.getRlnBinding().rlnListUnspents(skipSync);
-  }
-
-  public async rlnLnInvoice(
-    amtMsat: number | null,
-    expirySec: number,
-    assetId: string | null,
-    assetAmount: number | null
-  ): Promise<object> {
-    return this.getRlnBinding().rlnLnInvoice(
-      amtMsat,
-      expirySec,
-      assetId,
-      assetAmount
-    );
-  }
-
-  public async rlnRefreshTransfers(skipSync: boolean): Promise<void> {
-    return this.getRlnBinding().rlnRefreshTransfers(skipSync);
-  }
-
-  public async rlnRgbInvoice(
-    assetId: string | null,
-    assignmentAmount: number | null,
-    durationSeconds: number | null,
-    minConfirmations: number,
-    witness: boolean
-  ): Promise<object> {
-    return this.getRlnBinding().rlnRgbInvoice(
-      assetId,
-      assignmentAmount,
-      durationSeconds,
-      minConfirmations,
-      witness
-    );
-  }
-
-  public async rlnSendBtc(
-    amount: number,
-    address: string,
-    feeRate: number,
-    skipSync: boolean
-  ): Promise<object> {
-    return this.getRlnBinding().rlnSendBtc(amount, address, feeRate, skipSync);
-  }
-
-  public async rlnSendPayment(
-    invoice: string,
-    amtMsat: number | null,
-    assetId: string | null,
-    assetAmount: number | null
-  ): Promise<object> {
-    return this.getRlnBinding().rlnSendPayment(
-      invoice,
-      amtMsat,
-      assetId,
-      assetAmount
-    );
-  }
-
-  public async rlnSendRgb(
-    donation: boolean,
-    feeRate: number,
-    minConfirmations: number,
-    skipSync: boolean
-  ): Promise<object> {
-    return this.getRlnBinding().rlnSendRgb(
-      donation,
-      feeRate,
-      minConfirmations,
-      skipSync
-    );
-  }
-
-  public async rlnShutdown(): Promise<void> {
-    return this.getRlnBinding().rlnShutdown();
-  }
-
-  public async rlnSync(): Promise<void> {
-    return this.getRlnBinding().rlnSync();
   }
 }
 

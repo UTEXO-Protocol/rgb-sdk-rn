@@ -23,6 +23,6 @@ export default [
     },
   },
   {
-    ignores: ['node_modules/', 'lib/', 'dist/'],
+    ignores: ['node_modules/', 'lib/', 'dist/', 'examples/'],
   },
 ];

@@ -47,7 +47,9 @@ class RlnSdkNodeInstrumentationTest {
       network = "regtest",
       maxMediaUploadSizeMb = 20u,
       enableVirtualChannelsV0 = false,
-      virtualPeerPubkeys = null
+      virtualPeerPubkeys = null,
+      lspBaseUrl = "",
+      lspBearerToken = ""
     )
     val node = SdkNode.create(initRequest)
 

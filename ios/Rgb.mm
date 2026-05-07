@@ -2046,6 +2046,42 @@ enableVirtualChannelsV0:(NSNumber * _Nullable)enableVirtualChannelsV0
     });
 }
 
+- (void)rlnInitNodeWithExternalSigner:(double)nodeId
+                     nodePublicKeyHex:(NSString *)nodePublicKeyHex
+                  accountXpubVanilla:(NSString *)accountXpubVanilla
+                  accountXpubColored:(NSString *)accountXpubColored
+                   masterFingerprint:(NSString *)masterFingerprint
+                     protocolVersion:(NSString *)protocolVersion
+                            apiLevel:(double)apiLevel
+             ldkInboundPaymentKeyHex:(NSString *)ldkInboundPaymentKeyHex
+               ldkPeerStorageKeyHex:(NSString *)ldkPeerStorageKeyHex
+               ldkReceiveAuthKeyHex:(NSString *)ldkReceiveAuthKeyHex
+        asyncPaymentsRootSeedHex:(NSString *)asyncPaymentsRootSeedHex
+                             resolve:(RCTPromiseResolveBlock)resolve
+                              reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper
+            _rlnInitNodeWithExternalSigner:@(nodeId)
+            nodePublicKeyHex:nodePublicKeyHex
+            accountXpubVanilla:accountXpubVanilla
+            accountXpubColored:accountXpubColored
+            masterFingerprint:masterFingerprint
+            protocolVersion:protocolVersion
+            apiLevel:@(apiLevel)
+            ldkInboundPaymentKeyHex:ldkInboundPaymentKeyHex
+            ldkPeerStorageKeyHex:ldkPeerStorageKeyHex
+            ldkReceiveAuthKeyHex:ldkReceiveAuthKeyHex
+            asyncPaymentsRootSeedHex:asyncPaymentsRootSeedHex];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_INIT_NODE_EXT_SIGNER_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
 - (void)rlnUnlockNode:(double)nodeId
              password:(NSString *)password
   bitcoindRpcUsername:(NSString *)bitcoindRpcUsername
@@ -2731,6 +2767,104 @@ feeProportionalMillionths:(NSNumber * _Nullable)feeProportionalMillionths
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {
     return std::make_shared<facebook::react::NativeRgbSpecJSI>(params);
+}
+
+- (void)rlnCreateNativeExternalSigner:(NSString *)seedHex
+                             network:(NSString *)network
+                     permissivePolicy:(BOOL)permissivePolicy
+                              resolve:(RCTPromiseResolveBlock)resolve
+                               reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnCreateNativeExternalSigner:seedHex network:network permissivePolicy:permissivePolicy];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_CREATE_NATIVE_SIGNER_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"signerId"]);
+        }
+    });
+}
+
+- (void)rlnInitNodeWithNativeExternalSigner:(double)nodeId
+                                   signerId:(double)signerId
+                                    resolve:(RCTPromiseResolveBlock)resolve
+                                     reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnInitNodeWithNativeExternalSigner:@(nodeId) signerId:@(signerId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_INIT_NODE_NATIVE_SIGNER_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnAttachNativeExternalSigner:(double)nodeId
+                             signerId:(double)signerId
+                              resolve:(RCTPromiseResolveBlock)resolve
+                               reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnAttachNativeExternalSigner:@(nodeId) signerId:@(signerId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_ATTACH_NATIVE_SIGNER_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnUnlockNodeWithNativeExternalSigner:(double)nodeId
+                                     signerId:(double)signerId
+                          bitcoindRpcUsername:(NSString *)bitcoindRpcUsername
+                          bitcoindRpcPassword:(NSString *)bitcoindRpcPassword
+                              bitcoindRpcHost:(NSString *)bitcoindRpcHost
+                              bitcoindRpcPort:(double)bitcoindRpcPort
+                                   indexerUrl:(NSString * _Nullable)indexerUrl
+                                proxyEndpoint:(NSString * _Nullable)proxyEndpoint
+                            announceAddresses:(NSArray<NSString *> *)announceAddresses
+                                announceAlias:(NSString * _Nullable)announceAlias
+                                      resolve:(RCTPromiseResolveBlock)resolve
+                                       reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper
+            _rlnUnlockNodeWithNativeExternalSigner:@(nodeId)
+            signerId:@(signerId)
+            bitcoindRpcUsername:bitcoindRpcUsername
+            bitcoindRpcPassword:bitcoindRpcPassword
+            bitcoindRpcHost:bitcoindRpcHost
+            bitcoindRpcPort:@(bitcoindRpcPort)
+            indexerUrl:indexerUrl
+            proxyEndpoint:proxyEndpoint
+            announceAddresses:announceAddresses
+            announceAlias:announceAlias];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_UNLOCK_NODE_NATIVE_SIGNER_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnDestroyNativeExternalSigner:(double)signerId
+                               resolve:(RCTPromiseResolveBlock)resolve
+                                reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnDestroyNativeExternalSigner:@(signerId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_DESTROY_NATIVE_SIGNER_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
 }
 
 + (NSString *)moduleName

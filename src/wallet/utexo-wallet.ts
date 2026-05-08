@@ -87,7 +87,7 @@ import type {
 
 // ── Constructor params ────────────────────────────────────────────────────────
 
-export interface RLNUtexoWalletNodeParams {
+export interface UTEXOWalletNodeParams {
   storageDirPath: string;
   daemonListeningPort: number;
   ldkPeerListeningPort: number;
@@ -307,15 +307,15 @@ function mapInvoiceStatus(s: RlnInvoiceStatus): CoreTransferStatus | null {
   }
 }
 
-// ── RLNUtexoWallet ────────────────────────────────────────────────────────────
+// ── UTEXOWallet ────────────────────────────────────────────────────────────
 
-export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
+export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   private rln: RLNManager;
-  private readonly params: RLNUtexoWalletNodeParams;
+  private readonly params: UTEXOWalletNodeParams;
   private readonly signer: IRLNSigner;
   private disposed = false;
 
-  constructor(params: RLNUtexoWalletNodeParams, signer: IRLNSigner) {
+  constructor(params: UTEXOWalletNodeParams, signer: IRLNSigner) {
     this.params = params;
     this.signer = signer;
     this.rln = createRLNManager();
@@ -370,7 +370,7 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   goOnline(_indexerUrl: string, _skipConsistencyCheck?: boolean): Promise<void> {
-    throw new Error('RLNUtexoWallet.goOnline: not implemented — use unlock(params) instead');
+    throw new Error('UTEXOWallet.goOnline: not implemented — use unlock(params) instead');
   }
 
   getXpub(): { xpubVan: string; xpubCol: string } {
@@ -400,11 +400,11 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   rotateVanillaAddress(): Promise<string> {
-    throw new Error('RLNUtexoWallet.rotateVanillaAddress: not implemented');
+    throw new Error('UTEXOWallet.rotateVanillaAddress: not implemented');
   }
 
   rotateColoredAddress(): Promise<string> {
-    throw new Error('RLNUtexoWallet.rotateColoredAddress: not implemented');
+    throw new Error('UTEXOWallet.rotateColoredAddress: not implemented');
   }
 
   // ── IWalletManager — UTXO Management ─────────────────────────────────────
@@ -414,11 +414,11 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   createUtxosBegin(_params: CreateUtxosBeginRequestModel): Promise<string> {
-    throw new Error('RLNUtexoWallet.createUtxosBegin: not implemented');
+    throw new Error('UTEXOWallet.createUtxosBegin: not implemented');
   }
 
   createUtxosEnd(_params: CreateUtxosEndRequestModel): Promise<number> {
-    throw new Error('RLNUtexoWallet.createUtxosEnd: not implemented');
+    throw new Error('UTEXOWallet.createUtxosEnd: not implemented');
   }
 
   async createUtxos(params: {
@@ -469,32 +469,32 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   inflateBegin(_params: InflateAssetIfaRequestModel): Promise<string> {
-    throw new Error('RLNUtexoWallet.inflateBegin: not implemented');
+    throw new Error('UTEXOWallet.inflateBegin: not implemented');
   }
 
   inflateEnd(_params: InflateEndRequestModel): Promise<OperationResult> {
-    throw new Error('RLNUtexoWallet.inflateEnd: not implemented');
+    throw new Error('UTEXOWallet.inflateEnd: not implemented');
   }
 
   inflate(_params: InflateAssetIfaRequestModel, _mnemonic?: string): Promise<OperationResult> {
-    throw new Error('RLNUtexoWallet.inflate: not implemented');
+    throw new Error('UTEXOWallet.inflate: not implemented');
   }
 
   // ── IWalletManager — Sending Assets ──────────────────────────────────────
 
   sendBegin(_params: SendAssetBeginRequestModel): Promise<string> {
-    throw new Error('RLNUtexoWallet.sendBegin: not implemented');
+    throw new Error('UTEXOWallet.sendBegin: not implemented');
   }
 
   sendEnd(_params: SendAssetEndRequestModel): Promise<SendResult> {
-    throw new Error('RLNUtexoWallet.sendEnd: not implemented');
+    throw new Error('UTEXOWallet.sendEnd: not implemented');
   }
 
   async send(params: SendAssetBeginRequestModel, _mnemonic?: string): Promise<SendResult> {
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
-    if (!assetId) throw new Error('RLNUtexoWallet.send: assetId required');
-    if (params.amount === undefined) throw new Error('RLNUtexoWallet.send: amount required');
+    if (!assetId) throw new Error('UTEXOWallet.send: assetId required');
+    if (params.amount === undefined) throw new Error('UTEXOWallet.send: amount required');
     return this.rln.rlnSendRgb(
       params.donation ?? false,
       params.feeRate ?? 1.5,
@@ -510,11 +510,11 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   // ── IWalletManager — Sending BTC ──────────────────────────────────────────
 
   sendBtcBegin(_params: SendBtcBeginRequestModel): Promise<string> {
-    throw new Error('RLNUtexoWallet.sendBtcBegin: not implemented');
+    throw new Error('UTEXOWallet.sendBtcBegin: not implemented');
   }
 
   sendBtcEnd(_params: SendBtcEndRequestModel): Promise<string> {
-    throw new Error('RLNUtexoWallet.sendBtcEnd: not implemented');
+    throw new Error('UTEXOWallet.sendBtcEnd: not implemented');
   }
 
   async sendBtc(params: SendBtcBeginRequestModel): Promise<string> {
@@ -590,19 +590,19 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   // ── IWalletManager — VSS Backup (not implemented) ────────────────────────
 
   configureVssBackup(_config: VssBackupConfig): Promise<void> {
-    throw new Error('RLNUtexoWallet.configureVssBackup: not implemented');
+    throw new Error('UTEXOWallet.configureVssBackup: not implemented');
   }
 
   disableVssAutoBackup(): Promise<void> {
-    throw new Error('RLNUtexoWallet.disableVssAutoBackup: not implemented');
+    throw new Error('UTEXOWallet.disableVssAutoBackup: not implemented');
   }
 
   vssBackup(_config: VssBackupConfig): Promise<number> {
-    throw new Error('RLNUtexoWallet.vssBackup: not implemented');
+    throw new Error('UTEXOWallet.vssBackup: not implemented');
   }
 
   vssBackupInfo(_config: VssBackupConfig): Promise<VssBackupInfo> {
-    throw new Error('RLNUtexoWallet.vssBackupInfo: not implemented');
+    throw new Error('UTEXOWallet.vssBackupInfo: not implemented');
   }
 
   // ── IWalletManager — Fee Estimation ──────────────────────────────────────
@@ -613,7 +613,7 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   estimateFee(_psbtBase64: string): Promise<EstimateFeeResult> {
-    throw new Error('RLNUtexoWallet.estimateFee: not implemented');
+    throw new Error('UTEXOWallet.estimateFee: not implemented');
   }
 
   // ── IWalletManager — Backup ───────────────────────────────────────────────
@@ -626,15 +626,15 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   // ── IWalletManager — Cryptographic Operations (not implemented) ───────────
 
   signPsbt(_psbt: string, _mnemonic?: string): Promise<string> {
-    throw new Error('RLNUtexoWallet.signPsbt: not implemented');
+    throw new Error('UTEXOWallet.signPsbt: not implemented');
   }
 
   signMessage(_message: string): Promise<string> {
-    throw new Error('RLNUtexoWallet.signMessage: not implemented');
+    throw new Error('UTEXOWallet.signMessage: not implemented');
   }
 
   verifyMessage(_message: string, _signature: string, _accountXpub?: string): Promise<boolean> {
-    throw new Error('RLNUtexoWallet.verifyMessage: not implemented');
+    throw new Error('UTEXOWallet.verifyMessage: not implemented');
   }
 
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
@@ -673,15 +673,15 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   getLightningSendFeeEstimate(_params: GetLightningSendFeeEstimateRequestModel): Promise<number> {
-    throw new Error('RLNUtexoWallet.getLightningSendFeeEstimate: not implemented');
+    throw new Error('UTEXOWallet.getLightningSendFeeEstimate: not implemented');
   }
 
   payLightningInvoiceBegin(_params: PayLightningInvoiceRequestModel): Promise<string> {
-    throw new Error('RLNUtexoWallet.payLightningInvoiceBegin: not implemented');
+    throw new Error('UTEXOWallet.payLightningInvoiceBegin: not implemented');
   }
 
   payLightningInvoiceEnd(_params: SendAssetEndRequestModel): Promise<LightningSendRequest> {
-    throw new Error('RLNUtexoWallet.payLightningInvoiceEnd: not implemented');
+    throw new Error('UTEXOWallet.payLightningInvoiceEnd: not implemented');
   }
 
   async payLightningInvoice(params: PayLightningInvoiceRequestModel): Promise<LightningSendRequest> {
@@ -716,18 +716,18 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   onchainSendBegin(_params: OnchainSendRequestModel): Promise<string> {
-    throw new Error('RLNUtexoWallet.onchainSendBegin: not implemented');
+    throw new Error('UTEXOWallet.onchainSendBegin: not implemented');
   }
 
   onchainSendEnd(_params: SendAssetEndRequestModel): Promise<OnchainSendResponse> {
-    throw new Error('RLNUtexoWallet.onchainSendEnd: not implemented');
+    throw new Error('UTEXOWallet.onchainSendEnd: not implemented');
   }
 
   async onchainSend(params: OnchainSendRequestModel): Promise<OnchainSendResponse> {
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
-    if (!assetId) throw new Error('RLNUtexoWallet.onchainSend: assetId required');
-    if (params.amount === undefined) throw new Error('RLNUtexoWallet.onchainSend: amount required');
+    if (!assetId) throw new Error('UTEXOWallet.onchainSend: assetId required');
+    if (params.amount === undefined) throw new Error('UTEXOWallet.onchainSend: amount required');
     return this.rln.rlnSendRgb(
       false,
       1.5,
@@ -741,7 +741,7 @@ export class RLNUtexoWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   getOnchainSendStatus(_send_id: string): Promise<OnchainSendStatus | null> {
-    throw new Error('RLNUtexoWallet.getOnchainSendStatus: not implemented');
+    throw new Error('UTEXOWallet.getOnchainSendStatus: not implemented');
   }
 
   async listOnchainTransfers(asset_id?: string): Promise<Transfer[]> {

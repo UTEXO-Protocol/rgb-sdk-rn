@@ -15,15 +15,11 @@ export type {
 // RLN node manager
 export { RLNManager, createRLNManager } from './wallet/rln-manager';
 
-// RLN wallet (implements IWalletManager + IUTEXOProtocol)
-export { RLNUtexoWallet } from './wallet/rln-utexo-wallet';
-export type { RLNUtexoWalletNodeParams } from './wallet/rln-utexo-wallet';
+// UTEXO wallet (implements IWalletManager + IUTEXOProtocol, backed by RLN)
+export { UTEXOWallet } from './wallet/utexo-wallet';
+export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
 export { PasswordRLNSigner, NativeExternalRLNSigner } from './wallet/rln-signers';
 export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln-signers';
-
-// UTEXO module (Lightning + on-chain bridge transfers)
-export { UTEXOWallet } from './utexo/utexo-wallet';
-export type { ConfigOptions } from './utexo/utexo-wallet';
 
 // Binding and signer (for advanced / testing use)
 export { RNRgbLibBinding } from './binding/RNRgbLibBinding';

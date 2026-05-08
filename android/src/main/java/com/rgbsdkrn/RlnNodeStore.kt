@@ -26,8 +26,19 @@ object RlnNodeStore {
 
   suspend fun create(node: SdkNode, storageDirPath: String): Int = mutex.withLock {
     val normalizedPath = storageDirPath.trim()
-    if (normalizedPath.isNotEmpty() && storageDirByNodeId.values.contains(normalizedPath)) {
-      throw IllegalStateException("RLN node already exists for storageDirPath: $normalizedPath")
+    if (normalizedPath.isNotEmpty()) {
+      val existingEntry = storageDirByNodeId.entries.firstOrNull { it.value == normalizedPath }
+      if (existingEntry != null) {
+        val existingId = existingEntry.key
+        if (states[existingId] == NodeLifecycleState.SHUTDOWN) {
+          nodes[existingId]?.close()
+          nodes[existingId] = node
+          states[existingId] = NodeLifecycleState.INITIALIZED
+          Log.d(TAG, "Restarted RLN node session with id: $existingId")
+          return@withLock existingId
+        }
+        throw IllegalStateException("RLN node already exists for storageDirPath: $normalizedPath")
+      }
     }
     val id = nextId++
     nodes[id] = node

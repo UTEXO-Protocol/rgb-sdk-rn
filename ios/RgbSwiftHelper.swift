@@ -3100,6 +3100,7 @@ public class RgbSwiftHelper: NSObject {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       node.shutdown()
+      RlnNodeStore.shared.markShutdown(id: nodeId.intValue)
       return [:] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary

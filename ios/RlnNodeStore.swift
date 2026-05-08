@@ -5,6 +5,7 @@ final class RlnNodeStore {
 
   private var nodes: [Int: SdkNode] = [:]
   private var storageDirByNodeId: [Int: String] = [:]
+  private var shutdownNodeIds: Set<Int> = []
   private var nextId: Int = 1
   private var signers: [Int: NativeExternalSigner] = [:]
   private var nextSignerId: Int = 1
@@ -13,25 +14,39 @@ final class RlnNodeStore {
   private init() {}
 
   func create(node: SdkNode, storageDirPath: String) throws -> Int {
-    return queue.sync {
+    var result: Result<Int, Error> = .failure(NSError(domain: "RlnNodeStore", code: -1))
+    queue.sync {
       let normalizedPath = storageDirPath.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !normalizedPath.isEmpty && storageDirByNodeId.values.contains(normalizedPath) {
-        throw NSError(
-          domain: "RlnNodeStore",
-          code: 2,
-          userInfo: [NSLocalizedDescriptionKey: "RLN node already exists for storageDirPath: \(normalizedPath)"]
-        )
+      if !normalizedPath.isEmpty, let existingId = storageDirByNodeId.first(where: { $0.value == normalizedPath })?.key {
+        if shutdownNodeIds.contains(existingId) {
+          nodes[existingId]?.destroy()
+          nodes[existingId] = node
+          shutdownNodeIds.remove(existingId)
+          result = .success(existingId)
+        } else {
+          result = .failure(NSError(
+            domain: "RlnNodeStore",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "RLN node already exists for storageDirPath: \(normalizedPath)"]
+          ))
+        }
+        return
       }
       let id = nextId
       nextId += 1
       nodes[id] = node
       storageDirByNodeId[id] = normalizedPath
-      return id
+      result = .success(id)
     }
+    return try result.get()
   }
 
   func get(id: Int) -> SdkNode? {
     return queue.sync { nodes[id] }
+  }
+
+  func markShutdown(id: Int) {
+    queue.sync { shutdownNodeIds.insert(id) }
   }
 
   func remove(id: Int) {
@@ -40,6 +55,7 @@ final class RlnNodeStore {
         node.destroy()
       }
       storageDirByNodeId.removeValue(forKey: id)
+      shutdownNodeIds.remove(id)
     }
   }
 

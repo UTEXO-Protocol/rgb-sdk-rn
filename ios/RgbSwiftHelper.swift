@@ -2864,7 +2864,19 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      let txs = try node.listTransactions(skipSync: skipSync).map { ["txid": $0.txid] as NSDictionary }
+      let txs = try node.listTransactions(skipSync: skipSync).map { tx -> NSDictionary in
+        var txDict: [String: Any] = [
+          "txid": tx.txid,
+          "transactionType": "\(tx.transactionType)",
+          "received": NSNumber(value: UInt64(tx.received)),
+          "sent": NSNumber(value: UInt64(tx.sent)),
+          "fee": NSNumber(value: UInt64(tx.fee)),
+        ]
+        if let ct = tx.confirmationTime {
+          txDict["confirmationTime"] = ["height": NSNumber(value: ct.height), "timestamp": NSNumber(value: ct.timestamp)] as NSDictionary
+        }
+        return txDict as NSDictionary
+      }
       return ["transactions": txs] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary

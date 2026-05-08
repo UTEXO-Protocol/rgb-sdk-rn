@@ -990,6 +990,16 @@ class RgbModule(reactContext: ReactApplicationContext) :
         txs.forEach { tx ->
           val map = Arguments.createMap()
           map.putString("txid", tx.txid)
+          map.putString("transactionType", tx.transactionType.name)
+          map.putDouble("received", tx.received.toDouble())
+          map.putDouble("sent", tx.sent.toDouble())
+          map.putDouble("fee", tx.fee.toDouble())
+          tx.confirmationTime?.let { bt ->
+            val ctMap = Arguments.createMap()
+            ctMap.putDouble("height", bt.height.toDouble())
+            ctMap.putDouble("timestamp", bt.timestamp.toDouble())
+            map.putMap("confirmationTime", ctMap)
+          }
           arr.pushMap(map)
         }
         withContext(Dispatchers.Main) { promise.resolve(arr) }

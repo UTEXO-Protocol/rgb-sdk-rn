@@ -1,24 +1,11 @@
-import {
-  BaseWalletManager,
-  ValidationError,
-  normalizeNetwork,
-} from '@utexo/rgb-sdk-core';
+import { BaseWalletManager, ValidationError, generateKeys as coreGenerateKeys } from '@utexo/rgb-sdk-core';
 import type {
   WalletInitParams,
-  BtcBalance,
   WalletRestoreResponse,
   RestoreWalletRequestModel,
   VssBackupConfig,
-  VssBackupInfo,
+  GeneratedKeys,
 } from '@utexo/rgb-sdk-core';
-import { RNRgbLibBinding } from '../binding/RNRgbLibBinding';
-import { RNSigner } from '../signer/RNSigner';
-import { BitcoinNetwork } from '../binding/Interfaces';
-import {
-  generateKeys,
-  restoreBackup,
-  restoreFromVss as nativeRestoreFromVss,
-} from '../binding';
 
 export type { WalletInitParams };
 export type WalletManagerInitParams = WalletInitParams;
@@ -32,74 +19,31 @@ export const restoreFromBackup = async (
   if (!password) throw new ValidationError('password is required', 'password');
   if (!dataDir)
     throw new ValidationError('restore directory is required', 'restoreDir');
-  await restoreBackup(backupFilePath, password);
-  return { message: 'Wallet restored successfully' };
+  throw new Error('restoreFromBackup is not supported in the RLN-only build');
 };
 
-export const createWallet = async (network: string = 'regtest') => {
-  normalizeNetwork(network ?? 'regtest');
-  return generateKeys(BitcoinNetwork.REGTEST);
+export const createWallet = async (network: string = 'regtest'): Promise<GeneratedKeys> => {
+  return coreGenerateKeys(network);
 };
 
-/**
- * Restore a wallet from a VSS cloud backup into targetDir.
- * This should be called before creating a WalletManager instance.
- */
 export const restoreFromVss = async (
-  config: VssBackupConfig,
-  targetDir: string
+  _config: VssBackupConfig,
+  _targetDir: string
 ): Promise<string> => {
-  if (!targetDir) {
-    throw new ValidationError('target directory is required', 'targetDir');
-  }
-  return nativeRestoreFromVss(config, targetDir);
+  throw new Error('restoreFromVss is not supported in the RLN-only build');
 };
 
 export class WalletManager extends BaseWalletManager {
-  private readonly rnBinding: RNRgbLibBinding;
-
   constructor(params: WalletManagerInitParams) {
-    const binding = new RNRgbLibBinding(params);
-    super(params, binding, new RNSigner());
-    this.rnBinding = binding;
+    super(params, null as any, null as any);
   }
 
   async initialize(): Promise<void> {
-    await this.rnBinding.goOnline(this.rnBinding.indexerUrl, false);
+    throw new Error('WalletManager is not supported in the RLN-only build');
   }
 
-  async goOnline(
-    indexerUrl: string,
-    skipConsistencyCheck: boolean = false
-  ): Promise<void> {
-    await this.rnBinding.goOnline(indexerUrl, skipConsistencyCheck);
-  }
-
-  public async registerWallet(): Promise<{
-    address: string;
-    btcBalance: BtcBalance;
-  }> {
-    const [address, btcBalance] = await Promise.all([
-      this.getAddress(),
-      this.getBtcBalance(),
-    ]);
-    return { address, btcBalance };
-  }
-
-  public async configureVssBackup(config: VssBackupConfig): Promise<void> {
-    await this.rnBinding.configureVssBackup(config);
-  }
-
-  public async vssBackup(config: VssBackupConfig): Promise<number> {
-    return this.rnBinding.vssBackup(config);
-  }
-
-  public async vssBackupInfo(config: VssBackupConfig): Promise<VssBackupInfo> {
-    return this.rnBinding.vssBackupInfo(config);
-  }
-
-  public async disableVssAutoBackup(): Promise<void> {
-    await this.rnBinding.disableVssAutoBackup();
+  async goOnline(_indexerUrl: string, _skipConsistencyCheck?: boolean): Promise<void> {
+    throw new Error('WalletManager is not supported in the RLN-only build');
   }
 }
 

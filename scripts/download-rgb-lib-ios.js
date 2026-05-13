@@ -3,6 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// Set to false when rgb_libFFI.xcframework should be fetched again on postinstall.
+const DISABLE_RGB_LIB_FFI_DOWNLOAD = true;
+if (DISABLE_RGB_LIB_FFI_DOWNLOAD) {
+  console.log('Skipping rgb_libFFI.xcframework download (disabled).');
+  process.exit(0);
+}
+
 const URL =
   'https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/download/0.3.0-beta.18/rgb_libFFI.xcframework.zip';
 const IOS_DIR = path.join(__dirname, '..', 'ios');

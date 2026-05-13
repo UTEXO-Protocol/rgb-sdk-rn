@@ -1901,13 +1901,6 @@ baseline-browser-mapping@^2.9.0:
   resolved "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.9.19.tgz"
   integrity sha512-ipDqC8FrAl/76p2SSWKSI+H9tFwm7vYqXQrItCuiVPt26Km0jS+NzSsBWAaBusvSbQcfJG+JitdMm+wZAgTYqg==
 
-"bdk-rn@https://github.com/UTEXO-Protocol/bdk-rn/releases/download/v2.2.0-Alpha.1/bdk-rn-2.2.0-Alpha.1.tgz":
-  version "2.2.0-Alpha.1"
-  resolved "https://github.com/UTEXO-Protocol/bdk-rn/releases/download/v2.2.0-Alpha.1/bdk-rn-2.2.0-Alpha.1.tgz"
-  integrity sha512-hAEUWh8nP4846tuzJBak4jUm5OwIkHQniGg6S4ZT5frCzkSxGzmn8lWBGF8xdH4xE4PDs2C0te5cUzf11GF3lA==
-  dependencies:
-    uniffi-bindgen-react-native "https://github.com/jhugman/uniffi-bindgen-react-native/archive/b9301797ef697331d29edb9d2402ea35c218571e.tar.gz"
-
 brace-expansion@^1.1.7:
   version "1.1.12"
   resolved "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.12.tgz"
@@ -4410,11 +4403,6 @@ unicorn-magic@^0.3.0:
   version "0.3.0"
   resolved "https://registry.npmjs.org/unicorn-magic/-/unicorn-magic-0.3.0.tgz"
   integrity sha512-+QBBXBCvifc56fsbuxZQ6Sic3wqqc3WWaqxs58gvJrcOuN83HGTCwz3oS5phzU9LthRNE9VrJCFCLUgHeeFnfA==
-
-"uniffi-bindgen-react-native@https://github.com/jhugman/uniffi-bindgen-react-native/archive/b9301797ef697331d29edb9d2402ea35c218571e.tar.gz":
-  version "0.29.3-1"
-  resolved "https://github.com/jhugman/uniffi-bindgen-react-native/archive/b9301797ef697331d29edb9d2402ea35c218571e.tar.gz"
-  integrity sha512-ZJPXOs2wpEreM/1jFnKEj5QWZp8HF9sYeURix90Eq87gmPhpsinOg9dBgQ425aQkhOzgxdycVK8L+2fj8Q4Oxg==
 
 universalify@^2.0.0:
   version "2.0.1"

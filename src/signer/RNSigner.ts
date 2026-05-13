@@ -1,7 +1,7 @@
 /**
  * RNSigner — React Native implementation of ISigner.
  *
- * Delegates to signer.ts which uses bdk-rn for PSBT signing.
+ * Delegates to signer.ts for PSBT — throws (bdk-rn removed; use NativeExternalRLNSigner).
  * Message signing uses the pure @scure/* implementation from core.
  */
 import type { ISigner } from '@utexo/rgb-sdk-core';

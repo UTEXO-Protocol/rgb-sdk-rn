@@ -22,7 +22,6 @@ export { PasswordRLNSigner, NativeExternalRLNSigner } from './wallet/rln-signers
 export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln-signers';
 
 // Binding and signer (for advanced / testing use)
-export { RNRgbLibBinding } from './binding/RNRgbLibBinding';
 export { RLNBinding } from './binding/RLNBinding';
 export { RNSigner } from './signer/RNSigner';
 export type * from './binding/rln-types';
@@ -33,10 +32,7 @@ export type {
   IRLNExternalSignerBootstrap,
 } from './binding/IRLN';
 
-/** @deprecated Use RLNManager + RLNBinding instead. */
-export { RLNRgbLibBinding } from './binding/RLNRgbLibBinding';
-
-// Crypto — PSBT signing (RN-specific, uses bdk-rn)
+// Crypto — PSBT signing stubs (bdk-rn removed; throws — use NativeExternalRLNSigner for PSBT)
 export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';
 
 // Re-export everything consumers need from core

@@ -41,8 +41,10 @@ android/keystores/debug.keystore
 .DS_Store
 
 
+
+src/bindings/*.zip
 src/bindings/extracted-android/
-src/bindings/
+src/bindings/.tmp-rln-android/
 android/src/main/jniLibs/                                        
 android/src/main/java/org/utexo/                                 
 ios/RGBLightningNode.xcframework/                                

@@ -19,8 +19,7 @@ final class RlnNodeStore {
       let normalizedPath = storageDirPath.trimmingCharacters(in: .whitespacesAndNewlines)
       if !normalizedPath.isEmpty, let existingId = storageDirByNodeId.first(where: { $0.value == normalizedPath })?.key {
         if shutdownNodeIds.contains(existingId) {
-          nodes[existingId]?.destroy()
-          nodes[existingId] = node
+          nodes[existingId] = node  // ARC releases old node via deinit
           shutdownNodeIds.remove(existingId)
           result = .success(existingId)
         } else {
@@ -52,7 +51,10 @@ final class RlnNodeStore {
   func remove(id: Int) {
     queue.sync {
       if let node = nodes.removeValue(forKey: id) {
-        node.destroy()
+        if !shutdownNodeIds.contains(id) {
+          node.shutdown()
+        }
+        // ARC releases node memory via deinit
       }
       storageDirByNodeId.removeValue(forKey: id)
       shutdownNodeIds.remove(id)

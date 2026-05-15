@@ -180,9 +180,9 @@ await wallet.destroy();
 | `getAssetBalance(assetId)` | Balance for one asset |
 | `issueAssetNia({ ticker, name, precision, amounts })` | Issue a Non-Inflationary Asset |
 | `issueAssetIfa({ ticker, name, precision, amounts, inflationAmounts, rejectListUrl })` | Issue an Inflatable Asset |
-| `send(params)` | RGB transfer (decodes invoice + sends) |
-| `blindReceive(params)` | Create blinded RGB invoice |
-| `witnessReceive(params)` | Create witness RGB invoice |
+| `send({ invoice, assetId?, amount, donation?, feeRate?, minConfirmations?, skipSync?, witnessData? })` | RGB transfer — decodes invoice and sends. `witnessData: { amountSat, blinding? }` required for witness sends |
+| `blindReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a blinded RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
+| `witnessReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a witness RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
 | `decodeRGBInvoice({ invoice })` | Decode an RGB invoice |
 
 #### IWalletManager — BTC Sends
@@ -222,8 +222,8 @@ await wallet.destroy();
 
 | Method | Description |
 |--------|-------------|
-| `onchainReceive({ assetId, amount, durationSeconds?, minConfirmations? })` | RGB witness invoice |
-| `onchainSend({ invoice, assetId?, amount? })` | RGB send via decoded invoice |
+| `onchainReceive({ assetId?, amount?, durationSeconds?, minConfirmations?, witness? })` | RGB invoice — witness by default (`witness: true`). Pass `witness: false` for a blinded invoice |
+| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, skipSync?, witnessData? })` | RGB send via decoded invoice |
 | `listOnchainTransfers(assetId?)` | RGB transfer history |
 
 #### RLN Extras — Node Info
@@ -277,7 +277,7 @@ npm install @utexo/rgb-sdk-rn
 
 ### iOS Setup
 
-The native Rust framework (`rgb_libFFI.xcframework`) is automatically downloaded during `postinstall`.
+The native framework (`RGBLightningNode.xcframework`) is automatically downloaded and extracted during `postinstall`.
 
 ```bash
 cd ios && pod install
@@ -285,15 +285,7 @@ cd ios && pod install
 
 ### Android Setup
 
-The library requires `minSdkVersion` 24. Make sure your `android/build.gradle` includes JitPack if necessary for transitive dependencies:
-
-```gradle
-allprojects {
-    repositories {
-        maven { url 'https://jitpack.io' }
-    }
-}
-```
+The library requires `minSdkVersion` 24. The native binding (`com.utexo:rgb-lightning-node-android`) is published to Maven Central and resolved by Gradle automatically — no extra repository configuration needed.
 
 ---
 
@@ -462,27 +454,7 @@ try {
 
 ---
 
-## `WalletManager` (low-level, single RGB wallet)
-
-Use `WalletManager` when you only need a plain RGB wallet without a Lightning node. It exposes the same per-wallet RGB/PSBT/VSS methods but does not include Lightning, channels, or peers. Suitable for **regtest**, **signet**, **testnet4**, or **mainnet** RGB development where you control the indexer and transport endpoint directly.
-
-```typescript
-import { WalletManager, generateKeys } from '@utexo/rgb-sdk-rn';
-
-const keys = await generateKeys('regtest');
-const wm = new WalletManager({
-  mnemonic: keys.mnemonic,
-  xpubVan: keys.accountXpubVanilla,
-  xpubCol: keys.accountXpubColored,
-  masterFingerprint: keys.masterFingerprint,
-  network: 'regtest',
-  indexerUrl: 'tcp://127.0.0.1:50001',
-});
-await wm.initialize();
-await wm.goOnline('tcp://127.0.0.1:50001');
-```
-
-### Standalone helpers
+## Standalone helpers
 
 | Function | Description |
 |----------|-------------|
@@ -490,33 +462,7 @@ await wm.goOnline('tcp://127.0.0.1:50001');
 | `createWallet(network?)` | Alias for `generateKeys` |
 | `deriveKeysFromMnemonic(network, mnemonic)` | Derive keys from existing mnemonic |
 | `deriveKeysFromSeed(network, seed)` | Derive keys from BIP39 seed |
-| `createWalletManager(params)` | `WalletManager` factory |
-| `restoreFromBackup({ backupFilePath, password, dataDir })` | Restore from encrypted backup file |
 | `signMessage` / `verifyMessage` | Schnorr message signing (standalone, no wallet) |
-
----
-
-## Configuration
-
-### Default Indexer URLs (`DEFAULT_INDEXER_URLS`)
-
-Used by `WalletManager` when `indexerUrl` is not set:
-
-| Network | Default |
-|---------|---------|
-| `mainnet` | `ssl://electrum.iriswallet.com:50003` |
-| `testnet` | `ssl://electrum.iriswallet.com:50013` |
-| `testnet4` | `ssl://electrum.iriswallet.com:50053` |
-| `signet` | `ssl://electrum.iriswallet.com:50033` |
-| `regtest` | `tcp://regtest.thunderstack.org:50001` |
-
-### Default RGB Transport Endpoints (`DEFAULT_TRANSPORT_ENDPOINTS`)
-
-| Network | Default |
-|---------|---------|
-| `mainnet` | `rpcs://rgb-proxy-mainnet.utexo.com/json-rpc` |
-| `testnet` | `rpcs://rgb-proxy-testnet3.utexo.com/json-rpc` |
-| `regtest` | `rpcs://proxy.iriswallet.com/0.2/json-rpc` |
 
 ---
 

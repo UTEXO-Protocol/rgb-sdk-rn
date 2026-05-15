@@ -90,10 +90,6 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
                    masterFingerprint:(NSString *)masterFingerprint
                      protocolVersion:(NSString *)protocolVersion
                             apiLevel:(double)apiLevel
-             ldkInboundPaymentKeyHex:(NSString *)ldkInboundPaymentKeyHex
-               ldkPeerStorageKeyHex:(NSString *)ldkPeerStorageKeyHex
-               ldkReceiveAuthKeyHex:(NSString *)ldkReceiveAuthKeyHex
-        asyncPaymentsRootSeedHex:(NSString *)asyncPaymentsRootSeedHex
                              resolve:(RCTPromiseResolveBlock)resolve
                               reject:(RCTPromiseRejectBlock)reject
 {
@@ -105,11 +101,7 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
             accountXpubColored:accountXpubColored
             masterFingerprint:masterFingerprint
             protocolVersion:protocolVersion
-            apiLevel:@(apiLevel)
-            ldkInboundPaymentKeyHex:ldkInboundPaymentKeyHex
-            ldkPeerStorageKeyHex:ldkPeerStorageKeyHex
-            ldkReceiveAuthKeyHex:ldkReceiveAuthKeyHex
-            asyncPaymentsRootSeedHex:asyncPaymentsRootSeedHex];
+            apiLevel:@(apiLevel)];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_INIT_NODE_EXT_SIGNER_ERROR", errorMessage, nil);
@@ -760,11 +752,13 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
         recipientId:(NSString *)recipientId
              amount:(double)amount
  transportEndpoints:(NSArray *)transportEndpoints
+   witnessAmountSat:(NSNumber *)witnessAmountSat
+    witnessBlinding:(NSNumber *)witnessBlinding
             resolve:(RCTPromiseResolveBlock)resolve
              reject:(RCTPromiseRejectBlock)reject
 {
     EXEC_ASYNC({
-        NSDictionary *result = [RgbSwiftHelper _rlnSendRgb:@(nodeId) donation:donation feeRate:@(feeRate) minConfirmations:@(minConfirmations) skipSync:skipSync assetId:assetId recipientId:recipientId amount:@(amount) transportEndpoints:transportEndpoints];
+        NSDictionary *result = [RgbSwiftHelper _rlnSendRgb:@(nodeId) donation:donation feeRate:@(feeRate) minConfirmations:@(minConfirmations) skipSync:skipSync assetId:assetId recipientId:recipientId amount:@(amount) transportEndpoints:transportEndpoints witnessAmountSat:witnessAmountSat witnessBlinding:witnessBlinding];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_SEND_RGB_ERROR", errorMessage, nil);

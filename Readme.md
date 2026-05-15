@@ -536,6 +536,156 @@ await rln.rlnShutdown();
 await rln.rlnDestroyNode();
 ```
 
+### External Signer — RGB Asset Channel
+
+Two nodes, each a `UTEXOWallet`. **nodeA** uses `PasswordRLNSigner` and acts as the channel funder and payer. **nodeB** uses `NativeExternalRLNSigner` and creates invoices.
+
+```typescript
+import {
+  UTEXOWallet,
+  NativeExternalRLNSigner,
+  PasswordRLNSigner,
+  generateKeys,
+} from '@utexo/rgb-sdk-rn';
+import * as FileSystem from 'expo-file-system/legacy';
+
+const network = 'regtest';
+const keysA = await generateKeys(network);
+const keysB = await generateKeys(network);
+
+const storageDirA = `${FileSystem.documentDirectory}node-a`.replace('file://', '');
+const storageDirB = `${FileSystem.documentDirectory}node-b`.replace('file://', '');
+await FileSystem.makeDirectoryAsync(storageDirA, { intermediates: true });
+await FileSystem.makeDirectoryAsync(storageDirB, { intermediates: true });
+
+// nodeA — password signer: issues asset, opens channel, pays
+const nodeA = new UTEXOWallet(
+  {
+    storageDirPath: storageDirA,
+    daemonListeningPort: 9735,
+    ldkPeerListeningPort: 9736,
+    network,
+    xpubVan: keysA.accountXpubVanilla,
+    xpubCol: keysA.accountXpubColored,
+    masterFingerprint: keysA.masterFingerprint,
+  },
+  new PasswordRLNSigner('nodeApass', keysA.mnemonic),
+);
+
+// nodeB — external signer: creates invoices, receives payments
+const nodeB = new UTEXOWallet(
+  {
+    storageDirPath: storageDirB,
+    daemonListeningPort: 9835,
+    ldkPeerListeningPort: 9836,
+    network,
+    xpubVan: keysB.accountXpubVanilla,
+    xpubCol: keysB.accountXpubColored,
+    masterFingerprint: keysB.masterFingerprint,
+  },
+  new NativeExternalRLNSigner(keysB.mnemonic, network),
+);
+
+const unlockParams = {
+  bitcoindRpcUsername: 'user',
+  bitcoindRpcPassword: 'password',
+  bitcoindRpcHost: '127.0.0.1',
+  bitcoindRpcPort: 18443,
+  indexerUrl: '127.0.0.1:50001',
+  proxyEndpoint: 'rpc://127.0.0.1:3000/json-rpc',
+  announceAddresses: [],
+  announceAlias: null,
+};
+
+// ── Start both nodes ──────────────────────────────────────────────────────────
+await nodeA.init();
+await nodeA.unlock(unlockParams);
+await nodeB.init();
+await nodeB.unlock(unlockParams);
+
+// ── Fund & create UTXOs ───────────────────────────────────────────────────────
+// send BTC to each node's address, mine 6 blocks, syncWallet, then:
+await nodeA.createUtxos({ upTo: false, num: 10, feeRate: 7 });
+await nodeB.createUtxos({ upTo: false, num: 10, feeRate: 7 });
+// mine 1 block + syncWallet after each createUtxos
+
+// ── Issue RGB asset on nodeA ──────────────────────────────────────────────────
+const { assetId } = await nodeA.issueAssetNia({
+  ticker: 'USDT',
+  name: 'Tether',
+  precision: 0,
+  amounts: [1000],
+});
+
+// ── Open RGB asset channel (nodeA → nodeB) ────────────────────────────────────
+const { pubkey: pubkeyB } = await nodeB.getNodeInfo();
+const peerUriB = `${pubkeyB}@127.0.0.1:9836`;
+
+await nodeA.connectPeer(peerUriB);
+await nodeA.openChannel({
+  peerPubkeyAndOptAddr: peerUriB,
+  capacitySat: 100_000,
+  pushMsat: 3_500_000,   // initial BTC push to nodeB to enable bidirectional payments
+  public: false,
+  withAnchors: true,
+  assetId,
+  assetAmount: 600,      // 600 of 1000 units placed in the channel
+});
+
+// poll nodeA.listChannels() until funding tx appears, then mine 6 blocks
+// poll nodeA/nodeB.getNodeInfo().numUsableChannels >= 1
+
+// ── Lightning payment: nodeB creates invoice, nodeA pays ──────────────────────
+const { lnInvoice } = await nodeB.createLightningInvoice({
+  amountSats: 3000,
+  expirySeconds: 900,
+  asset: { assetId, amount: 100 },
+});
+
+const { txid: paymentHash } = await nodeA.payLightningInvoice({ lnInvoice });
+
+// poll nodeA.getLightningSendRequest(paymentHash) until 'Settled'
+
+// ── Cooperative close ─────────────────────────────────────────────────────────
+// After two payments (100 + 50 units), channel balances: nodeA=450, nodeB=150
+// nodeA off-chain RGB balance: 400 (= 1000 − 600 issued to channel)
+// Expected on-chain after close: nodeA=850 (400+450), nodeB=150
+await nodeA.closeChannel(channelId, pubkeyB, false);
+// mine blocks and call refreshWallet() on both nodes while polling
+
+// Poll until both on-chain balances settle (can take ~3 minutes for sweep txs)
+const deadline = Date.now() + 300_000;
+while (Date.now() < deadline) {
+  const balA = await nodeA.getAssetBalance(assetId).catch(() => null);
+  const balB = await nodeB.getAssetBalance(assetId).catch(() => null);
+  if (Number(balA?.spendable) === 850 && Number(balB?.spendable) === 150) break;
+  await nodeA.refreshWallet().catch(() => {});
+  await nodeB.refreshWallet().catch(() => {});
+  await new Promise(r => setTimeout(r, 12_000));
+}
+
+// ── RGB on-chain send: nodeB returns 150 units to nodeA ──────────────────────
+const invoice = await nodeA.blindReceive({ minConfirmations: 1 });
+await nodeB.send({
+  invoice: invoice.invoice,
+  assetId,
+  amount: 150,
+  donation: true,
+  feeRate: 1,
+  minConfirmations: 1,
+});
+// mine 1 block, syncWallet + refreshWallet on both nodes
+// final balances: nodeA=1000, nodeB=0
+
+// ── Cleanup ───────────────────────────────────────────────────────────────────
+try {
+  // wallet operations
+} finally {
+  await nodeA.destroy();
+  await nodeB.destroy();
+}
+```
+
 ---
 
 ## Demo App

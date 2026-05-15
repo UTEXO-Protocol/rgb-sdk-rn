@@ -76,7 +76,7 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnInitNodeWithExternalSigner:nodePublicKeyHex:accountXpubVanilla:accountXpubColored:masterFingerprint:protocolVersion:apiLevel:ldkInboundPaymentKeyHex:ldkPeerStorageKeyHex:ldkReceiveAuthKeyHex:asyncPaymentsRootSeedHex:)
+  @objc(_rlnInitNodeWithExternalSigner:nodePublicKeyHex:accountXpubVanilla:accountXpubColored:masterFingerprint:protocolVersion:apiLevel:)
   public static func _rlnInitNodeWithExternalSigner(
     _ nodeId: NSNumber,
     nodePublicKeyHex: String,
@@ -84,11 +84,7 @@ public class RgbSwiftHelper: NSObject {
     accountXpubColored: String,
     masterFingerprint: String,
     protocolVersion: String,
-    apiLevel: NSNumber,
-    ldkInboundPaymentKeyHex: String,
-    ldkPeerStorageKeyHex: String,
-    ldkReceiveAuthKeyHex: String,
-    asyncPaymentsRootSeedHex: String
+    apiLevel: NSNumber
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -100,11 +96,7 @@ public class RgbSwiftHelper: NSObject {
         accountXpubColored: accountXpubColored,
         masterFingerprint: masterFingerprint,
         protocolVersion: protocolVersion,
-        apiLevel: UInt32(truncating: apiLevel),
-        ldkInboundPaymentKeyHex: ldkInboundPaymentKeyHex,
-        ldkPeerStorageKeyHex: ldkPeerStorageKeyHex,
-        ldkReceiveAuthKeyHex: ldkReceiveAuthKeyHex,
-        asyncPaymentsRootSeedHex: asyncPaymentsRootSeedHex
+        apiLevel: UInt32(truncating: apiLevel)
       ))
       return [:] as NSDictionary
     } catch {
@@ -627,7 +619,88 @@ public class RgbSwiftHelper: NSObject {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       let res = try node.listAssets(filterAssetSchemas: filterAssetSchemas)
-      return ["value": "\(res)"] as NSDictionary
+
+      let niaArr: [NSDictionary] = (res.nia ?? []).map { a in
+        var d: [String: Any] = [
+          "assetId": a.assetId, "ticker": a.ticker, "name": a.name,
+          "precision": NSNumber(value: a.precision),
+          "issuedSupply": NSNumber(value: a.issuedSupply),
+          "timestamp": NSNumber(value: a.timestamp),
+          "addedAt": NSNumber(value: a.addedAt),
+          "balance": ["settled": NSNumber(value: a.balance.settled), "future": NSNumber(value: a.balance.future),
+                      "spendable": NSNumber(value: a.balance.spendable),
+                      "offchainOutbound": NSNumber(value: a.balance.offchainOutbound),
+                      "offchainInbound": NSNumber(value: a.balance.offchainInbound)] as NSDictionary,
+        ]
+        if let v = a.details { d["details"] = v }
+        if let m = a.media { d["media"] = ["filePath": m.filePath, "mime": m.mime, "digest": m.digest] as NSDictionary }
+        return d as NSDictionary
+      }
+
+      let cfaArr: [NSDictionary] = (res.cfa ?? []).map { a in
+        var d: [String: Any] = [
+          "assetId": a.assetId, "name": a.name,
+          "precision": NSNumber(value: a.precision),
+          "issuedSupply": NSNumber(value: a.issuedSupply),
+          "timestamp": NSNumber(value: a.timestamp),
+          "addedAt": NSNumber(value: a.addedAt),
+          "balance": ["settled": NSNumber(value: a.balance.settled), "future": NSNumber(value: a.balance.future),
+                      "spendable": NSNumber(value: a.balance.spendable),
+                      "offchainOutbound": NSNumber(value: a.balance.offchainOutbound),
+                      "offchainInbound": NSNumber(value: a.balance.offchainInbound)] as NSDictionary,
+        ]
+        if let v = a.details { d["details"] = v }
+        if let m = a.media { d["media"] = ["filePath": m.filePath, "mime": m.mime, "digest": m.digest] as NSDictionary }
+        return d as NSDictionary
+      }
+
+      let ifaArr: [NSDictionary] = (res.ifa ?? []).map { a in
+        var d: [String: Any] = [
+          "assetId": a.assetId, "ticker": a.ticker, "name": a.name,
+          "precision": NSNumber(value: a.precision),
+          "initialSupply": NSNumber(value: a.initialSupply),
+          "maxSupply": NSNumber(value: a.maxSupply),
+          "knownCirculatingSupply": NSNumber(value: a.knownCirculatingSupply),
+          "timestamp": NSNumber(value: a.timestamp),
+          "addedAt": NSNumber(value: a.addedAt),
+          "balance": ["settled": NSNumber(value: a.balance.settled), "future": NSNumber(value: a.balance.future),
+                      "spendable": NSNumber(value: a.balance.spendable),
+                      "offchainOutbound": NSNumber(value: a.balance.offchainOutbound),
+                      "offchainInbound": NSNumber(value: a.balance.offchainInbound)] as NSDictionary,
+        ]
+        if let v = a.details { d["details"] = v }
+        if let m = a.media { d["media"] = ["filePath": m.filePath, "mime": m.mime, "digest": m.digest] as NSDictionary }
+        if let url = a.rejectListUrl { d["rejectListUrl"] = url }
+        return d as NSDictionary
+      }
+
+      let udaArr: [NSDictionary] = (res.uda ?? []).map { a in
+        var d: [String: Any] = [
+          "assetId": a.assetId, "ticker": a.ticker, "name": a.name,
+          "precision": NSNumber(value: a.precision),
+          "timestamp": NSNumber(value: a.timestamp),
+          "addedAt": NSNumber(value: a.addedAt),
+          "balance": ["settled": NSNumber(value: a.balance.settled), "future": NSNumber(value: a.balance.future),
+                      "spendable": NSNumber(value: a.balance.spendable),
+                      "offchainOutbound": NSNumber(value: a.balance.offchainOutbound),
+                      "offchainInbound": NSNumber(value: a.balance.offchainInbound)] as NSDictionary,
+        ]
+        if let v = a.details { d["details"] = v }
+        if let token = a.token {
+          var td: [String: Any] = ["index": NSNumber(value: token.index), "embeddedMedia": token.embeddedMedia, "reserves": token.reserves]
+          if let t = token.ticker { td["ticker"] = t }
+          if let n = token.name { td["name"] = n }
+          if let dd = token.details { td["details"] = dd }
+          if let m = token.media { td["media"] = ["filePath": m.filePath, "mime": m.mime, "digest": m.digest] as NSDictionary }
+          td["attachments"] = token.attachments.map { at -> NSDictionary in
+            ["key": NSNumber(value: at.key), "filePath": at.media.filePath, "mime": at.media.mime, "digest": at.media.digest] as NSDictionary
+          }
+          d["token"] = td as NSDictionary
+        }
+        return d as NSDictionary
+      }
+
+      return ["nia": niaArr, "cfa": cfaArr, "ifa": ifaArr, "uda": udaArr] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -664,8 +737,25 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      let transfers = try node.listTransfers(assetId: assetId).map {
-        ["idx": NSNumber(value: $0.idx), "status": "\($0.status)"] as NSDictionary
+      let transfers = try node.listTransfers(assetId: assetId).map { t -> NSDictionary in
+        var d: [String: Any] = [
+          "idx": NSNumber(value: t.idx),
+          "createdAt": NSNumber(value: t.createdAt),
+          "updatedAt": NSNumber(value: t.updatedAt),
+          "status": "\(t.status)",
+          "kind": "\(t.kind)",
+          "assignments": t.assignments,
+        ]
+        if let ra = t.requestedAssignment { d["requestedAssignment"] = "\(ra)" }
+        if let v = t.txid { d["txid"] = v }
+        if let v = t.recipientId { d["recipientId"] = v }
+        if let v = t.receiveUtxo { d["receiveUtxo"] = v }
+        if let v = t.changeUtxo { d["changeUtxo"] = v }
+        if let v = t.expiration { d["expiration"] = NSNumber(value: v) }
+        d["transportEndpoints"] = t.transportEndpoints.map { ep -> NSDictionary in
+          ["endpoint": ep.endpoint, "transportType": "\(ep.transportType)", "used": ep.used] as NSDictionary
+        }
+        return d as NSDictionary
       }
       return ["transfers": transfers] as NSDictionary
     } catch {
@@ -823,7 +913,7 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnSendRgb:donation:feeRate:minConfirmations:skipSync:assetId:recipientId:amount:transportEndpoints:)
+  @objc(_rlnSendRgb:donation:feeRate:minConfirmations:skipSync:assetId:recipientId:amount:transportEndpoints:witnessAmountSat:witnessBlinding:)
   public static func _rlnSendRgb(
     _ nodeId: NSNumber,
     donation: Bool,
@@ -833,13 +923,18 @@ public class RgbSwiftHelper: NSObject {
     assetId: String,
     recipientId: String,
     amount: NSNumber,
-    transportEndpoints: NSArray
+    transportEndpoints: NSArray,
+    witnessAmountSat: NSNumber?,
+    witnessBlinding: NSNumber?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       let endpoints = (transportEndpoints as? [String]) ?? []
+      let witnessData: WitnessData? = witnessAmountSat.map {
+        WitnessData(amountSat: UInt64(truncating: $0), blinding: witnessBlinding.map { UInt64(truncating: $0) })
+      }
       let res = try node.sendRgb(
         request: SendRgbRequest(
           donation: donation,
@@ -852,7 +947,7 @@ public class RgbSwiftHelper: NSObject {
               recipients: [
                 RgbRecipient(
                   recipientId: recipientId,
-                  witnessData: nil,
+                  witnessData: witnessData,
                   assignmentKind: .fungible,
                   assignmentAmount: UInt64(truncating: amount),
                   transportEndpoints: endpoints

@@ -266,9 +266,10 @@ export class RLNManager implements IRLN {
     assetId: string,
     recipientId: string,
     amount: number,
-    transportEndpoints: string[]
+    transportEndpoints: string[],
+    witnessData?: { amountSat: number; blinding?: number } | null
   ): Promise<RlnSendRgbResponse> {
-    return this.rlnBinding.rlnSendRgb(donation, feeRate, minConfirmations, skipSync, assetId, recipientId, amount, transportEndpoints);
+    return this.rlnBinding.rlnSendRgb(donation, feeRate, minConfirmations, skipSync, assetId, recipientId, amount, transportEndpoints, witnessData);
   }
 
   rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]> {

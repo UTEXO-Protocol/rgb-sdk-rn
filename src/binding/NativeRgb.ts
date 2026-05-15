@@ -38,11 +38,7 @@ export interface Spec extends TurboModule {
     accountXpubColored: string,
     masterFingerprint: string,
     protocolVersion: string,
-    apiLevel: number,
-    ldkInboundPaymentKeyHex: string,
-    ldkPeerStorageKeyHex: string,
-    ldkReceiveAuthKeyHex: string,
-    asyncPaymentsRootSeedHex: string
+    apiLevel: number
   ): Promise<void>;
   rlnUnlockNode(
     nodeId: number,
@@ -161,7 +157,9 @@ export interface Spec extends TurboModule {
     assetId: string,
     recipientId: string,
     amount: number,
-    transportEndpoints: string[]
+    transportEndpoints: string[],
+    witnessAmountSat: number | null,
+    witnessBlinding: number | null
   ): Promise<object>;
   rlnShutdown(nodeId: number): Promise<void>;
   rlnSync(nodeId: number): Promise<void>;

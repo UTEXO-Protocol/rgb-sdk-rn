@@ -989,7 +989,7 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func initWithNativeExternalSigner(signer: NativeExternalSigner) throws
 
-    func unlockWithAttachedExternalSigner(bootstrap: SdkExternalSignerBootstrap, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+    func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 
     func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 }
@@ -1458,10 +1458,9 @@ open class SdkNode:
         }
     }
 
-    open func unlockWithAttachedExternalSigner(bootstrap: SdkExternalSignerBootstrap, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+    open func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_attached_external_signer(self.uniffiClonePointer(),
-                                                                                             FfiConverterTypeSdkExternalSignerBootstrap.lower(bootstrap),
                                                                                              FfiConverterString.lower(bitcoindRpcUsername),
                                                                                              FfiConverterString.lower(bitcoindRpcPassword),
                                                                                              FfiConverterString.lower(bitcoindRpcHost),
@@ -4709,31 +4708,16 @@ public struct SdkExternalSignerBootstrap {
     public var masterFingerprint: String
     public var protocolVersion: String
     public var apiLevel: UInt32
-    public var ldkInboundPaymentKeyHex: String
-    public var ldkPeerStorageKeyHex: String
-    public var ldkReceiveAuthKeyHex: String
-    /**
-     * Empty = legacy async preimage seed; otherwise 64 hex chars = same 32-byte LDK/VLS node seed as the host.
-     */
-    public var asyncPaymentsRootSeedHex: String
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(nodeId: String, accountXpubVanilla: String, accountXpubColored: String, masterFingerprint: String, protocolVersion: String, apiLevel: UInt32, ldkInboundPaymentKeyHex: String, ldkPeerStorageKeyHex: String, ldkReceiveAuthKeyHex: String,
-                /* 
-                    * Empty = legacy async preimage seed; otherwise 64 hex chars = same 32-byte LDK/VLS node seed as the host.
-                    */ asyncPaymentsRootSeedHex: String)
-    {
+    public init(nodeId: String, accountXpubVanilla: String, accountXpubColored: String, masterFingerprint: String, protocolVersion: String, apiLevel: UInt32) {
         self.nodeId = nodeId
         self.accountXpubVanilla = accountXpubVanilla
         self.accountXpubColored = accountXpubColored
         self.masterFingerprint = masterFingerprint
         self.protocolVersion = protocolVersion
         self.apiLevel = apiLevel
-        self.ldkInboundPaymentKeyHex = ldkInboundPaymentKeyHex
-        self.ldkPeerStorageKeyHex = ldkPeerStorageKeyHex
-        self.ldkReceiveAuthKeyHex = ldkReceiveAuthKeyHex
-        self.asyncPaymentsRootSeedHex = asyncPaymentsRootSeedHex
     }
 }
 
@@ -4757,18 +4741,6 @@ extension SdkExternalSignerBootstrap: Equatable, Hashable {
         if lhs.apiLevel != rhs.apiLevel {
             return false
         }
-        if lhs.ldkInboundPaymentKeyHex != rhs.ldkInboundPaymentKeyHex {
-            return false
-        }
-        if lhs.ldkPeerStorageKeyHex != rhs.ldkPeerStorageKeyHex {
-            return false
-        }
-        if lhs.ldkReceiveAuthKeyHex != rhs.ldkReceiveAuthKeyHex {
-            return false
-        }
-        if lhs.asyncPaymentsRootSeedHex != rhs.asyncPaymentsRootSeedHex {
-            return false
-        }
         return true
     }
 
@@ -4779,10 +4751,6 @@ extension SdkExternalSignerBootstrap: Equatable, Hashable {
         hasher.combine(masterFingerprint)
         hasher.combine(protocolVersion)
         hasher.combine(apiLevel)
-        hasher.combine(ldkInboundPaymentKeyHex)
-        hasher.combine(ldkPeerStorageKeyHex)
-        hasher.combine(ldkReceiveAuthKeyHex)
-        hasher.combine(asyncPaymentsRootSeedHex)
     }
 }
 
@@ -4798,11 +4766,7 @@ public struct FfiConverterTypeSdkExternalSignerBootstrap: FfiConverterRustBuffer
                 accountXpubColored: FfiConverterString.read(from: &buf),
                 masterFingerprint: FfiConverterString.read(from: &buf),
                 protocolVersion: FfiConverterString.read(from: &buf),
-                apiLevel: FfiConverterUInt32.read(from: &buf),
-                ldkInboundPaymentKeyHex: FfiConverterString.read(from: &buf),
-                ldkPeerStorageKeyHex: FfiConverterString.read(from: &buf),
-                ldkReceiveAuthKeyHex: FfiConverterString.read(from: &buf),
-                asyncPaymentsRootSeedHex: FfiConverterString.read(from: &buf)
+                apiLevel: FfiConverterUInt32.read(from: &buf)
             )
     }
 
@@ -4813,10 +4777,6 @@ public struct FfiConverterTypeSdkExternalSignerBootstrap: FfiConverterRustBuffer
         FfiConverterString.write(value.masterFingerprint, into: &buf)
         FfiConverterString.write(value.protocolVersion, into: &buf)
         FfiConverterUInt32.write(value.apiLevel, into: &buf)
-        FfiConverterString.write(value.ldkInboundPaymentKeyHex, into: &buf)
-        FfiConverterString.write(value.ldkPeerStorageKeyHex, into: &buf)
-        FfiConverterString.write(value.ldkReceiveAuthKeyHex, into: &buf)
-        FfiConverterString.write(value.asyncPaymentsRootSeedHex, into: &buf)
     }
 }
 
@@ -10143,7 +10103,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_init_with_native_external_signer() != 35000 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 51964 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 48853 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 58434 {

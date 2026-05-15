@@ -85,6 +85,25 @@ import type {
   RlnUnspent,
 } from '../binding/rln-types';
 
+// ── Extended send request models ─────────────────────────────────────────────
+// These extend the core interfaces with RLN-specific fields without modifying core.
+
+export interface RlnOnchainReceiveRequestModel extends OnchainReceiveRequestModel {
+  witness?: boolean;
+}
+
+export interface RlnSendAssetRequestModel extends SendAssetBeginRequestModel {
+  skipSync?: boolean;
+}
+
+export interface RlnOnchainSendRequestModel extends OnchainSendRequestModel {
+  witnessData?: { amountSat: number; blinding?: number };
+  donation?: boolean;
+  feeRate?: number;
+  minConfirmations?: number;
+  skipSync?: boolean;
+}
+
 // ── Constructor params ────────────────────────────────────────────────────────
 
 export interface UTEXOWalletNodeParams {
@@ -182,7 +201,7 @@ function mapTransfer(t: RlnTransfer): Transfer {
     status: (validStatuses.includes(t.status as TransferStatus)
       ? t.status
       : 'WaitingCounterparty') as TransferStatus,
-    assignments: [],
+    assignments: (t.assignments ?? []).map(parseAssignment),
     kind: (validKinds.includes(t.kind as TransferKind) ? t.kind : 'Send') as TransferKind,
     txid: t.txid,
     recipientId: t.recipientId,
@@ -490,7 +509,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     throw new Error('UTEXOWallet.sendEnd: not implemented');
   }
 
-  async send(params: SendAssetBeginRequestModel, _mnemonic?: string): Promise<SendResult> {
+  async send(params: RlnSendAssetRequestModel, _mnemonic?: string): Promise<SendResult> {
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
     if (!assetId) throw new Error('UTEXOWallet.send: assetId required');
@@ -499,11 +518,12 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       params.donation ?? false,
       params.feeRate ?? 1.5,
       params.minConfirmations ?? 1,
-      false,
+      params.skipSync ?? false,
       assetId,
       decoded.recipientId,
       params.amount,
       decoded.transportEndpoints,
+      params.witnessData ?? null,
     );
   }
 
@@ -704,13 +724,13 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   // ── IUTEXOProtocol — Onchain ──────────────────────────────────────────────
 
-  async onchainReceive(params: OnchainReceiveRequestModel): Promise<OnchainReceiveResponse> {
+  async onchainReceive(params: RlnOnchainReceiveRequestModel): Promise<OnchainReceiveResponse> {
     const resp = await this.rln.rlnRgbInvoice(
       params.assetId,
       params.amount,
       params.durationSeconds ?? null,
       params.minConfirmations ?? 0,
-      true,
+      params.witness ?? true,
     );
     return { invoice: resp.invoice };
   }
@@ -723,20 +743,21 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     throw new Error('UTEXOWallet.onchainSendEnd: not implemented');
   }
 
-  async onchainSend(params: OnchainSendRequestModel): Promise<OnchainSendResponse> {
+  async onchainSend(params: RlnOnchainSendRequestModel): Promise<OnchainSendResponse> {
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
     if (!assetId) throw new Error('UTEXOWallet.onchainSend: assetId required');
     if (params.amount === undefined) throw new Error('UTEXOWallet.onchainSend: amount required');
     return this.rln.rlnSendRgb(
-      false,
-      1.5,
-      1,
-      false,
+      params.donation ?? false,
+      params.feeRate ?? 1.5,
+      params.minConfirmations ?? 1,
+      params.skipSync ?? false,
       assetId,
       decoded.recipientId,
       params.amount,
       decoded.transportEndpoints,
+      params.witnessData ?? null,
     );
   }
 

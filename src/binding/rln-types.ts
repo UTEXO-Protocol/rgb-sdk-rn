@@ -294,6 +294,8 @@ export interface RlnTransfer {
   changeUtxo?: string;
   expiration?: number;
   transportEndpoints?: RlnTransportEndpoint[];
+  requestedAssignment?: string;
+  assignments?: string[];
 }
 
 // ── Send RGB ──────────────────────────────────────────────────────────────────

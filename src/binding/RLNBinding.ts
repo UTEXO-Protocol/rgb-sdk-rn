@@ -202,21 +202,50 @@ export class RLNBinding implements IRLN {
     signerId: number,
     request: IRLNUnlockParams
   ): Promise<void> {
-    return this.withNodeQueue(async () => {
+    await this.withNodeQueue(async () => {
       const nodeId = this.requireNodeId();
       this.assertRegularOpsAllowed();
-      return Rgb.rlnUnlockNodeWithNativeExternalSigner(
-        nodeId,
-        signerId,
-        request.bitcoindRpcUsername,
-        request.bitcoindRpcPassword,
-        request.bitcoindRpcHost,
-        request.bitcoindRpcPort,
-        request.indexerUrl ?? null,
-        request.proxyEndpoint ?? null,
-        request.announceAddresses ?? [],
-        request.announceAlias ?? null
-      );
+      this.unlockConflictNormalized = false;
+
+      const alreadyReady = await this.probeNodeReady(nodeId, 3, 300);
+      if (alreadyReady) return;
+
+      const unlockOnce = () =>
+        Rgb.rlnUnlockNodeWithNativeExternalSigner(
+          nodeId,
+          signerId,
+          request.bitcoindRpcUsername,
+          request.bitcoindRpcPassword,
+          request.bitcoindRpcHost,
+          request.bitcoindRpcPort,
+          request.indexerUrl ?? null,
+          request.proxyEndpoint ?? null,
+          request.announceAddresses ?? [],
+          request.announceAlias ?? null
+        );
+
+      const maxConflictRetries = 4;
+      let lastConflictError: unknown = null;
+      for (let attempt = 1; attempt <= maxConflictRetries; attempt += 1) {
+        try {
+          await unlockOnce();
+          return;
+        } catch (error) {
+          if (!this.isConflictError(error)) throw error;
+          const ready = await this.probeNodeReady(nodeId, 12, 500);
+          if (ready) {
+            this.unlockConflictNormalized = true;
+            return;
+          }
+          lastConflictError = error;
+          if (attempt < maxConflictRetries) {
+            await new Promise((resolve) =>
+              globalThis.setTimeout(resolve, 400 * attempt)
+            );
+          }
+        }
+      }
+      throw lastConflictError;
     });
   }
 
@@ -239,11 +268,7 @@ export class RLNBinding implements IRLN {
         bootstrap.accountXpubColored,
         bootstrap.masterFingerprint,
         bootstrap.protocolVersion,
-        bootstrap.apiLevel,
-        bootstrap.ldkInboundPaymentKeyHex,
-        bootstrap.ldkPeerStorageKeyHex,
-        bootstrap.ldkReceiveAuthKeyHex,
-        bootstrap.asyncPaymentsRootSeedHex ?? ''
+        bootstrap.apiLevel
       );
     });
   }
@@ -510,10 +535,16 @@ export class RLNBinding implements IRLN {
     assetId: string,
     recipientId: string,
     amount: number,
-    transportEndpoints: string[]
+    transportEndpoints: string[],
+    witnessData?: { amountSat: number; blinding?: number } | null
   ): Promise<RlnSendRgbResponse> {
     return this.withNodeOperation((nodeId) =>
-      Rgb.rlnSendRgb(nodeId, donation, feeRate, minConfirmations, skipSync, assetId, recipientId, amount, transportEndpoints)
+      Rgb.rlnSendRgb(
+        nodeId, donation, feeRate, minConfirmations, skipSync,
+        assetId, recipientId, amount, transportEndpoints,
+        witnessData?.amountSat ?? null,
+        witnessData?.blinding ?? null,
+      )
     ) as Promise<RlnSendRgbResponse>;
   }
 
@@ -665,6 +696,20 @@ export class RLNBinding implements IRLN {
     const message =
       typeof e?.message === 'string' ? e.message.toLowerCase() : '';
     return code.includes('conflict') || message.includes('conflict');
+  }
+
+  isPoisonError(error: unknown): boolean {
+    const e = error as { message?: string; code?: unknown } | null;
+    const code =
+      typeof e?.code === 'string' ? e.code.toLowerCase() : '';
+    const message =
+      typeof e?.message === 'string' ? e.message.toLowerCase() : '';
+    return (
+      code.includes('nodestatecorrupted') ||
+      message.includes('poisonerror') ||
+      message.includes('poison error') ||
+      message.includes('node internal state is corrupted')
+    );
   }
 
   private isNotInitializedError(error: unknown): boolean {

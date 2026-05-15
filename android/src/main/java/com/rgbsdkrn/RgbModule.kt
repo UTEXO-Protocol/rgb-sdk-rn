@@ -30,8 +30,14 @@ import org.utexo.rgblightningnode.SdkSendBtcRequest
 import org.utexo.rgblightningnode.SdkSendPaymentRequest
 import org.utexo.rgblightningnode.AssignmentKind
 import org.utexo.rgblightningnode.AssetRecipients
+import org.utexo.rgblightningnode.AssetBalanceInfo
+import org.utexo.rgblightningnode.AssetNia
+import org.utexo.rgblightningnode.AssetCfa
+import org.utexo.rgblightningnode.AssetIfa
+import org.utexo.rgblightningnode.AssetUda
 import org.utexo.rgblightningnode.RgbRecipient
 import org.utexo.rgblightningnode.SendRgbRequest
+import org.utexo.rgblightningnode.WitnessData
 import org.utexo.rgblightningnode.SdkUnlockRequest
 import org.utexo.rgblightningnode.PaymentType
 import org.utexo.rgblightningnode.SdkIssueAssetCfaRequest
@@ -131,10 +137,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
     masterFingerprint: String,
     protocolVersion: String,
     apiLevel: Double,
-    ldkInboundPaymentKeyHex: String,
-    ldkPeerStorageKeyHex: String,
-    ldkReceiveAuthKeyHex: String,
-    asyncPaymentsRootSeedHex: String,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -154,11 +156,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
             accountXpubColored = accountXpubColored,
             masterFingerprint = masterFingerprint,
             protocolVersion = protocolVersion,
-            apiLevel = apiLevel.toInt().toUInt(),
-            ldkInboundPaymentKeyHex = ldkInboundPaymentKeyHex,
-            ldkPeerStorageKeyHex = ldkPeerStorageKeyHex,
-            ldkReceiveAuthKeyHex = ldkReceiveAuthKeyHex,
-            asyncPaymentsRootSeedHex = asyncPaymentsRootSeedHex
+            apiLevel = apiLevel.toInt().toUInt()
           )
         )
         RlnNodeStore.markInitialized(intNodeId)
@@ -347,6 +345,12 @@ class RgbModule(reactContext: ReactApplicationContext) :
         RlnNodeStore.markUnlocked(intNodeId)
         withContext(Dispatchers.Main) { promise.resolve(null) }
       } catch (e: Exception) {
+        val node = RlnNodeStore.get(intNodeId)
+        if (node != null && isConflictLike(e) && probeNodeReady(node, attempts = 12, delayMs = 500L)) {
+          RlnNodeStore.markUnlocked(intNodeId)
+          withContext(Dispatchers.Main) { promise.resolve(null) }
+          return@launch
+        }
         RlnNodeStore.rollbackUnlock(intNodeId)
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
@@ -449,6 +453,14 @@ class RgbModule(reactContext: ReactApplicationContext) :
         node.connectpeer(peerPubkeyAndAddr)
         withContext(Dispatchers.Main) { promise.resolve(null) }
       } catch (e: Exception) {
+        if (isPoisonError(e)) {
+          // A Rust mutex was poisoned by a background LDK thread panic. The node's
+          // internal state is unrecoverable; the caller must destroy and restart the node.
+          withContext(Dispatchers.Main) {
+            promise.reject("NodeStateCorrupted", "Node internal state is corrupted (PoisonError); please restart the node", e)
+          }
+          return@launch
+        }
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }
@@ -950,7 +962,18 @@ class RgbModule(reactContext: ReactApplicationContext) :
         }
         val res = node.listAssets(schemas)
         val map = Arguments.createMap()
-        map.putString("value", res.toString())
+        val niaArr = Arguments.createArray()
+        res.nia?.forEach { niaArr.pushMap(serializeAssetNia(it)) }
+        map.putArray("nia", niaArr)
+        val cfaArr = Arguments.createArray()
+        res.cfa?.forEach { cfaArr.pushMap(serializeAssetCfa(it)) }
+        map.putArray("cfa", cfaArr)
+        val ifaArr = Arguments.createArray()
+        res.ifa?.forEach { ifaArr.pushMap(serializeAssetIfa(it)) }
+        map.putArray("ifa", ifaArr)
+        val udaArr = Arguments.createArray()
+        res.uda?.forEach { udaArr.pushMap(serializeAssetUda(it)) }
+        map.putArray("uda", udaArr)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -998,10 +1021,31 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val transfers = node.listTransfers(assetId)
         val arr = Arguments.createArray()
-        transfers.forEach { transfer ->
+        transfers.forEach { t ->
           val map = Arguments.createMap()
-          map.putInt("idx", transfer.idx)
-          map.putString("status", transfer.status.toString())
+          map.putInt("idx", t.idx)
+          map.putDouble("createdAt", t.createdAt.toDouble())
+          map.putDouble("updatedAt", t.updatedAt.toDouble())
+          map.putString("status", t.status)
+          t.requestedAssignment?.let { map.putString("requestedAssignment", it) }
+          val assignArr = Arguments.createArray()
+          t.assignments.forEach { assignArr.pushString(it) }
+          map.putArray("assignments", assignArr)
+          map.putString("kind", t.kind)
+          t.txid?.let { map.putString("txid", it) }
+          t.recipientId?.let { map.putString("recipientId", it) }
+          t.receiveUtxo?.let { map.putString("receiveUtxo", it) }
+          t.changeUtxo?.let { map.putString("changeUtxo", it) }
+          t.expiration?.let { map.putDouble("expiration", it.toDouble()) }
+          val epArr = Arguments.createArray()
+          t.transportEndpoints.forEach { ep ->
+            val epMap = Arguments.createMap()
+            epMap.putString("endpoint", ep.endpoint)
+            epMap.putString("transportType", ep.transportType)
+            epMap.putBoolean("used", ep.used)
+            epArr.pushMap(epMap)
+          }
+          map.putArray("transportEndpoints", epArr)
           arr.pushMap(map)
         }
         withContext(Dispatchers.Main) { promise.resolve(arr) }
@@ -1193,6 +1237,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
     recipientId: String,
     amount: Double,
     transportEndpoints: ReadableArray,
+    witnessAmountSat: Double?,
+    witnessBlinding: Double?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -1200,6 +1246,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val endpoints = (0 until transportEndpoints.size()).map { transportEndpoints.getString(it) ?: "" }
+        val witnessData = witnessAmountSat?.let {
+          WitnessData(amountSat = it.toULong(), blinding = witnessBlinding?.toULong())
+        }
         val res = node.sendRgb(
           SendRgbRequest(
             donation = donation,
@@ -1212,7 +1261,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
                 recipients = listOf(
                   RgbRecipient(
                     recipientId = recipientId,
-                    witnessData = null,
+                    witnessData = witnessData,
                     assignmentKind = AssignmentKind.FUNGIBLE,
                     assignmentAmount = amount.toULong(),
                     transportEndpoints = endpoints,
@@ -1406,6 +1455,73 @@ class RgbModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  private fun serializeBalance(b: AssetBalanceInfo): WritableMap {
+    val m = Arguments.createMap()
+    m.putDouble("settled", b.settled.toDouble())
+    m.putDouble("future", b.future.toDouble())
+    m.putDouble("spendable", b.spendable.toDouble())
+    m.putDouble("offchainOutbound", b.offchainOutbound.toDouble())
+    m.putDouble("offchainInbound", b.offchainInbound.toDouble())
+    return m
+  }
+
+  private fun serializeAssetNia(a: AssetNia): WritableMap {
+    val m = Arguments.createMap()
+    m.putString("assetId", a.assetId)
+    m.putString("ticker", a.ticker)
+    m.putString("name", a.name)
+    a.details?.let { m.putString("details", it) }
+    m.putDouble("precision", a.precision.toDouble())
+    m.putDouble("issuedSupply", a.issuedSupply.toDouble())
+    m.putDouble("timestamp", a.timestamp.toDouble())
+    m.putDouble("addedAt", a.addedAt.toDouble())
+    m.putMap("balance", serializeBalance(a.balance))
+    return m
+  }
+
+  private fun serializeAssetCfa(a: AssetCfa): WritableMap {
+    val m = Arguments.createMap()
+    m.putString("assetId", a.assetId)
+    m.putString("name", a.name)
+    a.details?.let { m.putString("details", it) }
+    m.putDouble("precision", a.precision.toDouble())
+    m.putDouble("issuedSupply", a.issuedSupply.toDouble())
+    m.putDouble("timestamp", a.timestamp.toDouble())
+    m.putDouble("addedAt", a.addedAt.toDouble())
+    m.putMap("balance", serializeBalance(a.balance))
+    return m
+  }
+
+  private fun serializeAssetIfa(a: AssetIfa): WritableMap {
+    val m = Arguments.createMap()
+    m.putString("assetId", a.assetId)
+    m.putString("ticker", a.ticker)
+    m.putString("name", a.name)
+    a.details?.let { m.putString("details", it) }
+    m.putDouble("precision", a.precision.toDouble())
+    m.putDouble("initialSupply", a.initialSupply.toDouble())
+    m.putDouble("maxSupply", a.maxSupply.toDouble())
+    m.putDouble("knownCirculatingSupply", a.knownCirculatingSupply.toDouble())
+    m.putDouble("timestamp", a.timestamp.toDouble())
+    m.putDouble("addedAt", a.addedAt.toDouble())
+    m.putMap("balance", serializeBalance(a.balance))
+    a.rejectListUrl?.let { m.putString("rejectListUrl", it) }
+    return m
+  }
+
+  private fun serializeAssetUda(a: AssetUda): WritableMap {
+    val m = Arguments.createMap()
+    m.putString("assetId", a.assetId)
+    m.putString("ticker", a.ticker)
+    m.putString("name", a.name)
+    a.details?.let { m.putString("details", it) }
+    m.putDouble("precision", a.precision.toDouble())
+    m.putDouble("timestamp", a.timestamp.toDouble())
+    m.putDouble("addedAt", a.addedAt.toDouble())
+    m.putMap("balance", serializeBalance(a.balance))
+    return m
+  }
+
   private fun getErrorClassName(exception: Exception): String {
     val className = exception.javaClass.name
     // Handle nested classes (separated by $)
@@ -1428,6 +1544,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
   private fun isConflictLike(error: Throwable): Boolean {
     val loweredMessage = (error.message ?: "").lowercase()
     return loweredMessage.contains("conflict")
+  }
+
+  private fun isPoisonError(error: Throwable): Boolean {
+    val loweredMessage = (error.message ?: "").lowercase()
+    return loweredMessage.contains("poisonerror") || loweredMessage.contains("poison error")
   }
 
   private suspend fun probeNodeReady(

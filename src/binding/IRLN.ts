@@ -55,10 +55,6 @@ export interface IRLNExternalSignerBootstrap {
   masterFingerprint: string;
   protocolVersion: string;
   apiLevel: number;
-  ldkInboundPaymentKeyHex: string;
-  ldkPeerStorageKeyHex: string;
-  ldkReceiveAuthKeyHex: string;
-  asyncPaymentsRootSeedHex?: string;
 }
 
 // ── IRLN interface ────────────────────────────────────────────────────────────
@@ -198,7 +194,8 @@ export interface IRLN {
     assetId: string,
     recipientId: string,
     amount: number,
-    transportEndpoints: string[]
+    transportEndpoints: string[],
+    witnessData?: { amountSat: number; blinding?: number } | null
   ): Promise<RlnSendRgbResponse>;
   rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]>;
   rlnListTransfers(assetId: string): Promise<RlnTransfer[]>;

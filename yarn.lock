@@ -1636,16 +1636,15 @@
     "@typescript-eslint/types" "8.55.0"
     eslint-visitor-keys "^4.2.1"
 
-"@utexo/rgb-sdk-core@1.0.0-beta.3":
-  version "1.0.0-beta.3"
-  resolved "https://registry.npmjs.org/@utexo/rgb-sdk-core/-/rgb-sdk-core-1.0.0-beta.3.tgz"
-  integrity sha512-TlHnTOp2/sHmjspXI6XYgt/ca3wDtOMXGESdACDY0ocGu6WyGHgI3ia1a5eRwq7H4Q+6Zjx4vT2rurujFKjNdA==
+"@utexo/rgb-sdk-core@1.0.0-beta.4":
+  version "1.0.0-beta.4"
+  resolved "https://registry.npmjs.org/@utexo/rgb-sdk-core/-/rgb-sdk-core-1.0.0-beta.4.tgz"
+  integrity sha512-2CXOX8+6N2B/71smay/pJmlnYfYiGTyNFuemkeouSFGWMhCa9bcpq19y5kno608TC+A0JsO4vHFgQUXocn/Gyw==
   dependencies:
     "@noble/hashes" "^2.0.1"
     "@noble/secp256k1" "3.0.0"
     "@scure/bip32" "^2.0.1"
     "@scure/bip39" "^2.0.1"
-    axios "^1.8.4"
 
 abort-controller@^3.0.0:
   version "3.0.0"

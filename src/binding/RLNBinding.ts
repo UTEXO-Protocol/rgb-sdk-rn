@@ -613,35 +613,16 @@ export class RLNBinding implements IRLN {
     feeRate: number,
     skipSync: boolean
   ): Promise<void> {
-    await this.withNodeOperation(async (nodeId) => {
-      const maxConflictRetries = 20;
-      let lastConflictError: unknown = null;
-      for (let attempt = 1; attempt <= maxConflictRetries; attempt += 1) {
-        try {
-          await Rgb.rlnCreateUtxos(nodeId, upTo, num, size, feeRate, skipSync);
-          return;
-        } catch (error) {
-          if (!this.isConflictError(error)) throw error;
-          const ready = await this.probeNodeReady(nodeId, 8, 500);
-          if (ready) {
-            await new Promise((resolve) =>
-              globalThis.setTimeout(resolve, 250 * attempt)
-            );
-          }
-          lastConflictError = error;
-          if (attempt < maxConflictRetries) {
-            await new Promise((resolve) =>
-              globalThis.setTimeout(resolve, 600)
-            );
-          }
-        }
-      }
-      throw lastConflictError;
-    });
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnCreateUtxos(nodeId, upTo, num, size, feeRate, skipSync)
+    );
   }
 
   // ── Backup ───────────────────────────────────────────────────────────────────
 
+  /**
+   * @throws Always throws — backup is not yet supported by the native RLN node.
+   */
   async rlnBackup(backupPath: string, password: string): Promise<void> {
     await this.withNodeOperation((nodeId) =>
       Rgb.rlnBackup(nodeId, backupPath, password)

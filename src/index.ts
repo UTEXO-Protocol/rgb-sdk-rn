@@ -1,16 +1,6 @@
-// Main wallet exports
-export {
-  wallet,
-  createWallet,
-  WalletManager,
-  createWalletManager,
-  restoreFromBackup,
-  restoreFromVss,
-} from './wallet/wallet-manager';
-export type {
-  WalletInitParams,
-  WalletManagerInitParams,
-} from './wallet/wallet-manager';
+// Wallet utilities
+export { createWallet } from './wallet/wallet-manager';
+export type { WalletInitParams } from '@utexo/rgb-sdk-core';
 
 // RLN node manager
 export { RLNManager, createRLNManager } from './wallet/rln-manager';

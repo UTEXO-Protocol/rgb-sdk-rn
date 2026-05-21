@@ -18,8 +18,8 @@ function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
 
-    https
-      .get(url, (response) => {
+    const req = https
+      .get(url, { timeout: 30000 }, (response) => {
         if (response.statusCode === 301 || response.statusCode === 302) {
           file.close();
           fs.unlinkSync(dest);
@@ -54,6 +54,12 @@ function downloadFile(url, dest) {
           file.close();
           resolve();
         });
+      })
+      .on('timeout', () => {
+        req.destroy();
+        file.close();
+        if (fs.existsSync(dest)) fs.unlinkSync(dest);
+        reject(new Error('Download timed out after 30s'));
       })
       .on('error', (err) => {
         file.close();

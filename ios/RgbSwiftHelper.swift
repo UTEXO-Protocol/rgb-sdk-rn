@@ -364,7 +364,6 @@ public class RgbSwiftHelper: NSObject {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       throw NSError(domain: "RlnError", code: -1, userInfo: [NSLocalizedDescriptionKey: "rlnBackup is not supported in this version of the RLN node"])
-      return [:] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -401,7 +400,7 @@ public class RgbSwiftHelper: NSObject {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       let res = try node.checkIndexerUrl(indexerUrl: indexerUrl)
-      return ["indexerUrl": res.indexerProtocol] as NSDictionary
+      return ["indexerProtocol": res.indexerProtocol] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -495,7 +494,7 @@ public class RgbSwiftHelper: NSObject {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       let res = try node.estimateFee(blocks: UInt16(truncating: blocks))
-      return ["value": "\(res)"] as NSDictionary
+      return ["feeRate": NSNumber(value: Double(res))] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -770,10 +769,22 @@ public class RgbSwiftHelper: NSObject {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       let unspents = try node.listUnspents(skipSync: skipSync).map { u -> NSDictionary in
-        let parts = u.utxo.outpoint.split(separator: ":", maxSplits: 1)
-        let txid = parts.count > 0 ? String(parts[0]) : u.utxo.outpoint
-        let vout = parts.count > 1 ? Int(String(parts[1])) ?? 0 : 0
-        return ["txid": txid, "vout": NSNumber(value: vout)] as NSDictionary
+        let utxoDict: [String: Any] = [
+          "outpoint": u.utxo.outpoint,
+          "btcAmount": NSNumber(value: u.utxo.btcAmount),
+          "colorable": u.utxo.colorable,
+        ]
+        var dict: [String: Any] = ["utxo": utxoDict as NSDictionary]
+        let allocs = u.rgbAllocations.map { a -> NSDictionary in
+          var allocDict: [String: Any] = [
+            "assignment": "\(a.assignment)",
+            "settled": a.settled,
+          ]
+          if let assetId = a.assetId { allocDict["assetId"] = assetId }
+          return allocDict as NSDictionary
+        }
+        if !allocs.isEmpty { dict["rgbAllocations"] = allocs }
+        return dict as NSDictionary
       }
       return ["unspents": unspents] as NSDictionary
     } catch {

@@ -79,26 +79,25 @@
     "@eslint/js": "^9.35.0",
     "@types/node": "^22.17.2",
     "@types/react": "^19.2.0",
-    "react-native": "*",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "del-cli": "^6.0.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
+    "prettier": "^3.0.0",
+    "react-native": "*",
     "react-native-builder-bob": "^0.40.17",
-    "typescript": "^5.9.2",
-    "del-cli": "^6.0.0",
-    "prettier": "^3.0.0"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@utexo/rgb-sdk-core": "1.0.0-beta.4",
     "@noble/hashes": "^2.0.1",
     "@noble/secp256k1": "3.0.0",
     "@scure/base": "^2.0.0",
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
-    "axios": "^1.8.4"
+    "@utexo/rgb-sdk-core": "1.0.0-beta.4"
   },
   "react-native-builder-bob": {
     "source": "src",

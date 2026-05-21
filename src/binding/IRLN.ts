@@ -172,10 +172,35 @@ export interface IRLN {
 
   // ── Assets / transfers ──────────────────────────────────────────────────────
 
-  rlnIssueAssetNia(ticker: string, name: string, precision: number, amounts: number[]): Promise<any>;
-  rlnIssueAssetCfa(name: string, details: string | null, precision: number, amounts: number[], fileDigest: string | null): Promise<any>;
-  rlnIssueAssetIfa(ticker: string, name: string, precision: number, amounts: number[], inflationAmounts: number[], rejectListUrl: string | null): Promise<any>;
-  rlnIssueAssetUda(ticker: string, name: string, details: string | null, precision: number, mediaFileDigest: string | null, attachmentsFileDigests: string[]): Promise<any>;
+  rlnIssueAssetNia(
+    ticker: string,
+    name: string,
+    precision: number,
+    amounts: number[]
+  ): Promise<any>;
+  rlnIssueAssetCfa(
+    name: string,
+    details: string | null,
+    precision: number,
+    amounts: number[],
+    fileDigest: string | null
+  ): Promise<any>;
+  rlnIssueAssetIfa(
+    ticker: string,
+    name: string,
+    precision: number,
+    amounts: number[],
+    inflationAmounts: number[],
+    rejectListUrl: string | null
+  ): Promise<any>;
+  rlnIssueAssetUda(
+    ticker: string,
+    name: string,
+    details: string | null,
+    precision: number,
+    mediaFileDigest: string | null,
+    attachmentsFileDigests: string[]
+  ): Promise<any>;
 
   rlnListAssets(filterAssetSchemas: string[]): Promise<RlnListAssetsResponse>;
   rlnAssetBalance(assetId: string): Promise<RlnAssetBalance>;

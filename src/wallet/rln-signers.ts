@@ -59,7 +59,11 @@ export class NativeExternalRLNSigner implements IRLNSigner {
    * @param network           Bitcoin network string ('regtest', 'testnet', 'mainnet', …).
    * @param permissivePolicy  Optional — relaxes signer policy checks.
    */
-  constructor(keys: RLNKeyMaterial, network: string, permissivePolicy?: boolean) {
+  constructor(
+    keys: RLNKeyMaterial,
+    network: string,
+    permissivePolicy?: boolean
+  ) {
     this.seedHex = toSeedHex(keys);
     this.network = network;
     this.permissivePolicy = permissivePolicy;
@@ -69,7 +73,7 @@ export class NativeExternalRLNSigner implements IRLNSigner {
     this.signerId = await rln.rlnCreateNativeExternalSigner(
       this.seedHex,
       this.network,
-      this.permissivePolicy,
+      this.permissivePolicy
     );
     await rln.rlnInitNodeWithNativeExternalSigner(this.signerId);
   }
@@ -80,7 +84,7 @@ export class NativeExternalRLNSigner implements IRLNSigner {
       this.signerId = await rln.rlnCreateNativeExternalSigner(
         this.seedHex,
         this.network,
-        this.permissivePolicy,
+        this.permissivePolicy
       );
       await rln.rlnAttachNativeExternalSigner(this.signerId);
     }

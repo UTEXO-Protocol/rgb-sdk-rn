@@ -10,14 +10,24 @@ export interface Spec extends TurboModule {
     maxMediaUploadSizeMb: number,
     enableVirtualChannelsV0: boolean | null
   ): Promise<number>;
-  rlnInitNode(nodeId: number, password: string, mnemonic?: string | null): Promise<string>;
+  rlnInitNode(
+    nodeId: number,
+    password: string,
+    mnemonic?: string | null
+  ): Promise<string>;
   rlnCreateNativeExternalSigner(
     seedHex: string,
     network: string,
     permissivePolicy: boolean
   ): Promise<number>;
-  rlnInitNodeWithNativeExternalSigner(nodeId: number, signerId: number): Promise<void>;
-  rlnAttachNativeExternalSigner(nodeId: number, signerId: number): Promise<void>;
+  rlnInitNodeWithNativeExternalSigner(
+    nodeId: number,
+    signerId: number
+  ): Promise<void>;
+  rlnAttachNativeExternalSigner(
+    nodeId: number,
+    signerId: number
+  ): Promise<void>;
   rlnUnlockNodeWithNativeExternalSigner(
     nodeId: number,
     signerId: number,
@@ -83,7 +93,11 @@ export interface Spec extends TurboModule {
   rlnListPayments(nodeId: number): Promise<object[]>;
   rlnAddress(nodeId: number): Promise<object>;
   rlnAssetBalance(nodeId: number, assetId: string): Promise<object>;
-  rlnBackup(nodeId: number, backupPath: string, password: string): Promise<void>;
+  rlnBackup(
+    nodeId: number,
+    backupPath: string,
+    password: string
+  ): Promise<void>;
   rlnBtcBalance(nodeId: number, skipSync: boolean): Promise<object>;
   rlnCheckIndexerUrl(nodeId: number, indexerUrl: string): Promise<object>;
   rlnCheckProxyEndpoint(nodeId: number, proxyEndpoint: string): Promise<void>;

@@ -91,7 +91,8 @@ async function setupIos() {
 
   // Extract to a temp dir — the zip contains a swift/ subdirectory
   const tmpDir = path.join(IOS_DIR, '.tmp-rln-swift');
-  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  if (fs.existsSync(tmpDir))
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   fs.mkdirSync(tmpDir, { recursive: true });
 
   await downloadFile(url, IOS_ZIP);
@@ -103,14 +104,20 @@ async function setupIos() {
   const swiftDir = path.join(tmpDir, 'swift');
   const srcFramework = path.join(swiftDir, 'RGBLightningNode.xcframework');
   if (!fs.existsSync(srcFramework)) {
-    throw new Error('RGBLightningNode.xcframework not found inside swift/ in zip');
+    throw new Error(
+      'RGBLightningNode.xcframework not found inside swift/ in zip'
+    );
   }
 
   // Move xcframework to ios/
   fs.cpSync(srcFramework, IOS_FRAMEWORK_DIR, { recursive: true });
 
   // Update generated binding files (Swift wrapper + FFI header + modulemap)
-  for (const file of ['RGBLightningNode.swift', 'RGBLightningNodeFFI.h', 'RGBLightningNodeFFI.modulemap']) {
+  for (const file of [
+    'RGBLightningNode.swift',
+    'RGBLightningNodeFFI.h',
+    'RGBLightningNodeFFI.modulemap',
+  ]) {
     const src = path.join(swiftDir, file);
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(IOS_DIR, file));
   }

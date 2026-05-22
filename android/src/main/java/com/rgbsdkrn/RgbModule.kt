@@ -708,7 +708,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val res = node.checkIndexerUrl(indexerUrl)
         val map = Arguments.createMap()
-        map.putString("value", res.toString())
+        map.putString("indexerProtocol", res.indexerProtocol)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -822,7 +822,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val res = node.estimateFee(blocks.toInt().toUShort())
         val map = Arguments.createMap()
-        map.putString("value", res.toString())
+        map.putDouble("feeRate", res.feeRate)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1066,7 +1066,20 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val arr = Arguments.createArray()
         unspents.forEach { unspent ->
           val map = Arguments.createMap()
-          map.putString("value", unspent.toString())
+          val utxoMap = Arguments.createMap()
+          utxoMap.putString("outpoint", unspent.utxo.outpoint)
+          utxoMap.putDouble("btcAmount", unspent.utxo.btcAmount.toDouble())
+          utxoMap.putBoolean("colorable", unspent.utxo.colorable)
+          map.putMap("utxo", utxoMap)
+          val allocsArr = Arguments.createArray()
+          unspent.rgbAllocations.forEach { alloc ->
+            val allocMap = Arguments.createMap()
+            alloc.assetId?.let { allocMap.putString("assetId", it) }
+            allocMap.putString("assignment", alloc.assignment.toString())
+            allocMap.putBoolean("settled", alloc.settled)
+            allocsArr.pushMap(allocMap)
+          }
+          if (allocsArr.size() > 0) map.putArray("rgbAllocations", allocsArr)
           arr.pushMap(map)
         }
         withContext(Dispatchers.Main) { promise.resolve(arr) }

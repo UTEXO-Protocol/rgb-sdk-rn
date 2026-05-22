@@ -141,7 +141,10 @@ export async function startNodeWithCustomSigner(
   });
 
   // 3. Create the custom signer — returns signerId + bootstrap key material.
-  const signerResult = await CustomSigner.createCustomSigner(seedHex, 'regtest');
+  const signerResult = await CustomSigner.createCustomSigner(
+    seedHex,
+    'regtest'
+  );
   const { signerId, ...bootstrap } = signerResult;
 
   const existingBootstrap = await loadBootstrap();

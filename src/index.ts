@@ -1,16 +1,6 @@
-// Main wallet exports
-export {
-  wallet,
-  createWallet,
-  WalletManager,
-  createWalletManager,
-  restoreFromBackup,
-  restoreFromVss,
-} from './wallet/wallet-manager';
-export type {
-  WalletInitParams,
-  WalletManagerInitParams,
-} from './wallet/wallet-manager';
+// Wallet utilities
+export { createWallet } from './wallet/wallet-manager';
+export type { WalletInitParams } from '@utexo/rgb-sdk-core';
 
 // RLN node manager
 export { RLNManager, createRLNManager } from './wallet/rln-manager';
@@ -18,7 +8,10 @@ export { RLNManager, createRLNManager } from './wallet/rln-manager';
 // UTEXO wallet (implements IWalletManager + IUTEXOProtocol, backed by RLN)
 export { UTEXOWallet } from './wallet/utexo-wallet';
 export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
-export { PasswordRLNSigner, NativeExternalRLNSigner } from './wallet/rln-signers';
+export {
+  PasswordRLNSigner,
+  NativeExternalRLNSigner,
+} from './wallet/rln-signers';
 export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln-signers';
 
 // Binding and signer (for advanced / testing use)

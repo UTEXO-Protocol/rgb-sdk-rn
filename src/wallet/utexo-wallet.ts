@@ -36,7 +36,6 @@ import type {
   SendBtcEndRequestModel,
   FailTransfersRequest,
   WalletBackupResponse,
-  GetFeeEstimationResponse,
   VssBackupConfig,
   VssBackupInfo,
   CreateUtxosBeginRequestModel,
@@ -123,7 +122,12 @@ export interface UTEXOWalletNodeParams {
 function parseAssignment(s: string): Assignment {
   const m = s.match(/Fungible\((\d+)\)/);
   if (m) return { type: 'Fungible', amount: Number(m[1]) };
-  const types: AssignmentType[] = ['NonFungible', 'InflationRight', 'ReplaceRight', 'Any'];
+  const types: AssignmentType[] = [
+    'NonFungible',
+    'InflationRight',
+    'ReplaceRight',
+    'Any',
+  ];
   for (const t of types) {
     if (s.includes(t)) return { type: t };
   }
@@ -166,14 +170,19 @@ function mapUtxo(u: RlnUnspent): Unspent {
         assetId: a.assetId,
         assignment: parseAssignment(a.assignment),
         settled: a.settled,
-      }),
+      })
     ),
     pendingBlinded: 0,
   };
 }
 
 function mapTransaction(t: RlnTransaction): Transaction {
-  const validTypes: TransactionType[] = ['RgbSend', 'Drain', 'CreateUtxos', 'User'];
+  const validTypes: TransactionType[] = [
+    'RgbSend',
+    'Drain',
+    'CreateUtxos',
+    'User',
+  ];
   return {
     txid: t.txid,
     transactionType: (validTypes.includes(t.transactionType as TransactionType)
@@ -188,10 +197,17 @@ function mapTransaction(t: RlnTransaction): Transaction {
 
 function mapTransfer(t: RlnTransfer): Transfer {
   const validStatuses: TransferStatus[] = [
-    'WaitingCounterparty', 'WaitingConfirmations', 'Settled', 'Failed',
+    'WaitingCounterparty',
+    'WaitingConfirmations',
+    'Settled',
+    'Failed',
   ];
   const validKinds: TransferKind[] = [
-    'Issuance', 'ReceiveBlind', 'ReceiveWitness', 'Send', 'Inflation',
+    'Issuance',
+    'ReceiveBlind',
+    'ReceiveWitness',
+    'Send',
+    'Inflation',
   ];
   return {
     idx: t.idx,
@@ -202,13 +218,15 @@ function mapTransfer(t: RlnTransfer): Transfer {
       ? t.status
       : 'WaitingCounterparty') as TransferStatus,
     assignments: (t.assignments ?? []).map(parseAssignment),
-    kind: (validKinds.includes(t.kind as TransferKind) ? t.kind : 'Send') as TransferKind,
+    kind: (validKinds.includes(t.kind as TransferKind)
+      ? t.kind
+      : 'Send') as TransferKind,
     txid: t.txid,
     recipientId: t.recipientId,
     receiveUtxo: t.receiveUtxo ? parseOutpoint(t.receiveUtxo) : undefined,
     changeUtxo: t.changeUtxo ? parseOutpoint(t.changeUtxo) : undefined,
     expiration: t.expiration,
-    transportEndpoints: (t.transportEndpoints ?? []).map(e => ({
+    transportEndpoints: (t.transportEndpoints ?? []).map((e) => ({
       endpoint: e.endpoint,
       transportType: e.transportType,
       used: e.used,
@@ -227,7 +245,9 @@ function mapAssetNia(a: RlnAssetNia): AssetNIA {
     timestamp: a.timestamp,
     addedAt: a.addedAt,
     balance: mapBalance(a.balance),
-    media: a.media ? { filePath: a.media.filePath, mime: a.media.mime } : undefined,
+    media: a.media
+      ? { filePath: a.media.filePath, mime: a.media.mime }
+      : undefined,
   };
 }
 
@@ -241,7 +261,9 @@ function mapAssetCfa(a: RlnAssetCfa): AssetCFA {
     timestamp: a.timestamp,
     addedAt: a.addedAt,
     balance: mapBalance(a.balance),
-    media: a.media ? { filePath: a.media.filePath, mime: a.media.mime } : undefined,
+    media: a.media
+      ? { filePath: a.media.filePath, mime: a.media.mime }
+      : undefined,
   };
 }
 
@@ -258,7 +280,9 @@ function mapAssetIfa(a: RlnAssetIfa): AssetIfa {
     timestamp: a.timestamp,
     addedAt: a.addedAt,
     balance: mapBalance(a.balance),
-    media: a.media ? { filePath: a.media.filePath, mime: a.media.mime } : undefined,
+    media: a.media
+      ? { filePath: a.media.filePath, mime: a.media.mime }
+      : undefined,
     rejectListUrl: a.rejectListUrl,
   };
 }
@@ -295,7 +319,10 @@ function mapInvoiceReceiveData(r: RlnRgbInvoiceResponse): InvoiceReceiveData {
   };
 }
 
-function mapInvoiceData(r: RlnDecodeRgbInvoiceResponse, invoice: string): InvoiceData {
+function mapInvoiceData(
+  r: RlnDecodeRgbInvoiceResponse,
+  invoice: string
+): InvoiceData {
   const schemaMap: Record<string, AssetSchema> = {
     Nia: AssetSchema.Nia,
     Uda: AssetSchema.Uda,
@@ -315,14 +342,19 @@ function mapInvoiceData(r: RlnDecodeRgbInvoiceResponse, invoice: string): Invoic
 
 function mapInvoiceStatus(s: RlnInvoiceStatus): CoreTransferStatus | null {
   switch (s) {
-    case 'PENDING': return 'WaitingCounterparty';
+    case 'PENDING':
+      return 'WaitingCounterparty';
     case 'CLAIMABLE':
-    case 'CLAIMING': return 'WaitingConfirmations';
-    case 'SUCCEEDED': return 'Settled';
+    case 'CLAIMING':
+      return 'WaitingConfirmations';
+    case 'SUCCEEDED':
+      return 'Settled';
     case 'CANCELLED':
     case 'FAILED':
-    case 'EXPIRED': return 'Failed';
-    default: return null;
+    case 'EXPIRED':
+      return 'Failed';
+    default:
+      return null;
   }
 }
 
@@ -388,8 +420,13 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.init();
   }
 
-  goOnline(_indexerUrl: string, _skipConsistencyCheck?: boolean): Promise<void> {
-    throw new Error('UTEXOWallet.goOnline: not implemented — use unlock(params) instead');
+  goOnline(
+    _indexerUrl: string,
+    _skipConsistencyCheck?: boolean
+  ): Promise<void> {
+    throw new Error(
+      'UTEXOWallet.goOnline: not implemented — use unlock(params) instead'
+    );
   }
 
   getXpub(): { xpubVan: string; xpubCol: string } {
@@ -451,7 +488,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       params.num ?? null,
       params.size ?? null,
       params.feeRate ?? 1.5,
-      false,
+      false
     );
     return params.num ?? 0;
   }
@@ -471,7 +508,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       params.ticker,
       params.name,
       params.precision,
-      params.amounts,
+      params.amounts
     );
     return mapAssetNia(raw);
   }
@@ -483,7 +520,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       params.precision,
       params.amounts,
       params.inflationAmounts,
-      params.rejectListUrl,
+      params.rejectListUrl
     );
   }
 
@@ -495,7 +532,10 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     throw new Error('UTEXOWallet.inflateEnd: not implemented');
   }
 
-  inflate(_params: InflateAssetIfaRequestModel, _mnemonic?: string): Promise<OperationResult> {
+  inflate(
+    _params: InflateAssetIfaRequestModel,
+    _mnemonic?: string
+  ): Promise<OperationResult> {
     throw new Error('UTEXOWallet.inflate: not implemented');
   }
 
@@ -509,11 +549,15 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     throw new Error('UTEXOWallet.sendEnd: not implemented');
   }
 
-  async send(params: RlnSendAssetRequestModel, _mnemonic?: string): Promise<SendResult> {
+  async send(
+    params: RlnSendAssetRequestModel,
+    _mnemonic?: string
+  ): Promise<SendResult> {
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
     if (!assetId) throw new Error('UTEXOWallet.send: assetId required');
-    if (params.amount === undefined) throw new Error('UTEXOWallet.send: amount required');
+    if (params.amount === undefined)
+      throw new Error('UTEXOWallet.send: amount required');
     return this.rln.rlnSendRgb(
       params.donation ?? false,
       params.feeRate ?? 1.5,
@@ -523,7 +567,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       decoded.recipientId,
       params.amount,
       decoded.transportEndpoints,
-      params.witnessData ?? null,
+      params.witnessData ?? null
     );
   }
 
@@ -542,7 +586,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       params.amount,
       params.address,
       params.feeRate,
-      params.skipSync ?? false,
+      params.skipSync ?? false
     );
     return resp.txid;
   }
@@ -556,8 +600,8 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
         params.amount ?? null,
         params.durationSeconds ?? null,
         params.minConfirmations ?? 0,
-        false,
-      ),
+        false
+      )
     );
   }
 
@@ -568,15 +612,15 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
         params.amount ?? null,
         params.durationSeconds ?? null,
         params.minConfirmations ?? 0,
-        true,
-      ),
+        true
+      )
     );
   }
 
   async decodeRGBInvoice(params: { invoice: string }): Promise<InvoiceData> {
     return mapInvoiceData(
       await this.rln.rlnDecodeRgbInvoice(params.invoice),
-      params.invoice,
+      params.invoice
     );
   }
 
@@ -594,7 +638,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     const resp = await this.rln.rlnFailTransfers(
       params.batchTransferIdx ?? null,
       params.noAssetOnly ?? false,
-      params.skipSync ?? false,
+      params.skipSync ?? false
     );
     return resp.transfersChanged;
   }
@@ -627,9 +671,9 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   // ── IWalletManager — Fee Estimation ──────────────────────────────────────
 
-  async estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
+  async estimateFeeRate(blocks: number): Promise<number> {
     const resp = await this.rln.rlnEstimateFee(blocks);
-    return { [String(blocks)]: resp.feeRate };
+    return resp.feeRate;
   }
 
   estimateFee(_psbtBase64: string): Promise<EstimateFeeResult> {
@@ -638,9 +682,15 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   // ── IWalletManager — Backup ───────────────────────────────────────────────
 
-  async createBackup(params: { backupPath: string; password: string }): Promise<WalletBackupResponse> {
+  async createBackup(params: {
+    backupPath: string;
+    password: string;
+  }): Promise<WalletBackupResponse> {
     await this.rln.rlnBackup(params.backupPath, params.password);
-    return { message: 'Backup created successfully', backupPath: params.backupPath };
+    return {
+      message: 'Backup created successfully',
+      backupPath: params.backupPath,
+    };
   }
 
   // ── IWalletManager — Cryptographic Operations (not implemented) ───────────
@@ -653,13 +703,19 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     throw new Error('UTEXOWallet.signMessage: not implemented');
   }
 
-  verifyMessage(_message: string, _signature: string, _accountXpub?: string): Promise<boolean> {
+  verifyMessage(
+    _message: string,
+    _signature: string,
+    _accountXpub?: string
+  ): Promise<boolean> {
     throw new Error('UTEXOWallet.verifyMessage: not implemented');
   }
 
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
 
-  async createLightningInvoice(params: CreateLightningInvoiceRequestModel): Promise<LightningReceiveRequest> {
+  async createLightningInvoice(
+    params: CreateLightningInvoiceRequestModel
+  ): Promise<LightningReceiveRequest> {
     const amtMsat = params.amountSats != null ? params.amountSats * 1000 : null;
     const assetId = params.asset?.assetId || null;
     const assetAmount = assetId ? (params.asset?.amount ?? null) : null;
@@ -667,17 +723,21 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       amtMsat,
       params.expirySeconds ?? 3600,
       assetId,
-      assetAmount,
+      assetAmount
     );
     return { lnInvoice: resp.invoice };
   }
 
-  async getLightningReceiveRequest(id: string): Promise<CoreTransferStatus | null> {
+  async getLightningReceiveRequest(
+    id: string
+  ): Promise<CoreTransferStatus | null> {
     const status = await this.rln.rlnInvoiceStatus(id);
     return mapInvoiceStatus(status);
   }
 
-  async getLightningSendRequest(id: string): Promise<CoreTransferStatus | null> {
+  async getLightningSendRequest(
+    id: string
+  ): Promise<CoreTransferStatus | null> {
     const payment = await this.rln.rlnGetPayment(id);
     if (!payment?.status) return null;
     // Native layer serializes enum with .name / .uppercased() → always UPPERCASE
@@ -692,25 +752,33 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return map[String(payment.status).toUpperCase()] ?? null;
   }
 
-  getLightningSendFeeEstimate(_params: GetLightningSendFeeEstimateRequestModel): Promise<number> {
+  getLightningSendFeeEstimate(
+    _params: GetLightningSendFeeEstimateRequestModel
+  ): Promise<number> {
     throw new Error('UTEXOWallet.getLightningSendFeeEstimate: not implemented');
   }
 
-  payLightningInvoiceBegin(_params: PayLightningInvoiceRequestModel): Promise<string> {
+  payLightningInvoiceBegin(
+    _params: PayLightningInvoiceRequestModel
+  ): Promise<string> {
     throw new Error('UTEXOWallet.payLightningInvoiceBegin: not implemented');
   }
 
-  payLightningInvoiceEnd(_params: SendAssetEndRequestModel): Promise<LightningSendRequest> {
+  payLightningInvoiceEnd(
+    _params: SendAssetEndRequestModel
+  ): Promise<LightningSendRequest> {
     throw new Error('UTEXOWallet.payLightningInvoiceEnd: not implemented');
   }
 
-  async payLightningInvoice(params: PayLightningInvoiceRequestModel): Promise<LightningSendRequest> {
+  async payLightningInvoice(
+    params: PayLightningInvoiceRequestModel
+  ): Promise<LightningSendRequest> {
     const amtMsat = params.amount != null ? params.amount * 1000 : null;
     const resp = await this.rln.rlnSendPayment(
       params.lnInvoice,
       amtMsat,
       params.assetId ?? null,
-      null,
+      null
     );
     return { txid: resp.paymentHash ?? resp.paymentId, status: resp.status };
   }
@@ -718,19 +786,24 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   async listLightningPayments(): Promise<ListLightningPaymentsResponse> {
     const payments = await this.rln.rlnListPayments();
     return {
-      payments: payments.map(p => ({ txid: p.paymentHash, status: p.status })),
+      payments: payments.map((p) => ({
+        txid: p.paymentHash,
+        status: p.status,
+      })),
     };
   }
 
   // ── IUTEXOProtocol — Onchain ──────────────────────────────────────────────
 
-  async onchainReceive(params: RlnOnchainReceiveRequestModel): Promise<OnchainReceiveResponse> {
+  async onchainReceive(
+    params: RlnOnchainReceiveRequestModel
+  ): Promise<OnchainReceiveResponse> {
     const resp = await this.rln.rlnRgbInvoice(
       params.assetId,
       params.amount,
       params.durationSeconds ?? null,
       params.minConfirmations ?? 0,
-      params.witness ?? true,
+      params.witness ?? true
     );
     return { invoice: resp.invoice };
   }
@@ -739,15 +812,20 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     throw new Error('UTEXOWallet.onchainSendBegin: not implemented');
   }
 
-  onchainSendEnd(_params: SendAssetEndRequestModel): Promise<OnchainSendResponse> {
+  onchainSendEnd(
+    _params: SendAssetEndRequestModel
+  ): Promise<OnchainSendResponse> {
     throw new Error('UTEXOWallet.onchainSendEnd: not implemented');
   }
 
-  async onchainSend(params: RlnOnchainSendRequestModel): Promise<OnchainSendResponse> {
+  async onchainSend(
+    params: RlnOnchainSendRequestModel
+  ): Promise<OnchainSendResponse> {
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
     if (!assetId) throw new Error('UTEXOWallet.onchainSend: assetId required');
-    if (params.amount === undefined) throw new Error('UTEXOWallet.onchainSend: amount required');
+    if (params.amount === undefined)
+      throw new Error('UTEXOWallet.onchainSend: amount required');
     return this.rln.rlnSendRgb(
       params.donation ?? false,
       params.feeRate ?? 1.5,
@@ -757,7 +835,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       decoded.recipientId,
       params.amount,
       decoded.transportEndpoints,
-      params.witnessData ?? null,
+      params.witnessData ?? null
     );
   }
 
@@ -795,11 +873,17 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.rln.rlnListChannels();
   }
 
-  openChannel(request: Parameters<RLNManager['rlnOpenChannel']>[0]): Promise<RlnOpenChannelResponse> {
+  openChannel(
+    request: Parameters<RLNManager['rlnOpenChannel']>[0]
+  ): Promise<RlnOpenChannelResponse> {
     return this.rln.rlnOpenChannel(request);
   }
 
-  closeChannel(channelId: string, peerPubkey: string, force: boolean): Promise<void> {
+  closeChannel(
+    channelId: string,
+    peerPubkey: string,
+    force: boolean
+  ): Promise<void> {
     return this.rln.rlnCloseChannel(channelId, peerPubkey, force);
   }
 
@@ -811,9 +895,14 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     destPubkey: string,
     amtMsat: number,
     assetId?: string,
-    assetAmount?: number,
+    assetAmount?: number
   ): Promise<RlnKeysendResponse> {
-    return this.rln.rlnKeysend(destPubkey, amtMsat, assetId ?? null, assetAmount ?? null);
+    return this.rln.rlnKeysend(
+      destPubkey,
+      amtMsat,
+      assetId ?? null,
+      assetAmount ?? null
+    );
   }
 
   decodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse> {

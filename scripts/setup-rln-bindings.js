@@ -23,7 +23,9 @@ function setupIos() {
   }
 
   if (fs.existsSync(IOS_FRAMEWORK_DIR)) {
-    console.log('[rln-bindings] RGBLightningNode.xcframework already exists, skipping.');
+    console.log(
+      '[rln-bindings] RGBLightningNode.xcframework already exists, skipping.'
+    );
     return;
   }
 

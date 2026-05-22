@@ -50,7 +50,9 @@ export class RLNManager implements IRLN {
     return this.rlnBinding.rlnInitNode(password, mnemonic);
   }
 
-  rlnUnlockNode(params: { password: string } & IRLNUnlockParams): Promise<void> {
+  rlnUnlockNode(
+    params: { password: string } & IRLNUnlockParams
+  ): Promise<void> {
     return this.rlnBinding.rlnUnlockNode(params);
   }
 
@@ -73,7 +75,11 @@ export class RLNManager implements IRLN {
     network: string,
     permissivePolicy?: boolean
   ): Promise<number> {
-    return this.rlnBinding.rlnCreateNativeExternalSigner(seedHex, network, permissivePolicy);
+    return this.rlnBinding.rlnCreateNativeExternalSigner(
+      seedHex,
+      network,
+      permissivePolicy
+    );
   }
 
   rlnInitNodeWithNativeExternalSigner(signerId: number): Promise<void> {
@@ -88,14 +94,19 @@ export class RLNManager implements IRLN {
     signerId: number,
     params: IRLNUnlockParams
   ): Promise<void> {
-    return this.rlnBinding.rlnUnlockNodeWithNativeExternalSigner(signerId, params);
+    return this.rlnBinding.rlnUnlockNodeWithNativeExternalSigner(
+      signerId,
+      params
+    );
   }
 
   rlnDestroyNativeExternalSigner(signerId: number): Promise<void> {
     return this.rlnBinding.rlnDestroyNativeExternalSigner(signerId);
   }
 
-  rlnInitNodeWithExternalSigner(bootstrap: IRLNExternalSignerBootstrap): Promise<void> {
+  rlnInitNodeWithExternalSigner(
+    bootstrap: IRLNExternalSignerBootstrap
+  ): Promise<void> {
     return this.rlnBinding.rlnInitNodeWithExternalSigner(bootstrap);
   }
 
@@ -146,7 +157,11 @@ export class RLNManager implements IRLN {
     return this.rlnBinding.rlnOpenChannel(request);
   }
 
-  rlnCloseChannel(channelId: string, peerPubkey: string, force: boolean): Promise<void> {
+  rlnCloseChannel(
+    channelId: string,
+    peerPubkey: string,
+    force: boolean
+  ): Promise<void> {
     return this.rlnBinding.rlnCloseChannel(channelId, peerPubkey, force);
   }
 
@@ -174,7 +189,12 @@ export class RLNManager implements IRLN {
     assetId: string | null,
     assetAmount: number | null
   ): Promise<RlnLnInvoiceResponse> {
-    return this.rlnBinding.rlnLnInvoice(amtMsat, expirySec, assetId, assetAmount);
+    return this.rlnBinding.rlnLnInvoice(
+      amtMsat,
+      expirySec,
+      assetId,
+      assetAmount
+    );
   }
 
   rlnDecodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse> {
@@ -191,7 +211,12 @@ export class RLNManager implements IRLN {
     assetId: string | null,
     assetAmount: number | null
   ): Promise<RlnSendPaymentResponse> {
-    return this.rlnBinding.rlnSendPayment(invoice, amtMsat, assetId, assetAmount);
+    return this.rlnBinding.rlnSendPayment(
+      invoice,
+      amtMsat,
+      assetId,
+      assetAmount
+    );
   }
 
   rlnKeysend(
@@ -200,7 +225,12 @@ export class RLNManager implements IRLN {
     assetId: string | null,
     assetAmount: number | null
   ): Promise<RlnKeysendResponse> {
-    return this.rlnBinding.rlnKeysend(destPubkey, amtMsat, assetId, assetAmount);
+    return this.rlnBinding.rlnKeysend(
+      destPubkey,
+      amtMsat,
+      assetId,
+      assetAmount
+    );
   }
 
   // ── On-chain wallet ──────────────────────────────────────────────────────────
@@ -224,20 +254,65 @@ export class RLNManager implements IRLN {
 
   // ── Assets / transfers ──────────────────────────────────────────────────────
 
-  rlnIssueAssetNia(ticker: string, name: string, precision: number, amounts: number[]): Promise<any> {
+  rlnIssueAssetNia(
+    ticker: string,
+    name: string,
+    precision: number,
+    amounts: number[]
+  ): Promise<any> {
     return this.rlnBinding.rlnIssueAssetNia(ticker, name, precision, amounts);
   }
 
-  rlnIssueAssetCfa(name: string, details: string | null, precision: number, amounts: number[], fileDigest: string | null): Promise<any> {
-    return this.rlnBinding.rlnIssueAssetCfa(name, details, precision, amounts, fileDigest);
+  rlnIssueAssetCfa(
+    name: string,
+    details: string | null,
+    precision: number,
+    amounts: number[],
+    fileDigest: string | null
+  ): Promise<any> {
+    return this.rlnBinding.rlnIssueAssetCfa(
+      name,
+      details,
+      precision,
+      amounts,
+      fileDigest
+    );
   }
 
-  rlnIssueAssetIfa(ticker: string, name: string, precision: number, amounts: number[], inflationAmounts: number[], rejectListUrl: string | null): Promise<any> {
-    return this.rlnBinding.rlnIssueAssetIfa(ticker, name, precision, amounts, inflationAmounts, rejectListUrl);
+  rlnIssueAssetIfa(
+    ticker: string,
+    name: string,
+    precision: number,
+    amounts: number[],
+    inflationAmounts: number[],
+    rejectListUrl: string | null
+  ): Promise<any> {
+    return this.rlnBinding.rlnIssueAssetIfa(
+      ticker,
+      name,
+      precision,
+      amounts,
+      inflationAmounts,
+      rejectListUrl
+    );
   }
 
-  rlnIssueAssetUda(ticker: string, name: string, details: string | null, precision: number, mediaFileDigest: string | null, attachmentsFileDigests: string[]): Promise<any> {
-    return this.rlnBinding.rlnIssueAssetUda(ticker, name, details, precision, mediaFileDigest, attachmentsFileDigests);
+  rlnIssueAssetUda(
+    ticker: string,
+    name: string,
+    details: string | null,
+    precision: number,
+    mediaFileDigest: string | null,
+    attachmentsFileDigests: string[]
+  ): Promise<any> {
+    return this.rlnBinding.rlnIssueAssetUda(
+      ticker,
+      name,
+      details,
+      precision,
+      mediaFileDigest,
+      attachmentsFileDigests
+    );
   }
 
   rlnListAssets(filterAssetSchemas: string[]): Promise<RlnListAssetsResponse> {
@@ -255,7 +330,13 @@ export class RLNManager implements IRLN {
     minConfirmations: number,
     witness: boolean
   ): Promise<RlnRgbInvoiceResponse> {
-    return this.rlnBinding.rlnRgbInvoice(assetId, assignmentAmount, durationSeconds, minConfirmations, witness);
+    return this.rlnBinding.rlnRgbInvoice(
+      assetId,
+      assignmentAmount,
+      durationSeconds,
+      minConfirmations,
+      witness
+    );
   }
 
   rlnSendRgb(
@@ -269,7 +350,17 @@ export class RLNManager implements IRLN {
     transportEndpoints: string[],
     witnessData?: { amountSat: number; blinding?: number } | null
   ): Promise<RlnSendRgbResponse> {
-    return this.rlnBinding.rlnSendRgb(donation, feeRate, minConfirmations, skipSync, assetId, recipientId, amount, transportEndpoints, witnessData);
+    return this.rlnBinding.rlnSendRgb(
+      donation,
+      feeRate,
+      minConfirmations,
+      skipSync,
+      assetId,
+      recipientId,
+      amount,
+      transportEndpoints,
+      witnessData
+    );
   }
 
   rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]> {
@@ -293,7 +384,11 @@ export class RLNManager implements IRLN {
     noAssetOnly: boolean,
     skipSync: boolean
   ): Promise<RlnFailTransfersResponse> {
-    return this.rlnBinding.rlnFailTransfers(batchTransferIdx, noAssetOnly, skipSync);
+    return this.rlnBinding.rlnFailTransfers(
+      batchTransferIdx,
+      noAssetOnly,
+      skipSync
+    );
   }
 
   // ── Utility ─────────────────────────────────────────────────────────────────

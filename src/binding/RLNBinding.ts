@@ -36,18 +36,34 @@ import type {
 
 // The native layer may return BtcBalance as its Rust Display string
 // e.g. "BtcBalance(settled=100, future=0, spendable=100)" — parse it into a proper object.
-function parseBtcSubBalance(raw: any): { settled: number; future: number; spendable: number } {
+function parseBtcSubBalance(raw: any): {
+  settled: number;
+  future: number;
+  spendable: number;
+} {
   if (raw && typeof raw === 'object') return raw;
   if (typeof raw === 'string') {
     const m = raw.match(/settled=(\d+)[,\s]+future=(\d+)[,\s]+spendable=(\d+)/);
-    if (m) return { settled: Number(m[1]), future: Number(m[2]), spendable: Number(m[3]) };
+    if (m)
+      return {
+        settled: Number(m[1]),
+        future: Number(m[2]),
+        spendable: Number(m[3]),
+      };
   }
   return { settled: 0, future: 0, spendable: 0 };
 }
 
 function normalizeBtcBalance(raw: any): RlnBtcBalance {
-  if (!raw || typeof raw !== 'object') return { vanilla: { settled: 0, future: 0, spendable: 0 }, colored: { settled: 0, future: 0, spendable: 0 } };
-  return { vanilla: parseBtcSubBalance(raw.vanilla), colored: parseBtcSubBalance(raw.colored) };
+  if (!raw || typeof raw !== 'object')
+    return {
+      vanilla: { settled: 0, future: 0, spendable: 0 },
+      colored: { settled: 0, future: 0, spendable: 0 },
+    };
+  return {
+    vanilla: parseBtcSubBalance(raw.vanilla),
+    colored: parseBtcSubBalance(raw.colored),
+  };
 }
 
 export class RLNBinding implements IRLN {
@@ -178,7 +194,11 @@ export class RLNBinding implements IRLN {
     permissivePolicy: boolean = true
   ): Promise<number> {
     return this.withNodeQueue(async () => {
-      return Rgb.rlnCreateNativeExternalSigner(seedHex, network, permissivePolicy);
+      return Rgb.rlnCreateNativeExternalSigner(
+        seedHex,
+        network,
+        permissivePolicy
+      );
     });
   }
 
@@ -276,11 +296,15 @@ export class RLNBinding implements IRLN {
   // ── Node info ───────────────────────────────────────────────────────────────
 
   async rlnNodeInfo(): Promise<RlnNodeInfo> {
-    return this.withNodeOperation((nodeId) => Rgb.rlnNodeInfo(nodeId)) as Promise<RlnNodeInfo>;
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnNodeInfo(nodeId)
+    ) as Promise<RlnNodeInfo>;
   }
 
   async rlnNetworkInfo(): Promise<RlnNetworkInfo> {
-    return this.withNodeOperation((nodeId) => Rgb.rlnNetworkInfo(nodeId)) as Promise<RlnNetworkInfo>;
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnNetworkInfo(nodeId)
+    ) as Promise<RlnNetworkInfo>;
   }
 
   // ── Peers ───────────────────────────────────────────────────────────────────
@@ -292,7 +316,9 @@ export class RLNBinding implements IRLN {
   }
 
   async rlnListPeers(): Promise<RlnPeer[]> {
-    return this.withNodeOperation((nodeId) => Rgb.rlnListPeers(nodeId)) as Promise<RlnPeer[]>;
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnListPeers(nodeId)
+    ) as Promise<RlnPeer[]>;
   }
 
   async rlnDisconnectPeer(peerPubkey: string): Promise<void> {
@@ -304,7 +330,9 @@ export class RLNBinding implements IRLN {
   // ── Channels ────────────────────────────────────────────────────────────────
 
   async rlnListChannels(): Promise<RlnChannel[]> {
-    return this.withNodeOperation((nodeId) => Rgb.rlnListChannels(nodeId)) as Promise<RlnChannel[]>;
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnListChannels(nodeId)
+    ) as Promise<RlnChannel[]>;
   }
 
   async rlnOpenChannel(request: {
@@ -359,7 +387,9 @@ export class RLNBinding implements IRLN {
   // ── Payments ─────────────────────────────────────────────────────────────────
 
   async rlnListPayments(): Promise<RlnPayment[]> {
-    return this.withNodeOperation((nodeId) => Rgb.rlnListPayments(nodeId)) as Promise<RlnPayment[]>;
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnListPayments(nodeId)
+    ) as Promise<RlnPayment[]>;
   }
 
   async rlnGetPayment(paymentHash: string): Promise<RlnPayment> {
@@ -387,13 +417,17 @@ export class RLNBinding implements IRLN {
     ) as Promise<RlnLnInvoiceResponse>;
   }
 
-  async rlnDecodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse> {
+  async rlnDecodeLnInvoice(
+    invoice: string
+  ): Promise<RlnDecodeLnInvoiceResponse> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnDecodeLnInvoice(nodeId, invoice)
     ) as Promise<RlnDecodeLnInvoiceResponse>;
   }
 
-  async rlnDecodeRgbInvoice(invoice: string): Promise<RlnDecodeRgbInvoiceResponse> {
+  async rlnDecodeRgbInvoice(
+    invoice: string
+  ): Promise<RlnDecodeRgbInvoiceResponse> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnDecodeRgbInvoice(nodeId, invoice)
     ) as Promise<RlnDecodeRgbInvoiceResponse>;
@@ -424,11 +458,15 @@ export class RLNBinding implements IRLN {
   // ── On-chain wallet ──────────────────────────────────────────────────────────
 
   async rlnAddress(): Promise<RlnAddressResponse> {
-    return this.withNodeOperation((nodeId) => Rgb.rlnAddress(nodeId)) as Promise<RlnAddressResponse>;
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnAddress(nodeId)
+    ) as Promise<RlnAddressResponse>;
   }
 
   async rlnBtcBalance(skipSync: boolean = false): Promise<RlnBtcBalance> {
-    const raw = await this.withNodeOperation((nodeId) => Rgb.rlnBtcBalance(nodeId, skipSync));
+    const raw = await this.withNodeOperation((nodeId) =>
+      Rgb.rlnBtcBalance(nodeId, skipSync)
+    );
     return normalizeBtcBalance(raw);
   }
 
@@ -464,7 +502,14 @@ export class RLNBinding implements IRLN {
     fileDigest: string | null
   ): Promise<any> {
     return this.withNodeOperation((nodeId) =>
-      Rgb.rlnIssueAssetCfa(nodeId, name, details, precision, amounts, fileDigest)
+      Rgb.rlnIssueAssetCfa(
+        nodeId,
+        name,
+        details,
+        precision,
+        amounts,
+        fileDigest
+      )
     );
   }
 
@@ -477,7 +522,15 @@ export class RLNBinding implements IRLN {
     rejectListUrl: string | null
   ): Promise<any> {
     return this.withNodeOperation((nodeId) =>
-      Rgb.rlnIssueAssetIfa(nodeId, ticker, name, precision, amounts, inflationAmounts, rejectListUrl)
+      Rgb.rlnIssueAssetIfa(
+        nodeId,
+        ticker,
+        name,
+        precision,
+        amounts,
+        inflationAmounts,
+        rejectListUrl
+      )
     );
   }
 
@@ -490,13 +543,23 @@ export class RLNBinding implements IRLN {
     attachmentsFileDigests: string[]
   ): Promise<any> {
     return this.withNodeOperation((nodeId) =>
-      Rgb.rlnIssueAssetUda(nodeId, ticker, name, details, precision, mediaFileDigest, attachmentsFileDigests)
+      Rgb.rlnIssueAssetUda(
+        nodeId,
+        ticker,
+        name,
+        details,
+        precision,
+        mediaFileDigest,
+        attachmentsFileDigests
+      )
     );
   }
 
   // ── Assets / transfers ──────────────────────────────────────────────────────
 
-  async rlnListAssets(filterAssetSchemas: string[]): Promise<RlnListAssetsResponse> {
+  async rlnListAssets(
+    filterAssetSchemas: string[]
+  ): Promise<RlnListAssetsResponse> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnListAssets(nodeId, filterAssetSchemas)
     ) as Promise<RlnListAssetsResponse>;
@@ -540,10 +603,17 @@ export class RLNBinding implements IRLN {
   ): Promise<RlnSendRgbResponse> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnSendRgb(
-        nodeId, donation, feeRate, minConfirmations, skipSync,
-        assetId, recipientId, amount, transportEndpoints,
+        nodeId,
+        donation,
+        feeRate,
+        minConfirmations,
+        skipSync,
+        assetId,
+        recipientId,
+        amount,
+        transportEndpoints,
         witnessData?.amountSat ?? null,
-        witnessData?.blinding ?? null,
+        witnessData?.blinding ?? null
       )
     ) as Promise<RlnSendRgbResponse>;
   }
@@ -590,7 +660,9 @@ export class RLNBinding implements IRLN {
     ) as Promise<RlnEstimateFeeResponse>;
   }
 
-  async rlnCheckIndexerUrl(indexerUrl: string): Promise<RlnCheckIndexerUrlResponse> {
+  async rlnCheckIndexerUrl(
+    indexerUrl: string
+  ): Promise<RlnCheckIndexerUrlResponse> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnCheckIndexerUrl(nodeId, indexerUrl)
     ) as Promise<RlnCheckIndexerUrlResponse>;
@@ -613,35 +685,16 @@ export class RLNBinding implements IRLN {
     feeRate: number,
     skipSync: boolean
   ): Promise<void> {
-    await this.withNodeOperation(async (nodeId) => {
-      const maxConflictRetries = 20;
-      let lastConflictError: unknown = null;
-      for (let attempt = 1; attempt <= maxConflictRetries; attempt += 1) {
-        try {
-          await Rgb.rlnCreateUtxos(nodeId, upTo, num, size, feeRate, skipSync);
-          return;
-        } catch (error) {
-          if (!this.isConflictError(error)) throw error;
-          const ready = await this.probeNodeReady(nodeId, 8, 500);
-          if (ready) {
-            await new Promise((resolve) =>
-              globalThis.setTimeout(resolve, 250 * attempt)
-            );
-          }
-          lastConflictError = error;
-          if (attempt < maxConflictRetries) {
-            await new Promise((resolve) =>
-              globalThis.setTimeout(resolve, 600)
-            );
-          }
-        }
-      }
-      throw lastConflictError;
-    });
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnCreateUtxos(nodeId, upTo, num, size, feeRate, skipSync)
+    );
   }
 
   // ── Backup ───────────────────────────────────────────────────────────────────
 
+  /**
+   * @throws Always throws — backup is not yet supported by the native RLN node.
+   */
   async rlnBackup(backupPath: string, password: string): Promise<void> {
     await this.withNodeOperation((nodeId) =>
       Rgb.rlnBackup(nodeId, backupPath, password)
@@ -679,9 +732,7 @@ export class RLNBinding implements IRLN {
   }
 
   private async withNodeQueue<T>(op: () => Promise<T>): Promise<T> {
-    const run = this.nodeOperationQueue
-      .catch(() => {})
-      .then(op);
+    const run = this.nodeOperationQueue.catch(() => {}).then(op);
     this.nodeOperationQueue = run.then(
       () => undefined,
       () => undefined
@@ -691,8 +742,7 @@ export class RLNBinding implements IRLN {
 
   private isConflictError(error: unknown): boolean {
     const e = error as { message?: string; code?: unknown } | null;
-    const code =
-      typeof e?.code === 'string' ? e.code.toLowerCase() : '';
+    const code = typeof e?.code === 'string' ? e.code.toLowerCase() : '';
     const message =
       typeof e?.message === 'string' ? e.message.toLowerCase() : '';
     return code.includes('conflict') || message.includes('conflict');
@@ -700,8 +750,7 @@ export class RLNBinding implements IRLN {
 
   isPoisonError(error: unknown): boolean {
     const e = error as { message?: string; code?: unknown } | null;
-    const code =
-      typeof e?.code === 'string' ? e.code.toLowerCase() : '';
+    const code = typeof e?.code === 'string' ? e.code.toLowerCase() : '';
     const message =
       typeof e?.message === 'string' ? e.message.toLowerCase() : '';
     return (
@@ -714,8 +763,7 @@ export class RLNBinding implements IRLN {
 
   private isNotInitializedError(error: unknown): boolean {
     const e = error as { message?: string; code?: unknown } | null;
-    const code =
-      typeof e?.code === 'string' ? e.code.toLowerCase() : '';
+    const code = typeof e?.code === 'string' ? e.code.toLowerCase() : '';
     const message =
       typeof e?.message === 'string' ? e.message.toLowerCase() : '';
     return (

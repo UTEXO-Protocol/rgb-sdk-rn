@@ -36,7 +36,6 @@ import type {
   SendBtcEndRequestModel,
   FailTransfersRequest,
   WalletBackupResponse,
-  GetFeeEstimationResponse,
   VssBackupConfig,
   VssBackupInfo,
   CreateUtxosBeginRequestModel,
@@ -672,9 +671,9 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   // ── IWalletManager — Fee Estimation ──────────────────────────────────────
 
-  async estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
+  async estimateFeeRate(blocks: number): Promise<number> {
     const resp = await this.rln.rlnEstimateFee(blocks);
-    return { [String(blocks)]: resp.feeRate };
+    return resp.feeRate;
   }
 
   estimateFee(_psbtBase64: string): Promise<EstimateFeeResult> {

@@ -245,7 +245,7 @@ export type Transfer = {
   assignments: Assignment[];
   receiveUtxo?: Outpoint;
   changeUtxo?: Outpoint;
-  expirationTimestamp?: number;
+  expiration?: number;
   transportEndpoints: TransferTransportEndpoint[];
   invoiceString?: string;
   consignmentPath?: string;

@@ -60,6 +60,7 @@ import { AssetSchema } from '@utexo/rgb-sdk-core';
 import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
 import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../binding/IRLN';
+import { toNativeNetwork } from '../binding/Interfaces';
 import type {
   RlnNodeInfo,
   RlnNetworkInfo,
@@ -928,7 +929,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       storageDirPath: this.params.storageDirPath,
       daemonListeningPort: this.params.daemonListeningPort,
       ldkPeerListeningPort: this.params.ldkPeerListeningPort,
-      network: this.params.network,
+      network: toNativeNetwork(this.params.network as BitcoinNetwork),
       maxMediaUploadSizeMb: this.params.maxMediaUploadSizeMb ?? 20,
       enableVirtualChannelsV0: this.params.enableVirtualChannelsV0 ?? null,
     };

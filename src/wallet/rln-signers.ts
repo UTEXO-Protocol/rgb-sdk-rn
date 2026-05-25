@@ -1,6 +1,7 @@
 import { mnemonicToSeedSync } from '@scure/bip39';
 import type { RLNManager } from './rln-manager';
 import type { IRLNUnlockParams } from '../binding/IRLN';
+import { toNativeNetwork, BitcoinNetwork } from '../binding/Interfaces';
 
 // Accepts a mnemonic string or raw BIP39 seed bytes; always returns 32-byte hex.
 export type RLNKeyMaterial = string | Uint8Array;
@@ -65,7 +66,7 @@ export class NativeExternalRLNSigner implements IRLNSigner {
     permissivePolicy?: boolean
   ) {
     this.seedHex = toSeedHex(keys);
-    this.network = network;
+    this.network = toNativeNetwork(network as BitcoinNetwork);
     this.permissivePolicy = permissivePolicy;
   }
 

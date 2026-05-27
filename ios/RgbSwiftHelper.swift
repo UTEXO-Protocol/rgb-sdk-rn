@@ -15,21 +15,16 @@ public class RgbSwiftHelper: NSObject {
   private static func parseErrorMessage(_ error: Error) -> String {
     let errorString = String(describing: error)
 
-    if let detailsRange = errorString.range(of: "details: \"") {
-      let afterDetails = String(errorString[detailsRange.upperBound...])
-      if let endQuote = afterDetails.firstIndex(of: "\"") {
-        return String(afterDetails[..<endQuote])
+    for prefix in ["details: \"", "(details: \"", "message: \"", "(message: \""] {
+      if let range = errorString.range(of: prefix) {
+        let after = String(errorString[range.upperBound...])
+        if let endQuote = after.firstIndex(of: "\"") {
+          return String(after[..<endQuote])
+        }
       }
     }
 
-    if let detailsRange = errorString.range(of: "(details: \"") {
-      let afterDetails = String(errorString[detailsRange.upperBound...])
-      if let endQuote = afterDetails.firstIndex(of: "\"") {
-        return String(afterDetails[..<endQuote])
-      }
-    }
-
-    return error.localizedDescription
+    return errorString
   }
 
   // MARK: - RLN native node bridge
@@ -52,8 +47,11 @@ public class RgbSwiftHelper: NSObject {
         maxMediaUploadSizeMb: UInt16(truncating: maxMediaUploadSizeMb),
         enableVirtualChannelsV0: request["enableVirtualChannelsV0"] as? Bool,
         virtualPeerPubkeys: nil,
-        lspBaseUrl: "",
-        lspBearerToken: ""
+        lspBaseUrl: nil,
+        lspBearerToken: nil,
+        vssUrl: request["vssUrl"] as? String,
+        vssAllowHttp: request["vssAllowHttp"] as? Bool ?? false,
+        vssAllowEmptyRestore: request["vssAllowEmptyRestore"] as? Bool ?? false
       )
       let node = try SdkNode.create(request: initReq)
       let nodeId = try RlnNodeStore.shared.create(node: node, storageDirPath: storageDirPath)
@@ -360,7 +358,7 @@ public class RgbSwiftHelper: NSObject {
   @objc(_rlnBackup:backupPath:password:)
   public static func _rlnBackup(_ nodeId: NSNumber, backupPath: String, password: String) -> NSDictionary {
     do {
-      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+      guard RlnNodeStore.shared.get(id: nodeId.intValue) != nil else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       throw NSError(domain: "RlnError", code: -1, userInfo: [NSLocalizedDescriptionKey: "rlnBackup is not supported in this version of the RLN node"])
@@ -494,7 +492,7 @@ public class RgbSwiftHelper: NSObject {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
       let res = try node.estimateFee(blocks: UInt16(truncating: blocks))
-      return ["feeRate": NSNumber(value: Double(res))] as NSDictionary
+      return ["feeRate": NSNumber(value: res.feeRate)] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -514,35 +512,31 @@ public class RgbSwiftHelper: NSObject {
 
   @objc(_rlnGetPayment:paymentHash:)
   public static func _rlnGetPayment(_ nodeId: NSNumber, paymentHash: String) -> NSDictionary {
-    do {
-      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
-        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
-      }
-      var found: Payment? = nil
-      for payType in [PaymentType.outbound, .inboundAutoClaim, .inboundHodl] {
-        if let p = try? node.getPayment(paymentHash: paymentHash, paymentType: payType) {
-          found = p; break
-        }
-      }
-      guard let p = found else {
-        return ["error": "Payment not found for hash: \(paymentHash)"] as NSDictionary
-      }
-      var dict: [String: Any] = [
-        "paymentHash": p.paymentHash,
-        "status": "\(p.status)".uppercased(),
-        "paymentType": "\(p.paymentType)".uppercased(),
-        "createdAt": NSNumber(value: p.createdAt),
-        "updatedAt": NSNumber(value: p.updatedAt),
-        "payeePubkey": p.payeePubkey,
-      ]
-      if let assetId = p.assetId { dict["assetId"] = assetId }
-      if let amt = p.amtMsat { dict["amtMsat"] = NSNumber(value: amt) }
-      if let a = p.assetAmount { dict["assetAmount"] = NSNumber(value: a) }
-      if let pre = p.preimage { dict["preimage"] = pre }
-      return dict as NSDictionary
-    } catch {
-      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+      return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
     }
+    var found: Payment? = nil
+    for payType in [PaymentType.outbound, .inboundAutoClaim, .inboundHodl] {
+      if let p = try? node.getPayment(paymentHash: paymentHash, paymentType: payType) {
+        found = p; break
+      }
+    }
+    guard let p = found else {
+      return ["error": "Payment not found for hash: \(paymentHash)"] as NSDictionary
+    }
+    var dict: [String: Any] = [
+      "paymentHash": p.paymentHash,
+      "status": "\(p.status)".uppercased(),
+      "paymentType": "\(p.paymentType)".uppercased(),
+      "createdAt": NSNumber(value: p.createdAt),
+      "updatedAt": NSNumber(value: p.updatedAt),
+      "payeePubkey": p.payeePubkey,
+    ]
+    if let assetId = p.assetId { dict["assetId"] = assetId }
+    if let amt = p.amtMsat { dict["amtMsat"] = NSNumber(value: amt) }
+    if let a = p.assetAmount { dict["assetAmount"] = NSNumber(value: a) }
+    if let pre = p.preimage { dict["preimage"] = pre }
+    return dict as NSDictionary
   }
 
   @objc(_rlnInvoiceStatus:invoice:)
@@ -811,7 +805,8 @@ public class RgbSwiftHelper: NSObject {
           assetId: assetId,
           assetAmount: assetAmount.map { UInt64(truncating: $0) },
           paymentHash: nil,
-          descriptionHash: nil
+          descriptionHash: nil,
+          minFinalCltvExpiryDelta: nil
         )
       )
       return ["invoice": res.invoice] as NSDictionary
@@ -951,7 +946,6 @@ public class RgbSwiftHelper: NSObject {
           donation: donation,
           feeRate: UInt64(truncating: feeRate),
           minConfirmations: UInt8(truncating: minConfirmations),
-          skipSync: skipSync,
           recipientGroups: [
             AssetRecipients(
               assetId: assetId,
@@ -1307,5 +1301,20 @@ public class RgbSwiftHelper: NSObject {
   public static func _rlnDestroyNativeExternalSigner(_ signerId: NSNumber) -> NSDictionary {
     RlnNodeStore.shared.removeSigner(id: signerId.intValue)
     return [:] as NSDictionary
+  }
+
+  // MARK: - VSS
+
+  @objc(_rlnVssClearFence:password:)
+  public static func _rlnVssClearFence(_ nodeId: NSNumber, password: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.vssClearFence(request: SdkVssClearFenceRequest(password: password))
+      return [:] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
   }
 }

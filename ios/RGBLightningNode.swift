@@ -981,6 +981,8 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func unlock(request: SdkUnlockRequest) throws
 
+    func vssClearFence(request: SdkVssClearFenceRequest) throws
+
     func attachExternalSigner(host: ExternalSignerHost, bootstrap: SdkExternalSignerBootstrap) throws
 
     func attachNativeExternalSigner(signer: NativeExternalSigner) throws
@@ -1427,6 +1429,13 @@ open class SdkNode:
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock(self.uniffiClonePointer(),
                                                                FfiConverterTypeSdkUnlockRequest.lower(request), $0)
+        }
+    }
+
+    open func vssClearFence(request: SdkVssClearFenceRequest) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_vss_clear_fence(self.uniffiClonePointer(),
+                                                                        FfiConverterTypeSdkVssClearFenceRequest.lower(request), $0)
         }
     }
 
@@ -3037,11 +3046,12 @@ public struct DecodeLnInvoiceResponse {
     public var paymentHash: PaymentHash
     public var paymentSecret: String
     public var payeePubkey: PublicKey?
+    public var minFinalCltvExpiryDelta: UInt64
     public var network: String
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amtMsat: UInt64?, expirySec: UInt64, timestamp: UInt64, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash, paymentSecret: String, payeePubkey: PublicKey?, network: String) {
+    public init(amtMsat: UInt64?, expirySec: UInt64, timestamp: UInt64, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash, paymentSecret: String, payeePubkey: PublicKey?, minFinalCltvExpiryDelta: UInt64, network: String) {
         self.amtMsat = amtMsat
         self.expirySec = expirySec
         self.timestamp = timestamp
@@ -3050,6 +3060,7 @@ public struct DecodeLnInvoiceResponse {
         self.paymentHash = paymentHash
         self.paymentSecret = paymentSecret
         self.payeePubkey = payeePubkey
+        self.minFinalCltvExpiryDelta = minFinalCltvExpiryDelta
         self.network = network
     }
 }
@@ -3080,6 +3091,9 @@ extension DecodeLnInvoiceResponse: Equatable, Hashable {
         if lhs.payeePubkey != rhs.payeePubkey {
             return false
         }
+        if lhs.minFinalCltvExpiryDelta != rhs.minFinalCltvExpiryDelta {
+            return false
+        }
         if lhs.network != rhs.network {
             return false
         }
@@ -3095,6 +3109,7 @@ extension DecodeLnInvoiceResponse: Equatable, Hashable {
         hasher.combine(paymentHash)
         hasher.combine(paymentSecret)
         hasher.combine(payeePubkey)
+        hasher.combine(minFinalCltvExpiryDelta)
         hasher.combine(network)
     }
 }
@@ -3114,6 +3129,7 @@ public struct FfiConverterTypeDecodeLnInvoiceResponse: FfiConverterRustBuffer {
                 paymentHash: FfiConverterTypePaymentHash.read(from: &buf),
                 paymentSecret: FfiConverterString.read(from: &buf),
                 payeePubkey: FfiConverterOptionTypePublicKey.read(from: &buf),
+                minFinalCltvExpiryDelta: FfiConverterUInt64.read(from: &buf),
                 network: FfiConverterString.read(from: &buf)
             )
     }
@@ -3127,6 +3143,7 @@ public struct FfiConverterTypeDecodeLnInvoiceResponse: FfiConverterRustBuffer {
         FfiConverterTypePaymentHash.write(value.paymentHash, into: &buf)
         FfiConverterString.write(value.paymentSecret, into: &buf)
         FfiConverterOptionTypePublicKey.write(value.payeePubkey, into: &buf)
+        FfiConverterUInt64.write(value.minFinalCltvExpiryDelta, into: &buf)
         FfiConverterString.write(value.network, into: &buf)
     }
 }
@@ -3582,16 +3599,18 @@ public struct LnInvoiceRequest {
     public var assetAmount: UInt64?
     public var paymentHash: PaymentHash?
     public var descriptionHash: String?
+    public var minFinalCltvExpiryDelta: UInt16?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amtMsat: UInt64?, expirySec: UInt32, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash?, descriptionHash: String?) {
+    public init(amtMsat: UInt64?, expirySec: UInt32, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash?, descriptionHash: String?, minFinalCltvExpiryDelta: UInt16?) {
         self.amtMsat = amtMsat
         self.expirySec = expirySec
         self.assetId = assetId
         self.assetAmount = assetAmount
         self.paymentHash = paymentHash
         self.descriptionHash = descriptionHash
+        self.minFinalCltvExpiryDelta = minFinalCltvExpiryDelta
     }
 }
 
@@ -3615,6 +3634,9 @@ extension LnInvoiceRequest: Equatable, Hashable {
         if lhs.descriptionHash != rhs.descriptionHash {
             return false
         }
+        if lhs.minFinalCltvExpiryDelta != rhs.minFinalCltvExpiryDelta {
+            return false
+        }
         return true
     }
 
@@ -3625,6 +3647,7 @@ extension LnInvoiceRequest: Equatable, Hashable {
         hasher.combine(assetAmount)
         hasher.combine(paymentHash)
         hasher.combine(descriptionHash)
+        hasher.combine(minFinalCltvExpiryDelta)
     }
 }
 
@@ -3640,7 +3663,8 @@ public struct FfiConverterTypeLnInvoiceRequest: FfiConverterRustBuffer {
                 assetId: FfiConverterOptionTypeContractId.read(from: &buf),
                 assetAmount: FfiConverterOptionUInt64.read(from: &buf),
                 paymentHash: FfiConverterOptionTypePaymentHash.read(from: &buf),
-                descriptionHash: FfiConverterOptionString.read(from: &buf)
+                descriptionHash: FfiConverterOptionString.read(from: &buf),
+                minFinalCltvExpiryDelta: FfiConverterOptionUInt16.read(from: &buf)
             )
     }
 
@@ -3651,6 +3675,7 @@ public struct FfiConverterTypeLnInvoiceRequest: FfiConverterRustBuffer {
         FfiConverterOptionUInt64.write(value.assetAmount, into: &buf)
         FfiConverterOptionTypePaymentHash.write(value.paymentHash, into: &buf)
         FfiConverterOptionString.write(value.descriptionHash, into: &buf)
+        FfiConverterOptionUInt16.write(value.minFinalCltvExpiryDelta, into: &buf)
     }
 }
 
@@ -4926,10 +4951,13 @@ public struct SdkInitRequest {
     public var virtualPeerPubkeys: [PublicKey]?
     public var lspBaseUrl: String?
     public var lspBearerToken: String?
+    public var vssUrl: String?
+    public var vssAllowHttp: Bool
+    public var vssAllowEmptyRestore: Bool
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(storageDirPath: String, daemonListeningPort: UInt16, ldkPeerListeningPort: UInt16, network: String, maxMediaUploadSizeMb: UInt16, enableVirtualChannelsV0: Bool?, virtualPeerPubkeys: [PublicKey]?, lspBaseUrl: String?, lspBearerToken: String?) {
+    public init(storageDirPath: String, daemonListeningPort: UInt16, ldkPeerListeningPort: UInt16, network: String, maxMediaUploadSizeMb: UInt16, enableVirtualChannelsV0: Bool?, virtualPeerPubkeys: [PublicKey]?, lspBaseUrl: String?, lspBearerToken: String?, vssUrl: String? = nil, vssAllowHttp: Bool = false, vssAllowEmptyRestore: Bool = false) {
         self.storageDirPath = storageDirPath
         self.daemonListeningPort = daemonListeningPort
         self.ldkPeerListeningPort = ldkPeerListeningPort
@@ -4939,6 +4967,9 @@ public struct SdkInitRequest {
         self.virtualPeerPubkeys = virtualPeerPubkeys
         self.lspBaseUrl = lspBaseUrl
         self.lspBearerToken = lspBearerToken
+        self.vssUrl = vssUrl
+        self.vssAllowHttp = vssAllowHttp
+        self.vssAllowEmptyRestore = vssAllowEmptyRestore
     }
 }
 
@@ -4971,6 +5002,15 @@ extension SdkInitRequest: Equatable, Hashable {
         if lhs.lspBearerToken != rhs.lspBearerToken {
             return false
         }
+        if lhs.vssUrl != rhs.vssUrl {
+            return false
+        }
+        if lhs.vssAllowHttp != rhs.vssAllowHttp {
+            return false
+        }
+        if lhs.vssAllowEmptyRestore != rhs.vssAllowEmptyRestore {
+            return false
+        }
         return true
     }
 
@@ -4984,6 +5024,9 @@ extension SdkInitRequest: Equatable, Hashable {
         hasher.combine(virtualPeerPubkeys)
         hasher.combine(lspBaseUrl)
         hasher.combine(lspBearerToken)
+        hasher.combine(vssUrl)
+        hasher.combine(vssAllowHttp)
+        hasher.combine(vssAllowEmptyRestore)
     }
 }
 
@@ -5002,7 +5045,10 @@ public struct FfiConverterTypeSdkInitRequest: FfiConverterRustBuffer {
                 enableVirtualChannelsV0: FfiConverterOptionBool.read(from: &buf),
                 virtualPeerPubkeys: FfiConverterOptionSequenceTypePublicKey.read(from: &buf),
                 lspBaseUrl: FfiConverterOptionString.read(from: &buf),
-                lspBearerToken: FfiConverterOptionString.read(from: &buf)
+                lspBearerToken: FfiConverterOptionString.read(from: &buf),
+                vssUrl: FfiConverterOptionString.read(from: &buf),
+                vssAllowHttp: FfiConverterBool.read(from: &buf),
+                vssAllowEmptyRestore: FfiConverterBool.read(from: &buf)
             )
     }
 
@@ -5016,6 +5062,9 @@ public struct FfiConverterTypeSdkInitRequest: FfiConverterRustBuffer {
         FfiConverterOptionSequenceTypePublicKey.write(value.virtualPeerPubkeys, into: &buf)
         FfiConverterOptionString.write(value.lspBaseUrl, into: &buf)
         FfiConverterOptionString.write(value.lspBearerToken, into: &buf)
+        FfiConverterOptionString.write(value.vssUrl, into: &buf)
+        FfiConverterBool.write(value.vssAllowHttp, into: &buf)
+        FfiConverterBool.write(value.vssAllowEmptyRestore, into: &buf)
     }
 }
 
@@ -6796,20 +6845,71 @@ public func FfiConverterTypeSdkUnlockRequest_lower(_ value: SdkUnlockRequest) ->
     return FfiConverterTypeSdkUnlockRequest.lower(value)
 }
 
+public struct SdkVssClearFenceRequest {
+    public var password: String
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(password: String) {
+        self.password = password
+    }
+}
+
+extension SdkVssClearFenceRequest: Equatable, Hashable {
+    public static func == (lhs: SdkVssClearFenceRequest, rhs: SdkVssClearFenceRequest) -> Bool {
+        if lhs.password != rhs.password {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(password)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkVssClearFenceRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkVssClearFenceRequest {
+        return
+            try SdkVssClearFenceRequest(
+                password: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: SdkVssClearFenceRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.password, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkVssClearFenceRequest_lift(_ buf: RustBuffer) throws -> SdkVssClearFenceRequest {
+    return try FfiConverterTypeSdkVssClearFenceRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkVssClearFenceRequest_lower(_ value: SdkVssClearFenceRequest) -> RustBuffer {
+    return FfiConverterTypeSdkVssClearFenceRequest.lower(value)
+}
+
 public struct SendRgbRequest {
     public var donation: Bool
     public var feeRate: UInt64
     public var minConfirmations: UInt8
-    public var skipSync: Bool
     public var recipientGroups: [AssetRecipients]
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(donation: Bool, feeRate: UInt64, minConfirmations: UInt8, skipSync: Bool, recipientGroups: [AssetRecipients]) {
+    public init(donation: Bool, feeRate: UInt64, minConfirmations: UInt8, recipientGroups: [AssetRecipients]) {
         self.donation = donation
         self.feeRate = feeRate
         self.minConfirmations = minConfirmations
-        self.skipSync = skipSync
         self.recipientGroups = recipientGroups
     }
 }
@@ -6825,9 +6925,6 @@ extension SendRgbRequest: Equatable, Hashable {
         if lhs.minConfirmations != rhs.minConfirmations {
             return false
         }
-        if lhs.skipSync != rhs.skipSync {
-            return false
-        }
         if lhs.recipientGroups != rhs.recipientGroups {
             return false
         }
@@ -6838,7 +6935,6 @@ extension SendRgbRequest: Equatable, Hashable {
         hasher.combine(donation)
         hasher.combine(feeRate)
         hasher.combine(minConfirmations)
-        hasher.combine(skipSync)
         hasher.combine(recipientGroups)
     }
 }
@@ -6853,7 +6949,6 @@ public struct FfiConverterTypeSendRgbRequest: FfiConverterRustBuffer {
                 donation: FfiConverterBool.read(from: &buf),
                 feeRate: FfiConverterUInt64.read(from: &buf),
                 minConfirmations: FfiConverterUInt8.read(from: &buf),
-                skipSync: FfiConverterBool.read(from: &buf),
                 recipientGroups: FfiConverterSequenceTypeAssetRecipients.read(from: &buf)
             )
     }
@@ -6862,7 +6957,6 @@ public struct FfiConverterTypeSendRgbRequest: FfiConverterRustBuffer {
         FfiConverterBool.write(value.donation, into: &buf)
         FfiConverterUInt64.write(value.feeRate, into: &buf)
         FfiConverterUInt8.write(value.minConfirmations, into: &buf)
-        FfiConverterBool.write(value.skipSync, into: &buf)
         FfiConverterSequenceTypeAssetRecipients.write(value.recipientGroups, into: &buf)
     }
 }
@@ -8254,6 +8348,32 @@ public enum RlnError {
 
     case Conflict(message: String)
 
+    case FailedBitcoindConnection(message: String)
+
+    case FailedBdkSync(message: String)
+
+    case FailedBroadcast(message: String)
+
+    case FailedPeerConnection(message: String)
+
+    case InsufficientCapacity(message: String)
+
+    case InsufficientFunds(message: String)
+
+    case NoAvailableUtxos(message: String)
+
+    case NoRoute(message: String)
+
+    case ExternalSignerRequired(message: String)
+
+    case ExternalSignerMismatch(message: String)
+
+    case ExternalSignerUnavailable(message: String)
+
+    case ExternalSignerProtocolError(message: String)
+
+    case UnsupportedInExternalSignerMode(message: String)
+
     case Internal(message: String)
 }
 
@@ -8282,7 +8402,59 @@ public struct FfiConverterTypeRlnError: FfiConverterRustBuffer {
                 message: FfiConverterString.read(from: &buf)
             )
 
-        case 5: return try .Internal(
+        case 5: return try .FailedBitcoindConnection(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 6: return try .FailedBdkSync(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 7: return try .FailedBroadcast(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 8: return try .FailedPeerConnection(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 9: return try .InsufficientCapacity(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 10: return try .InsufficientFunds(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 11: return try .NoAvailableUtxos(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 12: return try .NoRoute(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 13: return try .ExternalSignerRequired(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 14: return try .ExternalSignerMismatch(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 15: return try .ExternalSignerUnavailable(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 16: return try .ExternalSignerProtocolError(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 17: return try .UnsupportedInExternalSignerMode(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 18: return try .Internal(
                 message: FfiConverterString.read(from: &buf)
             )
 
@@ -8300,8 +8472,34 @@ public struct FfiConverterTypeRlnError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         case .Conflict(_ /* message is ignored*/ ):
             writeInt(&buf, Int32(4))
-        case .Internal(_ /* message is ignored*/ ):
+        case .FailedBitcoindConnection(_ /* message is ignored*/ ):
             writeInt(&buf, Int32(5))
+        case .FailedBdkSync(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(6))
+        case .FailedBroadcast(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(7))
+        case .FailedPeerConnection(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(8))
+        case .InsufficientCapacity(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(9))
+        case .InsufficientFunds(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(10))
+        case .NoAvailableUtxos(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(11))
+        case .NoRoute(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(12))
+        case .ExternalSignerRequired(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(13))
+        case .ExternalSignerMismatch(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(14))
+        case .ExternalSignerUnavailable(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(15))
+        case .ExternalSignerProtocolError(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(16))
+        case .UnsupportedInExternalSignerMode(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(17))
+        case .Internal(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(18))
         }
     }
 }
@@ -8391,7 +8589,8 @@ public enum TransactionType {
     case rgbSend
     case drain
     case createUtxos
-    case user
+    case sendBtc
+    case incoming
 }
 
 #if swift(>=5.8)
@@ -8409,7 +8608,9 @@ public struct FfiConverterTypeTransactionType: FfiConverterRustBuffer {
 
         case 3: return .createUtxos
 
-        case 4: return .user
+        case 4: return .sendBtc
+
+        case 5: return .incoming
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -8426,8 +8627,11 @@ public struct FfiConverterTypeTransactionType: FfiConverterRustBuffer {
         case .createUtxos:
             writeInt(&buf, Int32(3))
 
-        case .user:
+        case .sendBtc:
             writeInt(&buf, Int32(4))
+
+        case .incoming:
+            writeInt(&buf, Int32(5))
         }
     }
 }
@@ -8467,6 +8671,30 @@ private struct FfiConverterOptionUInt8: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterUInt8.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterOptionUInt16: FfiConverterRustBuffer {
+    typealias SwiftType = UInt16?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt16.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt16.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -10089,6 +10317,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock() != 60312 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_vss_clear_fence() != 9846 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_attach_external_signer() != 568 {

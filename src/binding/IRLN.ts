@@ -35,6 +35,9 @@ export interface IRLNNodeCreateParams {
   network: string;
   maxMediaUploadSizeMb: number;
   enableVirtualChannelsV0?: boolean | null;
+  vssUrl?: string | null;
+  vssAllowHttp?: boolean;
+  vssAllowEmptyRestore?: boolean;
 }
 
 export interface IRLNUnlockParams {
@@ -249,4 +252,8 @@ export interface IRLN {
   // ── Backup ───────────────────────────────────────────────────────────────────
 
   rlnBackup(backupPath: string, password: string): Promise<void>;
+
+  // ── VSS ──────────────────────────────────────────────────────────────────────
+
+  rlnVssClearFence(password: string): Promise<void>;
 }

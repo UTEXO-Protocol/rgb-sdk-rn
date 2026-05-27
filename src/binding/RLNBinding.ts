@@ -86,7 +86,10 @@ export class RLNBinding implements IRLN {
         params.ldkPeerListeningPort,
         params.network,
         params.maxMediaUploadSizeMb,
-        params.enableVirtualChannelsV0 ?? null
+        params.enableVirtualChannelsV0 ?? null,
+        params.vssUrl ?? null,
+        params.vssAllowHttp ?? false,
+        params.vssAllowEmptyRestore ?? false
       );
       this.rlnNodeId = nodeId;
       this.lifecycleState = 'active';
@@ -698,6 +701,14 @@ export class RLNBinding implements IRLN {
   async rlnBackup(backupPath: string, password: string): Promise<void> {
     await this.withNodeOperation((nodeId) =>
       Rgb.rlnBackup(nodeId, backupPath, password)
+    );
+  }
+
+  // ── VSS ─────────────────────────────────────────────────────────────────────
+
+  async rlnVssClearFence(password: string): Promise<void> {
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnVssClearFence(nodeId, password)
     );
   }
 

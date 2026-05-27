@@ -44,6 +44,9 @@ ldkPeerListeningPort:(double)ldkPeerListeningPort
               network:(NSString *)network
   maxMediaUploadSizeMb:(double)maxMediaUploadSizeMb
 enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
+               vssUrl:(NSString *)vssUrl
+         vssAllowHttp:(BOOL)vssAllowHttp
+  vssAllowEmptyRestore:(BOOL)vssAllowEmptyRestore
               resolve:(RCTPromiseResolveBlock)resolve
                reject:(RCTPromiseRejectBlock)reject
 {
@@ -55,6 +58,9 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
             @"network": network ?: @"",
             @"maxMediaUploadSizeMb": @(maxMediaUploadSizeMb),
             @"enableVirtualChannelsV0": enableVirtualChannelsV0 ?: [NSNull null],
+            @"vssUrl": vssUrl ?: [NSNull null],
+            @"vssAllowHttp": @(vssAllowHttp),
+            @"vssAllowEmptyRestore": @(vssAllowEmptyRestore),
         };
         NSDictionary *result = [RgbSwiftHelper _rlnCreateNode:request];
         NSString *errorMessage = result[@"error"];
@@ -792,6 +798,22 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_SYNC_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnVssClearFence:(double)nodeId
+                password:(NSString *)password
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnVssClearFence:@(nodeId) password:password];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_VSS_CLEAR_FENCE_ERROR", errorMessage, nil);
         } else {
             resolve(nil);
         }

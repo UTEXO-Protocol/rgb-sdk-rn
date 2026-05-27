@@ -113,6 +113,9 @@ export interface UTEXOWalletNodeParams {
   network: string;
   maxMediaUploadSizeMb?: number;
   enableVirtualChannelsV0?: boolean;
+  vssUrl?: string | null;
+  vssAllowHttp?: boolean;
+  vssAllowEmptyRestore?: boolean;
   xpubVan: string;
   xpubCol: string;
   masterFingerprint: string;
@@ -922,6 +925,17 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.rln.rlnCheckProxyEndpoint(endpoint);
   }
 
+  // ── VSS ───────────────────────────────────────────────────────────────────
+
+  /**
+   * Clears the VSS single-writer fence lock. Call this while the node is
+   * locked (before unlock) to recover from an unclean shutdown that left a
+   * stale fence blocking re-initialization.
+   */
+  vssClearFence(password: string): Promise<void> {
+    return this.rln.rlnVssClearFence(password);
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────────
 
   private buildNodeParams(): IRLNNodeCreateParams {
@@ -932,6 +946,9 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       network: toNativeNetwork(this.params.network as BitcoinNetwork),
       maxMediaUploadSizeMb: this.params.maxMediaUploadSizeMb ?? 20,
       enableVirtualChannelsV0: this.params.enableVirtualChannelsV0 ?? null,
+      vssUrl: this.params.vssUrl ?? null,
+      vssAllowHttp: this.params.vssAllowHttp ?? false,
+      vssAllowEmptyRestore: this.params.vssAllowEmptyRestore ?? false,
     };
   }
 }

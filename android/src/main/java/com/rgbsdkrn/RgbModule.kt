@@ -44,6 +44,7 @@ import org.utexo.rgblightningnode.SdkIssueAssetCfaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetIfaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetNiaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetUdaRequest
+import org.utexo.rgblightningnode.SdkVssClearFenceRequest
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -68,10 +69,14 @@ class RgbModule(reactContext: ReactApplicationContext) :
     network: String,
     maxMediaUploadSizeMb: Double,
     enableVirtualChannelsV0: Boolean?,
+    vssUrl: String?,
+    vssAllowHttp: Boolean,
+    vssAllowEmptyRestore: Boolean,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
       try {
+        android.util.Log.d("RgbModule", "[rlnCreateNode] network=$network vssUrl=$vssUrl vssAllowHttp=$vssAllowHttp vssAllowEmptyRestore=$vssAllowEmptyRestore daemonPort=$daemonListeningPort ldkPort=$ldkPeerListeningPort")
         val initRequest = SdkInitRequest(
           storageDirPath = storageDirPath,
           daemonListeningPort = daemonListeningPort.toInt().toUShort(),
@@ -80,13 +85,18 @@ class RgbModule(reactContext: ReactApplicationContext) :
           maxMediaUploadSizeMb = maxMediaUploadSizeMb.toInt().toUShort(),
           enableVirtualChannelsV0 = enableVirtualChannelsV0,
           virtualPeerPubkeys = null,
-          lspBaseUrl = "",
-          lspBearerToken = ""
+          lspBaseUrl = null,
+          lspBearerToken = null,
+          vssUrl = vssUrl,
+          vssAllowHttp = vssAllowHttp,
+          vssAllowEmptyRestore = vssAllowEmptyRestore
         )
         val node = SdkNode.create(initRequest)
+        android.util.Log.d("RgbModule", "[rlnCreateNode] SdkNode.create succeeded")
         val nodeId = RlnNodeStore.create(node, storageDirPath)
         withContext(Dispatchers.Main) { promise.resolve(nodeId) }
       } catch (e: Exception) {
+        android.util.Log.e("RgbModule", "[rlnCreateNode] FAILED ${e.javaClass.name}: ${e.message}", e)
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }
@@ -98,6 +108,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     coroutineScope.launch(Dispatchers.IO) {
       val intNodeId = nodeId.toInt()
       try {
+        android.util.Log.d("RgbModule", "[rlnInitNode] nodeId=$intNodeId hasMnemonic=${mnemonic != null}")
         val node = RlnNodeStore.get(intNodeId)
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val state = RlnNodeStore.getState(intNodeId)
@@ -106,9 +117,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
           throw IllegalStateException("RLN init is not allowed while node is in state: $state")
         }
         val nodePubkey = node.init(password, mnemonic)
+        android.util.Log.d("RgbModule", "[rlnInitNode] succeeded pubkey=${nodePubkey.take(16)}...")
         RlnNodeStore.markInitialized(intNodeId)
         withContext(Dispatchers.Main) { promise.resolve(nodePubkey) }
       } catch (e: Exception) {
+        android.util.Log.e("RgbModule", "[rlnInitNode] FAILED ${e.javaClass.name}: ${e.message}", e)
         val node = RlnNodeStore.get(intNodeId)
         if (node != null && isConflictLike(e)) {
           // RLN may already be initialized on disk after restart/recreate.
@@ -209,6 +222,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         for (i in 0 until announceAddresses.size()) {
           announceAddressesList.add(announceAddresses.getString(i) ?: "")
         }
+        android.util.Log.d("RgbModule", "[rlnUnlockNode] host=$bitcoindRpcHost port=$bitcoindRpcPort indexerUrl=$indexerUrl proxyEndpoint=$proxyEndpoint")
         node.unlock(
           SdkUnlockRequest(
             password = password,
@@ -222,9 +236,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
             announceAlias = announceAlias
           )
         )
+        android.util.Log.d("RgbModule", "[rlnUnlockNode] succeeded")
         RlnNodeStore.markUnlocked(intNodeId)
         withContext(Dispatchers.Main) { promise.resolve(null) }
       } catch (e: Exception) {
+        android.util.Log.e("RgbModule", "[rlnUnlockNode] FAILED ${e.javaClass.name}: ${e.message}", e)
         val node = RlnNodeStore.get(intNodeId)
         if (node != null && isConflictLike(e) && probeNodeReady(node, attempts = 12, delayMs = 500L)) {
           RlnNodeStore.markUnlocked(intNodeId)
@@ -1110,7 +1126,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
             assetId = assetId,
             assetAmount = assetAmount?.toULong(),
             paymentHash = null,
-            descriptionHash = null
+            descriptionHash = null,
+            minFinalCltvExpiryDelta = null
           )
         )
         val map = Arguments.createMap()
@@ -1267,7 +1284,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
             donation = donation,
             feeRate = feeRate.toULong(),
             minConfirmations = minConfirmations.toInt().toUByte(),
-            skipSync = skipSync,
             recipientGroups = listOf(
               AssetRecipients(
                 assetId = assetId,
@@ -1450,6 +1466,21 @@ class RgbModule(reactContext: ReactApplicationContext) :
           attachmentsFileDigests = digestsList
         ))
         withContext(Dispatchers.Main) { promise.resolve(rlnAssetUdaToMap(asset)) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnVssClearFence(nodeId: Double, password: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.vssClearFence(SdkVssClearFenceRequest(password = password))
+        withContext(Dispatchers.Main) { promise.resolve(null) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)

@@ -424,6 +424,12 @@ export class RLNManager implements IRLN {
   rlnBackup(backupPath: string, password: string): Promise<void> {
     return this.rlnBinding.rlnBackup(backupPath, password);
   }
+
+  // ── VSS ──────────────────────────────────────────────────────────────────────
+
+  rlnVssClearFence(password: string): Promise<void> {
+    return this.rlnBinding.rlnVssClearFence(password);
+  }
 }
 
 export function createRLNManager(): RLNManager {

@@ -8,7 +8,10 @@ export interface Spec extends TurboModule {
     ldkPeerListeningPort: number,
     network: string,
     maxMediaUploadSizeMb: number,
-    enableVirtualChannelsV0: boolean | null
+    enableVirtualChannelsV0: boolean | null,
+    vssUrl: string | null,
+    vssAllowHttp: boolean,
+    vssAllowEmptyRestore: boolean
   ): Promise<number>;
   rlnInitNode(
     nodeId: number,
@@ -210,6 +213,9 @@ export interface Spec extends TurboModule {
     mediaFileDigest: string | null,
     attachmentsFileDigests: string[]
   ): Promise<any>;
+
+  // ── VSS ─────────────────────────────────────────────────────────────────────
+  rlnVssClearFence(nodeId: number, password: string): Promise<void>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Rgb');

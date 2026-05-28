@@ -45,6 +45,8 @@ import org.utexo.rgblightningnode.SdkIssueAssetIfaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetNiaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetUdaRequest
 import org.utexo.rgblightningnode.SdkVssClearFenceRequest
+import org.utexo.rgblightningnode.CancelHodlInvoiceRequest
+import org.utexo.rgblightningnode.ClaimHodlInvoiceRequest
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -72,11 +74,13 @@ class RgbModule(reactContext: ReactApplicationContext) :
     vssUrl: String?,
     vssAllowHttp: Boolean,
     vssAllowEmptyRestore: Boolean,
+    lspBaseUrl: String?,
+    lspBearerToken: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
       try {
-        android.util.Log.d("RgbModule", "[rlnCreateNode] network=$network vssUrl=$vssUrl vssAllowHttp=$vssAllowHttp vssAllowEmptyRestore=$vssAllowEmptyRestore daemonPort=$daemonListeningPort ldkPort=$ldkPeerListeningPort")
+        android.util.Log.d("RgbModule", "[rlnCreateNode] network=$network vssUrl=$vssUrl lspBaseUrl=$lspBaseUrl daemonPort=$daemonListeningPort ldkPort=$ldkPeerListeningPort")
         val initRequest = SdkInitRequest(
           storageDirPath = storageDirPath,
           daemonListeningPort = daemonListeningPort.toInt().toUShort(),
@@ -85,8 +89,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
           maxMediaUploadSizeMb = maxMediaUploadSizeMb.toInt().toUShort(),
           enableVirtualChannelsV0 = enableVirtualChannelsV0,
           virtualPeerPubkeys = null,
-          lspBaseUrl = null,
-          lspBearerToken = null,
+          lspBaseUrl = lspBaseUrl,
+          lspBearerToken = lspBearerToken,
           vssUrl = vssUrl,
           vssAllowHttp = vssAllowHttp,
           vssAllowEmptyRestore = vssAllowEmptyRestore
@@ -1113,6 +1117,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
     expirySec: Double,
     assetId: String?,
     assetAmount: Double?,
+    paymentHash: String?,
+    minFinalCltvExpiryDelta: Double?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -1125,9 +1131,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
             expirySec = expirySec.toInt().toUInt(),
             assetId = assetId,
             assetAmount = assetAmount?.toULong(),
-            paymentHash = null,
+            paymentHash = paymentHash,
             descriptionHash = null,
-            minFinalCltvExpiryDelta = null
+            minFinalCltvExpiryDelta = minFinalCltvExpiryDelta?.toInt()?.toUShort()
           )
         )
         val map = Arguments.createMap()
@@ -1138,6 +1144,51 @@ class RgbModule(reactContext: ReactApplicationContext) :
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }
       }
+    }
+  }
+
+  override fun rlnClaimHodlInvoice(
+    nodeId: Double,
+    paymentHash: String,
+    paymentPreimage: String,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.claimhodlinvoice(
+          ClaimHodlInvoiceRequest(paymentHash = paymentHash, paymentPreimage = paymentPreimage)
+        )
+        val map = Arguments.createMap()
+        map.putBoolean("changed", res.changed)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnCancelHodlInvoice(nodeId: Double, paymentHash: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.cancelhodlinvoice(CancelHodlInvoiceRequest(paymentHash = paymentHash))
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnApayNew(nodeId: Double, hostNodeId: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.Main) {
+      promise.reject("NotImplemented", "rlnApayNew requires a new UDL method in rgb-lightning-node — not yet available in 0.4.3-beta.1 bindings")
     }
   }
 

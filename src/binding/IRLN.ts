@@ -24,6 +24,8 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnClaimHodlInvoiceResponse,
+  RlnApayNewResponse,
 } from './rln-types';
 
 // ── RLN node parameter types ──────────────────────────────────────────────────
@@ -38,6 +40,8 @@ export interface IRLNNodeCreateParams {
   vssUrl?: string | null;
   vssAllowHttp?: boolean;
   vssAllowEmptyRestore?: boolean;
+  lspBaseUrl?: string | null;
+  lspBearerToken?: string | null;
 }
 
 export interface IRLNUnlockParams {
@@ -142,8 +146,19 @@ export interface IRLN {
     amtMsat: number | null,
     expirySec: number,
     assetId: string | null,
-    assetAmount: number | null
+    assetAmount: number | null,
+    paymentHash?: string | null,
+    minFinalCltvExpiryDelta?: number | null
   ): Promise<RlnLnInvoiceResponse>;
+
+  rlnClaimHodlInvoice(
+    paymentHash: string,
+    paymentPreimage: string
+  ): Promise<RlnClaimHodlInvoiceResponse>;
+
+  rlnCancelHodlInvoice(paymentHash: string): Promise<void>;
+
+  rlnApayNew(hostNodeId: string): Promise<RlnApayNewResponse>;
 
   rlnDecodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse>;
   rlnDecodeRgbInvoice(invoice: string): Promise<RlnDecodeRgbInvoiceResponse>;

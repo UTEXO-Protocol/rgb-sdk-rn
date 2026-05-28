@@ -84,6 +84,12 @@ import type {
   RlnTransfer,
   RlnUnspent,
 } from '../binding/rln-types';
+import type {
+  CreateHodlInvoiceParams,
+  HodlInvoice,
+  HodlInvoiceResult,
+  ApayNewResponse,
+} from '../lsp/lsp-types';
 
 // ── Extended send request models ─────────────────────────────────────────────
 // These extend the core interfaces with RLN-specific fields without modifying core.
@@ -116,6 +122,8 @@ export interface UTEXOWalletNodeParams {
   vssUrl?: string | null;
   vssAllowHttp?: boolean;
   vssAllowEmptyRestore?: boolean;
+  lspBaseUrl?: string | null;
+  lspBearerToken?: string | null;
   xpubVan: string;
   xpubCol: string;
   masterFingerprint: string;
@@ -718,7 +726,10 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
 
   async createLightningInvoice(
-    params: CreateLightningInvoiceRequestModel
+    params: CreateLightningInvoiceRequestModel & {
+      paymentHash?: string | null;
+      minFinalCltvExpiryDelta?: number | null;
+    }
   ): Promise<LightningReceiveRequest> {
     const amtMsat = params.amountSats != null ? params.amountSats * 1000 : null;
     const assetId = params.asset?.assetId || null;
@@ -727,9 +738,54 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       amtMsat,
       params.expirySeconds ?? 3600,
       assetId,
-      assetAmount
+      assetAmount,
+      params.paymentHash ?? null,
+      params.minFinalCltvExpiryDelta ?? null
     );
     return { lnInvoice: resp.invoice };
+  }
+
+  async createHodlInvoice(params: CreateHodlInvoiceParams): Promise<HodlInvoice> {
+    const resp = await this.rln.rlnLnInvoice(
+      params.amtMsat ?? null,
+      params.expirySec,
+      params.assetId ?? null,
+      params.assetAmount ?? null,
+      params.paymentHash,
+      params.minFinalCltvExpiryDelta ?? null
+    );
+    return { bolt11: resp.invoice, paymentHash: params.paymentHash };
+  }
+
+  async claimHodlInvoice(
+    paymentHash: string,
+    preimage: string
+  ): Promise<HodlInvoiceResult> {
+    const resp = await this.rln.rlnClaimHodlInvoice(paymentHash, preimage);
+    return { changed: resp.changed };
+  }
+
+  async cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult> {
+    await this.rln.rlnCancelHodlInvoice(paymentHash);
+    return { changed: true };
+  }
+
+  async apayRegisterHashPool(hostNodeId: string): Promise<ApayNewResponse> {
+    const raw = await this.rln.rlnApayNew(hostNodeId);
+    return {
+      requestId: raw.requestId,
+      hostNodeId: raw.hostNodeId,
+      protocolVersion: raw.protocolVersion,
+      orderId: raw.orderId,
+      status: raw.status,
+      acceptedThroughIndex: raw.acceptedThroughIndex,
+      nextIndexExpected: raw.nextIndexExpected,
+      unusedHashes: raw.unusedHashes,
+      refillBatchSize: raw.refillBatchSize,
+      firstHashIndex: raw.firstHashIndex,
+      lastHashIndex: raw.lastHashIndex,
+      hashes: raw.hashes,
+    };
   }
 
   async getLightningReceiveRequest(
@@ -949,6 +1005,8 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       vssUrl: this.params.vssUrl ?? null,
       vssAllowHttp: this.params.vssAllowHttp ?? false,
       vssAllowEmptyRestore: this.params.vssAllowEmptyRestore ?? false,
+      lspBaseUrl: this.params.lspBaseUrl ?? null,
+      lspBearerToken: this.params.lspBearerToken ?? null,
     };
   }
 }

@@ -11,7 +11,9 @@ export interface Spec extends TurboModule {
     enableVirtualChannelsV0: boolean | null,
     vssUrl: string | null,
     vssAllowHttp: boolean,
-    vssAllowEmptyRestore: boolean
+    vssAllowEmptyRestore: boolean,
+    lspBaseUrl: string | null,
+    lspBearerToken: string | null
   ): Promise<number>;
   rlnInitNode(
     nodeId: number,
@@ -140,8 +142,17 @@ export interface Spec extends TurboModule {
     amtMsat: number | null,
     expirySec: number,
     assetId: string | null,
-    assetAmount: number | null
+    assetAmount: number | null,
+    paymentHash: string | null,
+    minFinalCltvExpiryDelta: number | null
   ): Promise<object>;
+  rlnClaimHodlInvoice(
+    nodeId: number,
+    paymentHash: string,
+    paymentPreimage: string
+  ): Promise<object>;
+  rlnCancelHodlInvoice(nodeId: number, paymentHash: string): Promise<void>;
+  rlnApayNew(nodeId: number, hostNodeId: string): Promise<object>;
   rlnRefreshTransfers(nodeId: number, skipSync: boolean): Promise<void>;
   rlnRgbInvoice(
     nodeId: number,

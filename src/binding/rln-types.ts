@@ -298,6 +298,34 @@ export interface RlnTransfer {
   assignments?: string[];
 }
 
+// ── HODL invoices ─────────────────────────────────────────────────────────────
+
+export interface RlnClaimHodlInvoiceResponse {
+  changed: boolean;
+}
+
+// ── Async payments (APay) ─────────────────────────────────────────────────────
+
+export interface RlnApayHashEntry {
+  hashIndex: number;
+  paymentHash: string;
+}
+
+export interface RlnApayNewResponse {
+  requestId: string;
+  hostNodeId: string;
+  protocolVersion: number;
+  orderId: string;
+  status: string;
+  acceptedThroughIndex: number;
+  nextIndexExpected: number;
+  unusedHashes: number;
+  refillBatchSize: number;
+  firstHashIndex: number;
+  lastHashIndex: number;
+  hashes: RlnApayHashEntry[];
+}
+
 // ── Send RGB ──────────────────────────────────────────────────────────────────
 
 export interface RlnSendRgbResponse {

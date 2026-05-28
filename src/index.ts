@@ -25,6 +25,26 @@ export type {
   IRLNExternalSignerBootstrap,
 } from './binding/IRLN';
 
+// LSP client + types (temporary in rgb-sdk-rn; moves to @utexo/rgb-sdk-core next release)
+export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
+export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
+export type {
+  LspClientConfig,
+  LspGetInfoResponse,
+  LspLnParams,
+  LspOnchainSendRequest,
+  LspOnchainSendResponse,
+  LspRgbParams,
+  LspLightningReceiveRequest,
+  LspLightningReceiveResponse,
+  LspLnurlpCallbackResponse,
+  CreateHodlInvoiceParams,
+  HodlInvoice,
+  HodlInvoiceResult,
+  ApayHashEntry,
+  ApayNewResponse,
+} from './lsp/lsp-types';
+
 // Crypto — PSBT signing stubs (bdk-rn removed; throws — use NativeExternalRLNSigner for PSBT)
 export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';
 

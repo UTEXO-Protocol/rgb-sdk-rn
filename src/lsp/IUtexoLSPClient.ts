@@ -1,0 +1,38 @@
+import type {
+  LspGetInfoResponse,
+  LspOnchainSendRequest,
+  LspOnchainSendResponse,
+  LspLightningReceiveRequest,
+  LspLightningReceiveResponse,
+  LspLnurlpCallbackResponse,
+} from './lsp-types';
+
+export interface IUtexoLSPClient {
+  getInfo(): Promise<LspGetInfoResponse>;
+
+  /**
+   * Full LUD-06 resolution: discovers callback URL from LNURL metadata then
+   * fetches the BOLT11 invoice. Works for any Lightning Address host.
+   */
+  resolveAddress(
+    username: string,
+    amtMsat: number
+  ): Promise<LspLnurlpCallbackResponse>;
+
+  /**
+   * Direct LSP callback — skips LNURL discovery and calls
+   * /pay/callback/{username} on the LSP base URL directly.
+   */
+  lnurlCallback(
+    username: string,
+    amtMsat: number
+  ): Promise<LspLnurlpCallbackResponse>;
+
+  /** RGB → Lightning: submit RGB invoice; get BOLT11 to pay. */
+  onchainSend(params: LspOnchainSendRequest): Promise<LspOnchainSendResponse>;
+
+  /** Lightning → RGB: submit BOLT11 + RGB params; get RGB invoice. */
+  lightningReceive(
+    params: LspLightningReceiveRequest
+  ): Promise<LspLightningReceiveResponse>;
+}

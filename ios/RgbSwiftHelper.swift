@@ -47,8 +47,8 @@ public class RgbSwiftHelper: NSObject {
         maxMediaUploadSizeMb: UInt16(truncating: maxMediaUploadSizeMb),
         enableVirtualChannelsV0: request["enableVirtualChannelsV0"] as? Bool,
         virtualPeerPubkeys: nil,
-        lspBaseUrl: nil,
-        lspBearerToken: nil,
+        lspBaseUrl: request["lspBaseUrl"] as? String,
+        lspBearerToken: request["lspBearerToken"] as? String,
         vssUrl: request["vssUrl"] as? String,
         vssAllowHttp: request["vssAllowHttp"] as? Bool ?? false,
         vssAllowEmptyRestore: request["vssAllowEmptyRestore"] as? Bool ?? false
@@ -786,13 +786,15 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnLnInvoice:amtMsat:expirySec:assetId:assetAmount:)
+  @objc(_rlnLnInvoice:amtMsat:expirySec:assetId:assetAmount:paymentHash:minFinalCltvExpiryDelta:)
   public static func _rlnLnInvoice(
     _ nodeId: NSNumber,
     amtMsat: NSNumber?,
     expirySec: NSNumber,
     assetId: String?,
-    assetAmount: NSNumber?
+    assetAmount: NSNumber?,
+    paymentHash: String?,
+    minFinalCltvExpiryDelta: NSNumber?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -804,12 +806,47 @@ public class RgbSwiftHelper: NSObject {
           expirySec: UInt32(truncating: expirySec),
           assetId: assetId,
           assetAmount: assetAmount.map { UInt64(truncating: $0) },
-          paymentHash: nil,
+          paymentHash: paymentHash,
           descriptionHash: nil,
-          minFinalCltvExpiryDelta: nil
+          minFinalCltvExpiryDelta: minFinalCltvExpiryDelta.map { UInt16(truncating: $0) }
         )
       )
       return ["invoice": res.invoice] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnClaimHodlInvoice:paymentHash:paymentPreimage:)
+  public static func _rlnClaimHodlInvoice(
+    _ nodeId: NSNumber,
+    paymentHash: String,
+    paymentPreimage: String
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.claimhodlinvoice(
+        request: ClaimHodlInvoiceRequest(paymentHash: paymentHash, paymentPreimage: paymentPreimage)
+      )
+      return ["changed": res.changed] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnCancelHodlInvoice:paymentHash:)
+  public static func _rlnCancelHodlInvoice(
+    _ nodeId: NSNumber,
+    paymentHash: String
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      try node.cancelhodlinvoice(request: CancelHodlInvoiceRequest(paymentHash: paymentHash))
+      return [:] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }

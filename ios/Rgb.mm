@@ -47,6 +47,8 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
                vssUrl:(NSString *)vssUrl
          vssAllowHttp:(BOOL)vssAllowHttp
   vssAllowEmptyRestore:(BOOL)vssAllowEmptyRestore
+           lspBaseUrl:(NSString *)lspBaseUrl
+       lspBearerToken:(NSString *)lspBearerToken
               resolve:(RCTPromiseResolveBlock)resolve
                reject:(RCTPromiseRejectBlock)reject
 {
@@ -61,6 +63,8 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
             @"vssUrl": vssUrl ?: [NSNull null],
             @"vssAllowHttp": @(vssAllowHttp),
             @"vssAllowEmptyRestore": @(vssAllowEmptyRestore),
+            @"lspBaseUrl": lspBaseUrl ?: [NSNull null],
+            @"lspBearerToken": lspBearerToken ?: [NSNull null],
         };
         NSDictionary *result = [RgbSwiftHelper _rlnCreateNode:request];
         NSString *errorMessage = result[@"error"];
@@ -661,17 +665,62 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
             expirySec:(double)expirySec
               assetId:(NSString *)assetId
           assetAmount:(NSNumber *)assetAmount
+          paymentHash:(NSString *)paymentHash
+minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
               resolve:(RCTPromiseResolveBlock)resolve
                reject:(RCTPromiseRejectBlock)reject
 {
     EXEC_ASYNC({
-        NSDictionary *result = [RgbSwiftHelper _rlnLnInvoice:@(nodeId) amtMsat:amtMsat expirySec:@(expirySec) assetId:assetId assetAmount:assetAmount];
+        NSDictionary *result = [RgbSwiftHelper _rlnLnInvoice:@(nodeId) amtMsat:amtMsat expirySec:@(expirySec) assetId:assetId assetAmount:assetAmount paymentHash:paymentHash minFinalCltvExpiryDelta:minFinalCltvExpiryDelta];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_LN_INVOICE_ERROR", errorMessage, nil);
         } else {
             resolve(result);
         }
+    });
+}
+
+- (void)rlnClaimHodlInvoice:(double)nodeId
+                paymentHash:(NSString *)paymentHash
+             paymentPreimage:(NSString *)paymentPreimage
+                     resolve:(RCTPromiseResolveBlock)resolve
+                      reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnClaimHodlInvoice:@(nodeId) paymentHash:paymentHash paymentPreimage:paymentPreimage];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_CLAIM_HODL_INVOICE_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
+- (void)rlnCancelHodlInvoice:(double)nodeId
+                  paymentHash:(NSString *)paymentHash
+                      resolve:(RCTPromiseResolveBlock)resolve
+                       reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnCancelHodlInvoice:@(nodeId) paymentHash:paymentHash];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_CANCEL_HODL_INVOICE_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnApayNew:(double)nodeId
+         hostNodeId:(NSString *)hostNodeId
+            resolve:(RCTPromiseResolveBlock)resolve
+             reject:(RCTPromiseRejectBlock)reject
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        reject(@"NotImplemented", @"rlnApayNew requires a new UDL method in rgb-lightning-node — not yet available in 0.4.3-beta.1 bindings", nil);
     });
 }
 

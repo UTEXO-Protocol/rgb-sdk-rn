@@ -7,6 +7,7 @@ import type {
   LspOnchainSendResponse,
   LspLightningReceiveRequest,
   LspLightningReceiveResponse,
+  LspLightningReceiveWire,
   LspLnurlpCallbackResponse,
 } from './lsp-types';
 
@@ -180,9 +181,14 @@ export class UtexoLSPClient implements IUtexoLSPClient {
       ln_invoice: params.lnInvoice,
       rgb_invoice: snakeCaseRgbParams(params.rgb),
     };
-    return this.request<LspLightningReceiveResponse>('/lightning_receive', {
+    const raw = await this.request<LspLightningReceiveWire>('/lightning_receive', {
       method: 'POST',
       body: JSON.stringify(body),
     });
+    return {
+      lnInvoice:  raw.ln_invoice  ?? raw.lnInvoice  ?? '',
+      rgbInvoice: raw.rgb_invoice ?? raw.rgbInvoice ?? '',
+      mappingId:  String(raw.mapping_id  ?? raw.mappingId  ?? ''),
+    };
   }
 }

@@ -57,6 +57,16 @@ export interface LspLightningReceiveResponse {
   mappingId: string;
 }
 
+/** Raw wire shape returned by utexo-lsp (snake_case keys). */
+export interface LspLightningReceiveWire {
+  ln_invoice?: string;
+  lnInvoice?: string;
+  rgb_invoice?: string;
+  rgbInvoice?: string;
+  mapping_id?: string | number;
+  mappingId?: string | number;
+}
+
 export interface LspLnurlpCallbackResponse {
   pr: string;
   routes: unknown[];

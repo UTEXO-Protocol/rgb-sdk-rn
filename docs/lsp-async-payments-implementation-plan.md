@@ -603,7 +603,7 @@ console.log(`Claimed: ${result.changed}`);
 ### 8.4 Sender-node: pay via Lightning Address
 
 ```typescript
-const lsp = new UtexoLSPClient({ baseUrl: 'https://lsp.example.com' });
+const lsp = new UtexoLSPClient({ baseUrl: 'https://lsp-signet.utexo.com' });
 
 // 1. Resolve Lightning Address → BOLT11
 const { pr: bolt11 } = await lsp.resolveAddress('alice', 50_000_000); // 50k sats in msat
@@ -615,7 +615,7 @@ await wallet.payLightningInvoice({ invoice: bolt11 });
 ### 8.5 Sender-node: RGB → Lightning swap via LSP
 
 ```typescript
-const lsp = new UtexoLSPClient({ baseUrl: 'https://lsp.example.com' });
+const lsp = new UtexoLSPClient({ baseUrl: 'https://lsp-signet.utexo.com' });
 
 // Get an RGB invoice from sender's wallet
 const { rgbInvoice } = await senderWallet.createRgbInvoice({ assetId: 'abc...', amount: 100 });
@@ -633,7 +633,7 @@ await senderWallet.payLightningInvoice({ invoice: lnInvoice });
 const wallet = new UTEXOWallet(signer, {
   storageDirPath: '/data/node',
   network: 'mainnet',
-  lspBaseUrl: 'https://lsp.example.com',
+  lspBaseUrl: 'https://lsp-signet.utexo.com',
   lspBearerToken: 'secret-token',
   vssUrl: 'https://vss.example.com',      // strongly recommended
   // ...other params

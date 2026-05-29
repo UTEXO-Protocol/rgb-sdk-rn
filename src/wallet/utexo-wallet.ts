@@ -89,7 +89,14 @@ import type {
   HodlInvoice,
   HodlInvoiceResult,
   ApayNewResponse,
+  LspLnParams,
+  LspRgbParams,
+  LspOnchainSendResponse,
+  LspLightningReceiveResponse,
+  LspClientConfig,
 } from '../lsp/lsp-types';
+import type { IUtexoLSPClient } from '../lsp/IUtexoLSPClient';
+import { UtexoLSPClient } from '../lsp/UtexoLSPClient';
 
 // ── Extended send request models ─────────────────────────────────────────────
 // These extend the core interfaces with RLN-specific fields without modifying core.
@@ -127,6 +134,13 @@ export interface UTEXOWalletNodeParams {
   xpubVan: string;
   xpubCol: string;
   masterFingerprint: string;
+}
+
+// ── LSP helper ───────────────────────────────────────────────────────────────
+
+function asLspClient(lsp: IUtexoLSPClient | LspClientConfig): IUtexoLSPClient {
+  if (typeof (lsp as IUtexoLSPClient).getInfo === 'function') return lsp as IUtexoLSPClient;
+  return new UtexoLSPClient(lsp as LspClientConfig);
 }
 
 // ── Type-mapping helpers (module-private) ─────────────────────────────────────
@@ -786,6 +800,71 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       lastHashIndex: raw.lastHashIndex,
       hashes: raw.hashes,
     };
+  }
+
+  // ── LSP convenience methods ───────────────────────────────────────────────
+
+  /**
+   * Resolve a Lightning Address (any host, full LUD-06) and pay the invoice.
+   * Works for alice@getalby.com, alice@lsp.example, any LNURL-pay server.
+   */
+  async payLightningAddress(
+    address: string,
+    amtMsat: number
+  ): Promise<{ invoice: string; sendResult: LightningSendRequest }> {
+    const [username, domain] = address.split('@');
+    if (!username || !domain) throw new Error(`payLightningAddress: invalid address "${address}"`);
+
+    const discoveryUrl = `https://${domain}/.well-known/lnurlp/${encodeURIComponent(username)}`;
+    const meta = await fetch(discoveryUrl).then((r) => r.json()) as { callback: string };
+    if (!meta?.callback) throw new Error('payLightningAddress: missing callback in LNURL response');
+
+    const sep = meta.callback.includes('?') ? '&' : '?';
+    const { pr } = await fetch(`${meta.callback}${sep}amount=${amtMsat}`).then((r) => r.json()) as { pr: string };
+    if (!pr) throw new Error('payLightningAddress: missing pr in LNURL callback response');
+
+    const sendResult = await this.payLightningInvoice({ lnInvoice: pr });
+    return { invoice: pr, sendResult };
+  }
+
+  /**
+   * RGB → Lightning: submit an RGB invoice to the LSP, pay the returned BOLT11.
+   * LSP runs sendrgb to the recipient once the LN payment settles.
+   */
+  async payRgbViaLsp(params: {
+    lsp: IUtexoLSPClient | LspClientConfig;
+    rgbInvoice: string;
+    ln: LspLnParams;
+  }): Promise<LspOnchainSendResponse & { sendResult: LightningSendRequest }> {
+    const client = asLspClient(params.lsp);
+    const issued = await client.onchainSend({ rgbInvoice: params.rgbInvoice, ln: params.ln });
+    const sendResult = await this.payLightningInvoice({ lnInvoice: issued.lnInvoice });
+    return { ...issued, sendResult };
+  }
+
+  /**
+   * Lightning → RGB: create a LN invoice on this wallet, post it to the LSP,
+   * get back an RGB invoice to share with the sender.
+   * Once the RGB transfer settles, the LSP pays the LN invoice.
+   */
+  async requestLspRgbDeposit(params: {
+    lsp: IUtexoLSPClient | LspClientConfig;
+    rgb: LspRgbParams;
+    lnInvoiceRequest?: { expirySeconds?: number; amountSats?: number };
+    lnInvoice?: string;
+  }): Promise<LspLightningReceiveResponse> {
+    const client = asLspClient(params.lsp);
+    let lnInvoice = params.lnInvoice;
+    if (!lnInvoice) {
+      const req = params.lnInvoiceRequest ?? {};
+      const minted = await this.createLightningInvoice({
+        expirySeconds: req.expirySeconds ?? 3600,
+        amountSats: req.amountSats,
+        asset: { assetId: '', amount: 0 },
+      });
+      lnInvoice = minted.lnInvoice;
+    }
+    return client.lightningReceive({ lnInvoice, rgb: params.rgb });
   }
 
   async getLightningReceiveRequest(

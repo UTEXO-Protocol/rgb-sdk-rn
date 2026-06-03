@@ -25,26 +25,28 @@
 
 The async payment logic lives in `src/async_order.rs`. It communicates with the LSP via `AsyncOrderLspClient` (P2P onion messaging), **not** via direct HTTP from the mobile device.
 
-### 1.2 What is missing in `rgb-sdk-rn`
+### 1.2 Implementation status in `rgb-sdk-rn` (updated 2026-06-01, v0.5.0-beta.1)
 
-| Gap | Where | Severity |
+| Feature | Status | Location |
 |---|---|---|
-| `lspBaseUrl` / `lspBearerToken` not in `IRLNNodeCreateParams` | `src/binding/IRLN.ts` | Blocker for async payments |
-| `paymentHash?` not in `rlnLnInvoice()` | `RLNBinding.ts:412` + `NativeRgb.ts` | Blocker |
-| `minFinalCltvExpiryDelta?` not in `rlnLnInvoice()` | `RLNBinding.ts:412` + `NativeRgb.ts` | Blocker |
-| No `rlnClaimHodlInvoice()` | `RLNBinding.ts`, `IRLN.ts`, `NativeRgb.ts` | Blocker |
-| No `rlnCancelHodlInvoice()` | `RLNBinding.ts`, `IRLN.ts`, `NativeRgb.ts` | Blocker |
-| No `rlnApayNew()` / `rlnApayOutboundInvoice()` | `RLNBinding.ts` | Blocker |
-| `UTEXOWallet.createLightningInvoice` missing CLTV + payment hash | `src/wallet/utexo-wallet.ts:720` | Blocker |
-| No HODL convenience methods on `UTEXOWallet` | `utexo-wallet.ts` | Blocker |
-| No `UtexoLSPClient` | — | Blocker |
+| `lspBaseUrl` / `lspBearerToken` in node init | ✅ Done | `UTEXOWallet` params → `RLNBinding.rlnCreateNode` |
+| `paymentHash?` in `rlnLnInvoice()` | ✅ Done | `RLNBinding`, `NativeRgb`, `RgbModule.kt`, `RgbSwiftHelper.swift` |
+| `minFinalCltvExpiryDelta?` in `rlnLnInvoice()` | ✅ Done | same |
+| `rlnClaimHodlInvoice()` | ✅ Done | `RLNBinding`, bridge, `UTEXOWallet.claimHodlInvoice` |
+| `rlnCancelHodlInvoice()` | ✅ Done | `RLNBinding`, bridge, `UTEXOWallet.cancelHodlInvoice` |
+| `rlnApayNew()` | ✅ Done | `RLNBinding`, `RgbModule.kt`, `RgbSwiftHelper.swift` |
+| `UTEXOWallet.apayRegisterHashPool` | ✅ Done | `utexo-wallet.ts` |
+| `UTEXOWallet.listPaymentsRaw()` | ✅ Done | `utexo-wallet.ts` — returns full `RlnPayment[]` with `preimage` |
+| `UTEXOWallet.createHodlInvoice` | ✅ Done | `utexo-wallet.ts` |
+| `UtexoLSPClient` | ✅ Done | `src/lsp/UtexoLSPClient.ts` |
+| `UTEXOWallet.payLightningAddress` | ✅ Done | `utexo-wallet.ts` |
 
 ### 1.3 State in other SDKs
 
 | SDK | HODL invoices | `min_final_cltv_expiry_delta` | LSP client | Async payments |
 |---|---|---|---|---|
 | `rgb-sdk-web` | ✓ (`createHodlLnInvoice`, `claimHodlInvoice`, `cancelHodlInvoice`) | ✗ | `LspClient` class on `feat/lsp-client` branch | ✗ (needs `/apay/new` + `/apay/outboundinvoice`) |
-| `rgb-sdk-rn` | ✗ | ✗ | ✗ | ✗ |
+| `rgb-sdk-rn` | ✅ | ✅ | ✅ | ✅ (v0.5.0-beta.1) |
 | `rgb-sdk-core` | ✗ (no types yet) | ✗ | ✗ | ✗ |
 
 ### 1.4 `utexo-lsp` (Go bridge)
@@ -71,67 +73,113 @@ CLTV policy: `144 blocks` inbound (LSP creates invoice), `18 blocks` outbound (L
 
 ---
 
-## 2. Proposed End-to-End Async Payment Flow
+## 2. Async Payment Flow
 
-```
-recipient-node                     LSP (utexo-lsp)               sender-node
-─────────────────────────────────────────────────────────────────────────────
-1. POST /apay/new ──────────────► /internal/async_order/new
-   (sends async_order.new JSON-RPC    (stores hash pool,
-    with N payment hashes via          returns accepted_through_index)
-    P2P onion message to LSP peer)
+### 2.1 Hash Pool Registration (Recipient → LSP)
 
-2.                                                         ◄── GET /.well-known/lnurlp/{user}
-                                                                 (Lightning Address lookup)
-3.                                  GET /pay/callback/
-                                     ?amount=<msat> ──────────►
-                                    (reserves slot, creates
-                                     HODL BOLT11 with
-                                     payment_hash from pool,
-                                     min_final_cltv=144)
-4.                                                         ◄── (BOLT11 returned to sender)
+The control plane for hash registration lives entirely inside `rgb-lightning-node`. The mobile SDK calls a single method; all P2P and HTTP communication happens inside the native daemon.
 
-5.                                  ◄── sender pays BOLT11
-                                     (HTLC held at LSP,
-                                      NOT yet settled)
+```mermaid
+sequenceDiagram
+  autonumber
+  participant R as Recipient RLN
+  participant H as Host RLN (LSP node)
+  participant L as utexo-lsp
 
-6.  POST /apay/outboundinvoice ◄──  /internal/async_order/claimable
-     LSP requests HODL invoice        (LSP notifies RLN via
-     from recipient-node              onion message;
-     with payment_hash + min_final    recipient RLN calls back
-     _cltv_expiry_delta=18)           /apay/outboundinvoice)
-
-7.  createHodlInvoice(               ◄── (LSP receives invoice)
-     payment_hash,
-     amount_msat,
-     expiry_sec,
-     min_final_cltv_expiry_delta=18)
-
-8.                                  LSP pays recipient HODL invoice ──►
-                                     (sendpayment to recipient-node)
-
-9.  claimHodlInvoice(preimage) ─────────────────────────────────────►
-     (recipient reveals preimage)    (LSP now has preimage)
-
-10.                                 LSP claims inbound HTLC ─────────►
-                                     from sender-node using preimage
+  R-->>H: control-plane payload<br/>(peer_pubkey, protocol_version, hash batch)
+  Note over R,H: P2P onion message — lives in rgb-lightning-node
+  H->>L: POST /internal/async_order/new
+  L->>L: ensureLightningAddressAccount(peer_pubkey)
+  L->>L: bootstrapAsyncOrder + mergeAsyncHashPool
+  L-->>H: JSON-RPC response<br/>(order_id, status, accepted_through_index,<br/>next_index_expected, unused_hashes, refill_batch_size)
+  H-->>R: response forwarded via P2P
 ```
 
-### 2.1 Key protocol invariants
+**SDK call:** `wallet.apayRegisterHashPool(hostNodePubkey)` — `hostNodePubkey` is the **LDK peer pubkey of the LSP's RLN node** (not the utexo-lsp HTTP service). After this call the LSP has created a Lightning Address for the recipient keyed by `peer_pubkey`.
 
-- Payment hashes are derived **deterministically** from the recipient's wallet seed by RLN (`/apay/new`). No client-side hash generation required.
+### 2.2 Recipient State Machine (inside `rgb-lightning-node`)
+
+```mermaid
+stateDiagram-v2
+  [*] --> RecipientPrepare
+
+  state "Recipient prepares params" as RecipientPrepare
+  state "Recipient queues request" as RecipientQueue
+  state "Host receives custom message" as HostHandle
+  state "Host posts to LSP" as HostPostLsp
+  state "LSP returns result" as LspReply
+  state "Host sends response to recipient" as HostReply
+  state "Recipient completes response" as RecipientComplete
+
+  RecipientPrepare --> RecipientQueue    : prepare_async_order_new_params
+  RecipientQueue   --> HostHandle        : queue_async_order_new
+  HostHandle       --> HostPostLsp       : lsp_client present
+  HostHandle       --> HostReply         : no lsp_client
+  HostPostLsp      --> LspReply          : async_order_new
+  LspReply         --> HostReply         : response
+  HostReply        --> RecipientComplete : complete_async_order_response
+  RecipientComplete --> [*]
+```
+
+### 2.3 Full End-to-End Payment Flow
+
+```
+Recipient RLN          Host RLN (LSP)          utexo-lsp               Sender RLN
+──────────────────────────────────────────────────────────────────────────────────
+1. apay_new ──P2P──► /internal/async_order/new ──► ensureLightningAddressAccount
+   (hash batch)       (stores pool, creates          (creates LN Address for
+                       LN Address for recipient)      recipient keyed by pubkey)
+   ◄── order_id, status, accepted_through_index ─────────────────────────────────
+
+2.                                              ◄── GET /.well-known/lnurlp/{pubkey}
+                                                     (sender discovers recipient LN Address)
+
+3.                    GET /pay/callback/
+                       ?amount=<msat> ─────────────────────────────────────────────►
+                      (reserves hash slot,
+                       creates HODL BOLT11
+                       with hash from pool,
+                       min_final_cltv=144)
+                      ◄─────────────────────────────────────── (BOLT11 returned to sender)
+
+4.                    ◄── sender pays BOLT11
+                       (HTLC held at LSP —
+                        NOT yet settled;
+                        recipient is "offline")
+
+5. /apay/outboundinvoice ◄── /internal/async_order/claimable
+   LSP requests HODL invoice   (LSP notifies recipient RLN
+   with payment_hash +          via P2P onion message;
+   min_final_cltv=18            recipient RLN creates HODL
+                                invoice, returns to LSP)
+
+6.                    LSP pays recipient HODL invoice ──────────────────────────────►
+                       (sendpayment to recipient node)
+
+7. claimHodlInvoice(preimage) ──────────────────────────────────────────────────────►
+   (recipient reveals preimage;  (LSP receives preimage,
+    payment_type=InboundHodl      settles inbound HTLC
+    status→Succeeded)             from sender)
+```
+
+### 2.4 Key protocol invariants
+
+- Payment hashes are derived **deterministically** from the recipient's wallet seed by RLN inside `apay_new`. No client-side hash generation required.
+- `hostNodePubkey` in `apayRegisterHashPool` is the **LDK peer pubkey** of the LSP's RLN node — not the utexo-lsp HTTP URL.
 - The LSP holds the HTLC until the outbound payment to the recipient settles — never settles early.
-- `claim_deadline` (block height) is enforced: if the deadline passes, the outbound payment is cancelled and the inbound HTLC expires safely.
-- RLN manages all onion-message communication with the LSP; the mobile SDK does not need a direct HTTP channel to LSP internal endpoints.
+- `claim_deadline` (block height) is enforced: if deadline passes, outbound is cancelled and inbound HTLC expires safely.
+- All P2P onion-message communication is handled inside the native RLN daemon. The mobile SDK never calls `/internal/async_order/*` directly.
 
-### 2.2 When does the mobile SDK need to call the LSP directly?
+### 2.5 What the mobile SDK calls directly
 
-Only for the **public** LSP endpoints:
-- Resolving a Lightning Address → `GET /.well-known/lnurlp/{user}` then `GET /pay/callback`
-- `POST /onchain_send` (RGB → Lightning swap)
-- `POST /lightning_receive` (Lightning → RGB swap)
-
-The internal `/internal/async_order/*` endpoints are called by RLN, not the app.
+| Endpoint | Who calls it | Purpose |
+|---|---|---|
+| `GET /.well-known/lnurlp/{pubkey}` | Sender app | Discover recipient Lightning Address |
+| `GET /pay/callback?amount=<msat>` | Sender app | Get HODL BOLT11 |
+| `POST /onchain_send` | Sender app | RGB → Lightning swap |
+| `POST /lightning_receive` | Recipient app | Lightning → RGB swap |
+| `POST /internal/async_order/new` | Host RLN daemon | Register hash pool (never called by app) |
+| `POST /internal/async_order/claimable` | Host RLN daemon | Notify claimable (never called by app) |
 
 ---
 

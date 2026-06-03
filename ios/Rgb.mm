@@ -719,8 +719,14 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
             resolve:(RCTPromiseResolveBlock)resolve
              reject:(RCTPromiseRejectBlock)reject
 {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        reject(@"NotImplemented", @"rlnApayNew requires a new UDL method in rgb-lightning-node — not yet available in 0.4.3-beta.1 bindings", nil);
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnApayNew:@(nodeId) hostNodeId:hostNodeId];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_APAY_NEW_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
     });
 }
 

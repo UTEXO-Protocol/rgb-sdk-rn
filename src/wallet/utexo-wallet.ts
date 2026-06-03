@@ -83,6 +83,7 @@ import type {
   RlnTransaction,
   RlnTransfer,
   RlnUnspent,
+  RlnPayment,
 } from '../binding/rln-types';
 import type {
   CreateHodlInvoiceParams,
@@ -174,12 +175,13 @@ function mapBalance(b: RlnAssetBalance): Balance {
 }
 
 function mapAssetBalance(b: RlnAssetBalance): AssetBalance {
+  const raw = b as any;
   return {
     settled: b.settled,
     future: b.future,
     spendable: b.spendable,
-    offchainOutbound: b.offchainOutbound,
-    offchainInbound: b.offchainInbound,
+    offchainOutbound: b.offchainOutbound ?? raw.offchain_outbound,
+    offchainInbound:  b.offchainInbound  ?? raw.offchain_inbound,
   };
 }
 
@@ -784,6 +786,10 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return { changed: true };
   }
 
+  async listPaymentsRaw(): Promise<RlnPayment[]> {
+    return this.rln.rlnListPayments();
+  }
+
   async apayRegisterHashPool(hostNodeId: string): Promise<ApayNewResponse> {
     const raw = await this.rln.rlnApayNew(hostNodeId);
     return {
@@ -910,14 +916,14 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   async payLightningInvoice(
-    params: PayLightningInvoiceRequestModel
+    params: PayLightningInvoiceRequestModel & { assetAmount?: number }
   ): Promise<LightningSendRequest> {
     const amtMsat = params.amount != null ? params.amount * 1000 : null;
     const resp = await this.rln.rlnSendPayment(
       params.lnInvoice,
       amtMsat,
       params.assetId ?? null,
-      null
+      params.assetAmount ?? null
     );
     return { txid: resp.paymentHash ?? resp.paymentId, status: resp.status };
   }

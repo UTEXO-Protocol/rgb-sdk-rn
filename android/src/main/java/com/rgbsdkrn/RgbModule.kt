@@ -47,6 +47,7 @@ import org.utexo.rgblightningnode.SdkIssueAssetUdaRequest
 import org.utexo.rgblightningnode.SdkVssClearFenceRequest
 import org.utexo.rgblightningnode.CancelHodlInvoiceRequest
 import org.utexo.rgblightningnode.ClaimHodlInvoiceRequest
+import org.utexo.rgblightningnode.AsyncOrderNewHashWire
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -665,6 +666,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putDouble("settled", b.settled.toDouble())
         map.putDouble("future", b.future.toDouble())
         map.putDouble("spendable", b.spendable.toDouble())
+        map.putDouble("offchainOutbound", b.offchainOutbound.toDouble())
+        map.putDouble("offchainInbound", b.offchainInbound.toDouble())
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1187,8 +1190,38 @@ class RgbModule(reactContext: ReactApplicationContext) :
   }
 
   override fun rlnApayNew(nodeId: Double, hostNodeId: String, promise: Promise) {
-    coroutineScope.launch(Dispatchers.Main) {
-      promise.reject("NotImplemented", "rlnApayNew requires a new UDL method in rgb-lightning-node — not yet available in 0.4.3-beta.1 bindings")
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        android.util.Log.d("RNRgb", "rlnApayNew: nodeId=$nodeId hostNodeId=$hostNodeId")
+        val res = node.apayNew(hostNodeId)
+        val map = Arguments.createMap()
+        map.putString("requestId", res.requestId)
+        map.putString("hostNodeId", res.hostNodeId)
+        map.putDouble("protocolVersion", res.protocolVersion.toDouble())
+        map.putString("orderId", res.orderId)
+        map.putString("status", res.status)
+        map.putDouble("acceptedThroughIndex", res.acceptedThroughIndex.toDouble())
+        map.putDouble("nextIndexExpected", res.nextIndexExpected.toDouble())
+        map.putDouble("unusedHashes", res.unusedHashes.toDouble())
+        map.putDouble("refillBatchSize", res.refillBatchSize.toDouble())
+        map.putDouble("firstHashIndex", res.firstHashIndex.toDouble())
+        map.putDouble("lastHashIndex", res.lastHashIndex.toDouble())
+        val hashesArr = Arguments.createArray()
+        res.hashes.forEach { h: AsyncOrderNewHashWire ->
+          val hMap = Arguments.createMap()
+          hMap.putDouble("hashIndex", h.hashIndex.toDouble())
+          hMap.putString("paymentHash", h.paymentHash)
+          hashesArr.pushMap(hMap)
+        }
+        map.putArray("hashes", hashesArr)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
     }
   }
 
@@ -1298,6 +1331,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val map = Arguments.createMap()
         map.putString("paymentId", res.paymentId)
         map.putString("paymentHash", res.paymentHash)
+        map.putString("paymentSecret", res.paymentSecret)
         map.putString("status", res.status.toString())
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {

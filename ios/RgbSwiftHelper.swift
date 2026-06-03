@@ -349,6 +349,8 @@ public class RgbSwiftHelper: NSObject {
         "settled": NSNumber(value: b.settled),
         "future": NSNumber(value: b.future),
         "spendable": NSNumber(value: b.spendable),
+        "offchainOutbound": NSNumber(value: b.offchainOutbound),
+        "offchainInbound": NSNumber(value: b.offchainInbound),
       ] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -852,6 +854,35 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
+  @objc(_rlnApayNew:hostNodeId:)
+  public static func _rlnApayNew(_ nodeId: NSNumber, hostNodeId: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.apayNew(hostNodeId: hostNodeId)
+      let hashes = res.hashes.map { h -> [String: Any] in
+        ["hashIndex": h.hashIndex, "paymentHash": h.paymentHash]
+      }
+      return [
+        "requestId": res.requestId,
+        "hostNodeId": res.hostNodeId,
+        "protocolVersion": res.protocolVersion,
+        "orderId": res.orderId,
+        "status": res.status,
+        "acceptedThroughIndex": res.acceptedThroughIndex,
+        "nextIndexExpected": res.nextIndexExpected,
+        "unusedHashes": res.unusedHashes,
+        "refillBatchSize": res.refillBatchSize,
+        "firstHashIndex": res.firstHashIndex,
+        "lastHashIndex": res.lastHashIndex,
+        "hashes": hashes,
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
   @objc(_rlnRefreshTransfers:skipSync:)
   public static func _rlnRefreshTransfers(_ nodeId: NSNumber, skipSync: Bool) -> NSDictionary {
     do {
@@ -949,6 +980,7 @@ public class RgbSwiftHelper: NSObject {
       return [
         "paymentId": res.paymentId,
         "paymentHash": res.paymentHash as Any,
+        "paymentSecret": res.paymentSecret as Any,
         "status": "\(res.status)",
       ] as NSDictionary
     } catch {

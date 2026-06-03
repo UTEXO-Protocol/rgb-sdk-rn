@@ -38,6 +38,7 @@ export type {
   LspLightningReceiveRequest,
   LspLightningReceiveResponse,
   LspLnurlpCallbackResponse,
+  LspLightningAddressByPubkeyResponse,
   CreateHodlInvoiceParams,
   HodlInvoice,
   HodlInvoiceResult,

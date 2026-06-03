@@ -124,6 +124,7 @@ export interface RlnPayment {
 export interface RlnSendPaymentResponse {
   paymentId: string;
   paymentHash?: string;
+  paymentSecret?: string;
   status: RlnPaymentStatus;
 }
 

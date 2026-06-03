@@ -873,6 +873,8 @@ public func FfiConverterTypeNativeExternalSigner_lower(_ value: NativeExternalSi
 public protocol SdkNodeProtocol: AnyObject {
     func address() throws -> AddressInfo
 
+    func apayNew(hostNodeId: String) throws -> AsyncOrderNewResponse
+
     func assetBalance(assetId: ContractId) throws -> AssetBalanceInfo
 
     func assetMetadata(assetId: ContractId) throws -> AssetMetadataInfo
@@ -981,6 +983,8 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func unlock(request: SdkUnlockRequest) throws
 
+    func vssBackup() throws -> Int64
+
     func vssClearFence(request: SdkVssClearFenceRequest) throws
 
     func attachExternalSigner(host: ExternalSignerHost, bootstrap: SdkExternalSignerBootstrap) throws
@@ -1056,6 +1060,13 @@ open class SdkNode:
     open func address() throws -> AddressInfo {
         return try FfiConverterTypeAddressInfo.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_address(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func apayNew(hostNodeId: String) throws -> AsyncOrderNewResponse {
+        return try FfiConverterTypeAsyncOrderNewResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_apay_new(self.uniffiClonePointer(),
+                                                                 FfiConverterString.lower(hostNodeId), $0)
         })
     }
 
@@ -1430,6 +1441,12 @@ open class SdkNode:
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock(self.uniffiClonePointer(),
                                                                FfiConverterTypeSdkUnlockRequest.lower(request), $0)
         }
+    }
+
+    open func vssBackup() throws -> Int64 {
+        return try FfiConverterInt64.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_vss_backup(self.uniffiClonePointer(), $0)
+        })
     }
 
     open func vssClearFence(request: SdkVssClearFenceRequest) throws {
@@ -2427,6 +2444,208 @@ public func FfiConverterTypeAssetUda_lift(_ buf: RustBuffer) throws -> AssetUda 
 #endif
 public func FfiConverterTypeAssetUda_lower(_ value: AssetUda) -> RustBuffer {
     return FfiConverterTypeAssetUda.lower(value)
+}
+
+public struct AsyncOrderNewHashWire {
+    public var hashIndex: UInt64
+    public var paymentHash: String
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(hashIndex: UInt64, paymentHash: String) {
+        self.hashIndex = hashIndex
+        self.paymentHash = paymentHash
+    }
+}
+
+extension AsyncOrderNewHashWire: Equatable, Hashable {
+    public static func == (lhs: AsyncOrderNewHashWire, rhs: AsyncOrderNewHashWire) -> Bool {
+        if lhs.hashIndex != rhs.hashIndex {
+            return false
+        }
+        if lhs.paymentHash != rhs.paymentHash {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(hashIndex)
+        hasher.combine(paymentHash)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAsyncOrderNewHashWire: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AsyncOrderNewHashWire {
+        return
+            try AsyncOrderNewHashWire(
+                hashIndex: FfiConverterUInt64.read(from: &buf),
+                paymentHash: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: AsyncOrderNewHashWire, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.hashIndex, into: &buf)
+        FfiConverterString.write(value.paymentHash, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncOrderNewHashWire_lift(_ buf: RustBuffer) throws -> AsyncOrderNewHashWire {
+    return try FfiConverterTypeAsyncOrderNewHashWire.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncOrderNewHashWire_lower(_ value: AsyncOrderNewHashWire) -> RustBuffer {
+    return FfiConverterTypeAsyncOrderNewHashWire.lower(value)
+}
+
+public struct AsyncOrderNewResponse {
+    public var requestId: String
+    public var hostNodeId: String
+    public var protocolVersion: UInt64
+    public var orderId: String
+    public var status: String
+    public var acceptedThroughIndex: UInt64
+    public var nextIndexExpected: UInt64
+    public var unusedHashes: UInt64
+    public var refillBatchSize: UInt64
+    public var firstHashIndex: UInt64
+    public var lastHashIndex: UInt64
+    public var hashes: [AsyncOrderNewHashWire]
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(requestId: String, hostNodeId: String, protocolVersion: UInt64, orderId: String, status: String, acceptedThroughIndex: UInt64, nextIndexExpected: UInt64, unusedHashes: UInt64, refillBatchSize: UInt64, firstHashIndex: UInt64, lastHashIndex: UInt64, hashes: [AsyncOrderNewHashWire]) {
+        self.requestId = requestId
+        self.hostNodeId = hostNodeId
+        self.protocolVersion = protocolVersion
+        self.orderId = orderId
+        self.status = status
+        self.acceptedThroughIndex = acceptedThroughIndex
+        self.nextIndexExpected = nextIndexExpected
+        self.unusedHashes = unusedHashes
+        self.refillBatchSize = refillBatchSize
+        self.firstHashIndex = firstHashIndex
+        self.lastHashIndex = lastHashIndex
+        self.hashes = hashes
+    }
+}
+
+extension AsyncOrderNewResponse: Equatable, Hashable {
+    public static func == (lhs: AsyncOrderNewResponse, rhs: AsyncOrderNewResponse) -> Bool {
+        if lhs.requestId != rhs.requestId {
+            return false
+        }
+        if lhs.hostNodeId != rhs.hostNodeId {
+            return false
+        }
+        if lhs.protocolVersion != rhs.protocolVersion {
+            return false
+        }
+        if lhs.orderId != rhs.orderId {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.acceptedThroughIndex != rhs.acceptedThroughIndex {
+            return false
+        }
+        if lhs.nextIndexExpected != rhs.nextIndexExpected {
+            return false
+        }
+        if lhs.unusedHashes != rhs.unusedHashes {
+            return false
+        }
+        if lhs.refillBatchSize != rhs.refillBatchSize {
+            return false
+        }
+        if lhs.firstHashIndex != rhs.firstHashIndex {
+            return false
+        }
+        if lhs.lastHashIndex != rhs.lastHashIndex {
+            return false
+        }
+        if lhs.hashes != rhs.hashes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(requestId)
+        hasher.combine(hostNodeId)
+        hasher.combine(protocolVersion)
+        hasher.combine(orderId)
+        hasher.combine(status)
+        hasher.combine(acceptedThroughIndex)
+        hasher.combine(nextIndexExpected)
+        hasher.combine(unusedHashes)
+        hasher.combine(refillBatchSize)
+        hasher.combine(firstHashIndex)
+        hasher.combine(lastHashIndex)
+        hasher.combine(hashes)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAsyncOrderNewResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AsyncOrderNewResponse {
+        return
+            try AsyncOrderNewResponse(
+                requestId: FfiConverterString.read(from: &buf),
+                hostNodeId: FfiConverterString.read(from: &buf),
+                protocolVersion: FfiConverterUInt64.read(from: &buf),
+                orderId: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf),
+                acceptedThroughIndex: FfiConverterUInt64.read(from: &buf),
+                nextIndexExpected: FfiConverterUInt64.read(from: &buf),
+                unusedHashes: FfiConverterUInt64.read(from: &buf),
+                refillBatchSize: FfiConverterUInt64.read(from: &buf),
+                firstHashIndex: FfiConverterUInt64.read(from: &buf),
+                lastHashIndex: FfiConverterUInt64.read(from: &buf),
+                hashes: FfiConverterSequenceTypeAsyncOrderNewHashWire.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: AsyncOrderNewResponse, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.requestId, into: &buf)
+        FfiConverterString.write(value.hostNodeId, into: &buf)
+        FfiConverterUInt64.write(value.protocolVersion, into: &buf)
+        FfiConverterString.write(value.orderId, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterUInt64.write(value.acceptedThroughIndex, into: &buf)
+        FfiConverterUInt64.write(value.nextIndexExpected, into: &buf)
+        FfiConverterUInt64.write(value.unusedHashes, into: &buf)
+        FfiConverterUInt64.write(value.refillBatchSize, into: &buf)
+        FfiConverterUInt64.write(value.firstHashIndex, into: &buf)
+        FfiConverterUInt64.write(value.lastHashIndex, into: &buf)
+        FfiConverterSequenceTypeAsyncOrderNewHashWire.write(value.hashes, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncOrderNewResponse_lift(_ buf: RustBuffer) throws -> AsyncOrderNewResponse {
+    return try FfiConverterTypeAsyncOrderNewResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncOrderNewResponse_lower(_ value: AsyncOrderNewResponse) -> RustBuffer {
+    return FfiConverterTypeAsyncOrderNewResponse.lower(value)
 }
 
 public struct BlockTime {
@@ -9479,6 +9698,31 @@ private struct FfiConverterSequenceTypeAssetUda: FfiConverterRustBuffer {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+private struct FfiConverterSequenceTypeAsyncOrderNewHashWire: FfiConverterRustBuffer {
+    typealias SwiftType = [AsyncOrderNewHashWire]
+
+    static func write(_ value: [AsyncOrderNewHashWire], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAsyncOrderNewHashWire.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AsyncOrderNewHashWire] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AsyncOrderNewHashWire]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeAsyncOrderNewHashWire.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
 private struct FfiConverterSequenceTypeChannel: FfiConverterRustBuffer {
     typealias SwiftType = [Channel]
 
@@ -10157,6 +10401,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_address() != 59336 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_apay_new() != 7684 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_asset_balance() != 20956 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10317,6 +10564,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock() != 60312 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_vss_backup() != 63911 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_vss_clear_fence() != 9846 {

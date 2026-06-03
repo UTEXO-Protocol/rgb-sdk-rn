@@ -15,6 +15,17 @@ export interface LspGetInfoResponse {
   pubkey: string;
   alias?: string;
   numChannels: number;
+  numUsableChannels: number;
+}
+
+/** Raw wire shape returned by utexo-lsp (snake_case keys). */
+export interface LspGetInfoWire {
+  pubkey: string;
+  alias?: string;
+  num_channels?: number;
+  numChannels?: number;
+  num_usable_channels?: number;
+  numUsableChannels?: number;
 }
 
 export interface LspLnParams {
@@ -72,6 +83,12 @@ export interface LspLnurlpCallbackResponse {
   routes: unknown[];
   status?: string;
   reason?: string;
+}
+
+/** utexo-lsp `GET /lightning_address/by_pubkey/{pubkey}` */
+export interface LspLightningAddressByPubkeyResponse {
+  username: string;
+  domain: string;
 }
 
 // ── HODL invoice types ────────────────────────────────────────────────────────

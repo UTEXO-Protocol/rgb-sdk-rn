@@ -1,5 +1,6 @@
 import type {
   LspGetInfoResponse,
+  LspLightningAddressByPubkeyResponse,
   LspOnchainSendRequest,
   LspOnchainSendResponse,
   LspLightningReceiveRequest,
@@ -16,7 +17,9 @@ export interface IUtexoLSPClient {
    */
   resolveAddress(
     username: string,
-    amtMsat: number
+    amtMsat: number,
+    assetId?: string,
+    assetAmount?: number
   ): Promise<LspLnurlpCallbackResponse>;
 
   /**
@@ -25,8 +28,18 @@ export interface IUtexoLSPClient {
    */
   lnurlCallback(
     username: string,
-    amtMsat: number
+    amtMsat: number,
+    assetId?: string,
+    assetAmount?: number
   ): Promise<LspLnurlpCallbackResponse>;
+
+  /**
+   * Resolve the haiku username + domain for a recipient peer pubkey
+   * (after `apayRegisterHashPool` / `async_order/new`).
+   */
+  getLightningAddressByPubkey(
+    peerPubkey: string
+  ): Promise<LspLightningAddressByPubkeyResponse>;
 
   /** RGB → Lightning: submit RGB invoice; get BOLT11 to pay. */
   onchainSend(params: LspOnchainSendRequest): Promise<LspOnchainSendResponse>;

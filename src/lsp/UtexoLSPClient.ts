@@ -3,11 +3,13 @@ import type { IUtexoLSPClient } from './IUtexoLSPClient';
 import type {
   LspClientConfig,
   LspGetInfoResponse,
+  LspGetInfoWire,
   LspOnchainSendRequest,
   LspOnchainSendResponse,
   LspLightningReceiveRequest,
   LspLightningReceiveResponse,
   LspLightningReceiveWire,
+  LspLightningAddressByPubkeyResponse,
   LspLnurlpCallbackResponse,
 } from './lsp-types';
 
@@ -92,6 +94,16 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     }
   }
 
+  private rewriteCallbackUrl(callbackUrl: string): string {
+    try {
+      const base = new URL(this.config.baseUrl);
+      const cb   = new URL(callbackUrl);
+      return base.origin + cb.pathname + cb.search + cb.hash;
+    } catch {
+      return callbackUrl;
+    }
+  }
+
   private timeoutSignal(ms: number): AbortSignal | undefined {
     if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
       return (AbortSignal as any).timeout(ms);
@@ -105,7 +117,13 @@ export class UtexoLSPClient implements IUtexoLSPClient {
   }
 
   async getInfo(): Promise<LspGetInfoResponse> {
-    return this.request<LspGetInfoResponse>('/get_info');
+    const raw = await this.request<LspGetInfoWire>('/get_info');
+    return {
+      pubkey:            raw.pubkey,
+      alias:             raw.alias,
+      numChannels:       raw.num_channels       ?? raw.numChannels       ?? 0,
+      numUsableChannels: raw.num_usable_channels ?? raw.numUsableChannels ?? 0,
+    };
   }
 
   /**
@@ -115,7 +133,9 @@ export class UtexoLSPClient implements IUtexoLSPClient {
    */
   async resolveAddress(
     username: string,
-    amtMsat: number
+    amtMsat: number,
+    assetId?: string,
+    assetAmount?: number
   ): Promise<LspLnurlpCallbackResponse> {
     const meta = await this.request<{ callback: string }>(
       `/.well-known/lnurlp/${encodeURIComponent(username)}`
@@ -123,11 +143,11 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     if (!meta?.callback) {
       throw new LspError('/.well-known/lnurlp', 200, 'missing callback in LNURL response');
     }
-    // Use the full callback URL — it may be on a different host
     const sep = meta.callback.includes('?') ? '&' : '?';
-    return this.request<LspLnurlpCallbackResponse>(
-      `${meta.callback}${sep}amount=${amtMsat}`
-    );
+    let url = `${this.rewriteCallbackUrl(meta.callback)}${sep}amount=${amtMsat}`;
+    if (assetId) url += `&asset_id=${encodeURIComponent(assetId)}`;
+    if (assetAmount !== undefined) url += `&asset_amount=${assetAmount}`;
+    return this.request<LspLnurlpCallbackResponse>(url);
   }
 
   /**
@@ -137,10 +157,25 @@ export class UtexoLSPClient implements IUtexoLSPClient {
    */
   async lnurlCallback(
     username: string,
-    amtMsat: number
+    amtMsat: number,
+    assetId?: string,
+    assetAmount?: number
   ): Promise<LspLnurlpCallbackResponse> {
-    return this.request<LspLnurlpCallbackResponse>(
-      `/pay/callback/${encodeURIComponent(username)}?amount=${amtMsat}`
+    let path = `/pay/callback/${encodeURIComponent(username)}?amount=${amtMsat}`;
+    if (assetId) path += `&asset_id=${encodeURIComponent(assetId)}`;
+    if (assetAmount !== undefined) path += `&asset_amount=${assetAmount}`;
+    return this.request<LspLnurlpCallbackResponse>(path);
+  }
+
+  async getLightningAddressByPubkey(
+    peerPubkey: string
+  ): Promise<LspLightningAddressByPubkeyResponse> {
+    const pubkey = peerPubkey.trim();
+    if (!pubkey) {
+      throw new Error('getLightningAddressByPubkey: peerPubkey is required');
+    }
+    return this.request<LspLightningAddressByPubkeyResponse>(
+      `/lightning_address/by_pubkey/${encodeURIComponent(pubkey)}`
     );
   }
 

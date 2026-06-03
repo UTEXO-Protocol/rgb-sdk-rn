@@ -11,6 +11,7 @@ React Native SDK for RGB client applications. Provides TypeScript/React Native b
 
 - Run a full Lightning node on-device (iOS and Android) via RLN
 - Open Lightning channels and send/receive BTC or RGB asset payments
+- Async payments (APay): hash pool + Lightning Address via utexo-lsp — see [docs/async-payments.md](./docs/async-payments.md)
 - Issue, transfer, and manage RGB assets (NIA, CFA, IFA, UDA)
 - Manage UTXOs and BTC on-chain sends
 - Use a hardware-wallet–style **external signer** or a simple **password signer**
@@ -217,6 +218,19 @@ await wallet.destroy();
 | `getLightningSendRequest(paymentHash)` | Poll send status (`'WaitingCounterparty'` → `'Settled'` \| `'Failed'`) |
 | `getLightningReceiveRequest(invoice)` | Poll receive status |
 | `listLightningPayments()` | List all Lightning payments |
+
+#### IUTEXOProtocol — Async payments (APay) & LSP
+
+| Method | Description |
+|--------|-------------|
+| `apayRegisterHashPool(hostNodeId)` | ① Register hash pool with Host RLN (LSP peer pubkey) |
+| `payLightningAddress(address, amtMsat)` | ②③ Resolve LNURL-pay and pay (sender) |
+| `claimHodlInvoice(paymentHash, preimage)` | ⑤ Claim inbound HODL after async payment |
+| `cancelHodlInvoice(paymentHash)` | Cancel a HODL invoice |
+| `createHodlInvoice(params)` | Create HODL invoice with optional `paymentHash` |
+| `listPaymentsRaw()` | Raw payment list (includes `InboundHodl`, `preimage`) |
+
+`UtexoLSPClient` (HTTP to utexo-lsp): `getLightningAddressByPubkey`, `resolveAddress`, `onchainSend`, `lightningReceive`. See [docs/async-payments.md](./docs/async-payments.md).
 
 #### IUTEXOProtocol — Onchain (RGB)
 
@@ -634,6 +648,17 @@ try {
 
 ---
 
+## Further reading
+
+| Doc | Description |
+|-----|-------------|
+| [docs/async-payments.md](./docs/async-payments.md) | Six-step APay flow, diagrams, SDK usage, demo mapping |
+| [docs/lsp-async-payments-implementation-plan.md](./docs/lsp-async-payments-implementation-plan.md) | Implementation plan and binding details |
+| [docs/bug-apay-new-invalid-request.md](./docs/bug-apay-new-invalid-request.md) | utexo-lsp ↔ RLN JSON wire-format issues |
+| [docs/bug-apay-claimable-outbox-stuck.md](./docs/bug-apay-claimable-outbox-stuck.md) | Claimable 400 / no InboundHodl on recipient after pay |
+
+---
+
 ## Demo App
 
 A full working demo is available at **[rgb-sdk-rn-playground](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo)**. It demonstrates:
@@ -642,6 +667,7 @@ A full working demo is available at **[rgb-sdk-rn-playground](https://github.com
 - Both signer types: `NativeExternalRLNSigner` (nodeA) and `PasswordRLNSigner` (nodeB)
 - Node restart on the same `UTEXOWallet` instance via `reinit()`
 - Raw `RLNManager` flows for comparison
+- **Async Payment** tab: full six-step APay flow — see [docs/async-payments.md](./docs/async-payments.md)
 
 ### Running the Demo
 

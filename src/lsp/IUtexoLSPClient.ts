@@ -35,7 +35,7 @@ export interface IUtexoLSPClient {
 
   /**
    * Resolve the haiku username + domain for a recipient peer pubkey
-   * (after `apayRegisterHashPool` / `async_order/new`).
+   * (after `apayNew` / `async_order/new`).
    */
   getLightningAddressByPubkey(
     peerPubkey: string

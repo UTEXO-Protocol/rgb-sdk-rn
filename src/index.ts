@@ -44,7 +44,26 @@ export type {
   HodlInvoiceResult,
   ApayHashEntry,
   ApayNewResponse,
+  // New LSP types
+  LspPeer,
+  ReceiveStatus,
+  ChannelReadyInfo,
 } from './lsp/lsp-types';
+export { normalizeReceiveStatus, peerUri } from './lsp/lsp-types';
+
+// UtexoLsp — composed LSP flows (connect, channel wait, receive, send, pay address, APay)
+export { UtexoLsp } from './lsp/UtexoLsp';
+export type {
+  WaitOptions,
+  ReceiveAssetOptions,
+  ReceiveAssetResult,
+  SendAssetOptions,
+  SendAssetResult,
+  PayAddressOptions,
+  LightningAddressInfo,
+  ClaimResult,
+} from './lsp/UtexoLsp';
+export { LspChannelTimeoutError, LspSettlementError } from './lsp/LspErrors';
 
 // Crypto — PSBT signing stubs (bdk-rn removed; throws — use NativeExternalRLNSigner for PSBT)
 export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';

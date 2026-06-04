@@ -91,6 +91,51 @@ export interface LspLightningAddressByPubkeyResponse {
   domain: string;
 }
 
+// ── LspPeer ───────────────────────────────────────────────────────────────────
+// Single config object that replaces three separate values apps currently pass
+// to connectPeer(), UtexoLSPClient, and UTEXOWalletNodeParams.lspBaseUrl.
+
+export interface LspPeer {
+  /** utexo-lsp HTTP base URL — same value as UTEXOWalletNodeParams.lspBaseUrl */
+  baseUrl: string;
+  /** Lightning P2P pubkey — used for connectPeer() */
+  peerPubkey: string;
+  peerHost: string;
+  peerPort: number;
+  /** Required only for APay async routes (/internal/async_order/*) */
+  bearerToken?: string;
+  timeoutMs?: number;
+}
+
+/** Returns the string accepted by UTEXOWallet.connectPeer() */
+export function peerUri(peer: LspPeer): string {
+  return `${peer.peerPubkey}@${peer.peerHost}:${peer.peerPort}`;
+}
+
+// ── ReceiveStatus ─────────────────────────────────────────────────────────────
+// Canonical status type. Replaces the dual Succeeded|Settled string checks
+// that appear in multiple places in the demo.
+
+export type ReceiveStatus = 'Pending' | 'Succeeded' | 'Failed' | 'Expired';
+
+export function normalizeReceiveStatus(raw: string | null | undefined): ReceiveStatus {
+  const s = (raw ?? '').toUpperCase();
+  if (s === 'SUCCEEDED' || s === 'SETTLED') return 'Succeeded';
+  if (s === 'FAILED')  return 'Failed';
+  if (s === 'EXPIRED') return 'Expired';
+  return 'Pending';
+}
+
+// ── ChannelReadyInfo ──────────────────────────────────────────────────────────
+
+export interface ChannelReadyInfo {
+  channelId: string;
+  peerPubkey: string;
+  capacitySat: number;
+  outboundBalanceMsat: number;
+  inboundBalanceMsat: number;
+}
+
 // ── HODL invoice types ────────────────────────────────────────────────────────
 
 export interface CreateHodlInvoiceParams {

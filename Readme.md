@@ -224,7 +224,7 @@ await wallet.destroy();
 
 | Method | Description |
 |--------|-------------|
-| `createLsp(peer)` | Create an `UtexoLsp` session for composed LSP flows |
+| `createLsp(peer?)` | Create an `UtexoLsp` session. No-arg: discovers peer from `lspBaseUrl` + `GET /get_info`. Pass `LspPeer` to override. |
 | `getLspConfig()` | Return `{ baseUrl, bearerToken }` this node was initialized with |
 | `apayNew(hostNodeId)` | Register a hash pool with the host LSP node |
 | `createHodlInvoice(params)` | Create a HODL invoice tied to a specific payment hash |
@@ -827,9 +827,7 @@ try {
 ### Setup
 
 ```typescript
-import { type LspPeer } from '@utexo/rgb-sdk-rn';
-
-// Wallet must include lspBaseUrl for APay (async payments)
+// Wallet must include lspBaseUrl — required for no-arg createLsp() and APay
 const wallet = new UTEXOWallet({
   ...nodeParams,
   lspBaseUrl:     'https://lsp-signet.utexo.com',
@@ -839,14 +837,17 @@ const wallet = new UTEXOWallet({
 await wallet.init();
 await wallet.unlock(unlockParams);
 
-const LSP_PEER: LspPeer = {
+// No-arg form — discovers peer pubkey from GET /get_info,
+// host from lspBaseUrl, port defaults to 9735
+const lsp = await wallet.createLsp();
+
+// Or pass explicit peer to override any field
+const lsp = await wallet.createLsp({
   baseUrl:    'https://lsp-signet.utexo.com',
   peerPubkey: '02abc...',
   peerHost:   'lsp-signet.utexo.com',
   peerPort:   9735,
-};
-
-const lsp = wallet.createLsp(LSP_PEER);
+});
 ```
 
 ### Receive RGB over Lightning

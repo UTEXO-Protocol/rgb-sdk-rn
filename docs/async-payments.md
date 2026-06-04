@@ -119,7 +119,7 @@ const LSP_PEER: LspPeer = {
   peerHost:   'lsp-signet.utexo.com',
   peerPort:   9735,
 };
-const lsp = wallet.createLsp(LSP_PEER);
+const lsp = await wallet.createLsp(LSP_PEER);
 ```
 
 ### ① Register + get Lightning Address

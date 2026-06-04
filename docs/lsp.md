@@ -2,7 +2,7 @@
 
 `utexo-lsp` is a Lightning Service Provider that bridges on-chain RGB assets with Lightning payments. The SDK exposes it through two objects:
 
-- **`UtexoLsp`** — composed flows (connect, channel wait, receive, send, APay). Create one per wallet via `wallet.createLsp(peer)`.
+- **`UtexoLsp`** — composed flows (connect, channel wait, receive, send, APay). Create one per wallet via `wallet.createLsp()`.
 - **`UtexoLSPClient`** — raw HTTP client. Accessible via `lsp.http` for one-off calls.
 
 ---
@@ -10,23 +10,36 @@
 ## Quick start
 
 ```typescript
-import { UTEXOWallet, UtexoLsp, type LspPeer } from '@utexo/rgb-sdk-rn';
+import { UTEXOWallet } from '@utexo/rgb-sdk-rn';
 
-const wallet = new UTEXOWallet({ ...nodeParams, lspBaseUrl: 'https://lsp-signet.utexo.com' }, signer);
+// lspBaseUrl is required — wires the native RLN for APay and
+// is the source for no-arg createLsp() peer discovery
+const wallet = new UTEXOWallet({
+  ...nodeParams,
+  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  lspBearerToken: 'bearer-token',  // only required for APay
+}, signer);
 await wallet.init();
 await wallet.unlock(unlockParams);
 
-const LSP: LspPeer = {
-  baseUrl:    'https://lsp-signet.utexo.com',
-  peerPubkey: '02abc...',   // Lightning P2P pubkey
-  peerHost:   'lsp-signet.utexo.com',
-  peerPort:   9735,
-};
-
-const lsp = wallet.createLsp(LSP);
+// No-arg: peer pubkey from GET /get_info, host from lspBaseUrl, port 9735
+const lsp = await wallet.createLsp();
 ```
 
-> **`lspBaseUrl` on the wallet** and **`baseUrl` on `LspPeer`** must be the same URL. The wallet param wires the native RLN node for async payments; `LspPeer.baseUrl` wires the HTTP client for bridge flows.
+If you need to override any peer detail:
+
+```typescript
+import { type LspPeer } from '@utexo/rgb-sdk-rn';
+
+const lsp = await wallet.createLsp({
+  baseUrl:    'https://lsp-signet.utexo.com',
+  peerPubkey: '02abc...',
+  peerHost:   'lsp-signet.utexo.com',
+  peerPort:   9736,  // non-standard port
+});
+```
+
+> **`lspBaseUrl` on the wallet** and **`baseUrl` on `LspPeer`** must point to the same URL. The wallet param wires the native RLN node for async payments; `LspPeer.baseUrl` wires the HTTP client for bridge flows.
 
 ---
 
@@ -248,7 +261,7 @@ class LspSettlementError extends Error {
 ### Receive RGB over Lightning
 
 ```typescript
-const lsp = wallet.createLsp(LSP_PEER);
+const lsp = await wallet.createLsp(LSP_PEER);
 
 // 1. Connect + wait for channel (regtest: mine blocks per iteration)
 await lsp.connect();
@@ -319,7 +332,7 @@ const wallet = new UTEXOWallet({
 await wallet.init();
 await wallet.unlock(unlockParams);
 
-const lsp = wallet.createLsp(LSP_PEER);
+const lsp = await wallet.createLsp(LSP_PEER);
 
 // Register once after first unlock
 const { address } = await lsp.enableLightningAddress();

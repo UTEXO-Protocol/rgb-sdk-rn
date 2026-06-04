@@ -93,6 +93,7 @@ import type {
   LspPeer,
 } from '../lsp/lsp-types';
 import { UtexoLsp } from '../lsp/UtexoLsp';
+import { UtexoLSPClient } from '../lsp/UtexoLSPClient';
 
 // ── Extended send request models ─────────────────────────────────────────────
 // These extend the core interfaces with RLN-specific fields without modifying core.
@@ -800,10 +801,31 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   /**
    * Create an UtexoLsp instance for composed LSP flows.
-   * Stateless — safe to recreate. One per wallet in a real app.
+   *
+   * No-arg form — auto-discovers peer info from the wallet's lspBaseUrl:
+   *   const lsp = await wallet.createLsp();
+   *   // pubkey from GET /get_info, host from lspBaseUrl, port defaults to 9735
+   *
+   * Explicit form — use when you already have the peer details:
+   *   const lsp = await wallet.createLsp({ baseUrl, peerPubkey, peerHost, peerPort });
    */
-  createLsp(peer: LspPeer): UtexoLsp {
-    return new UtexoLsp(this, peer);
+  async createLsp(peer?: LspPeer, peerPort = 9735): Promise<UtexoLsp> {
+    if (peer) return new UtexoLsp(this, peer);
+
+    const baseUrl = this.params.lspBaseUrl;
+    if (!baseUrl) throw new Error('createLsp: lspBaseUrl not set — pass a LspPeer explicitly or set lspBaseUrl in wallet params');
+
+    const http     = new UtexoLSPClient({ baseUrl, bearerToken: this.params.lspBearerToken ?? undefined });
+    const info     = await http.getInfo();
+    const peerHost = new URL(baseUrl).hostname;
+
+    return new UtexoLsp(this, {
+      baseUrl,
+      peerPubkey:  info.pubkey,
+      peerHost,
+      peerPort,
+      bearerToken: this.params.lspBearerToken ?? undefined,
+    });
   }
 
   /**

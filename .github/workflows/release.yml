@@ -1,19 +1,19 @@
 name: Build and Release
 
 on:
-  # Trigger from rgb-lib repository
+  # Triggered by rgb-lightning-node after a new SDK release
   repository_dispatch:
-    types: [rgb-lib-release]
+    types: [rln-release]
 
   # Manual trigger
   workflow_dispatch:
     inputs:
-      rgb_lib_version:
-        description: 'rgb-lib version to use (e.g., v0.3.0-beta.5)'
+      rln_version:
+        description: 'RLN version to pin (e.g., 0.3.0-beta.2)'
         required: true
         type: string
 
-  # Tag-based release
+  # Tag-based release (manual version bump + tag push)
   push:
     tags:
       - 'v*.*.*'
@@ -30,19 +30,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get version info
-        id: version
+      - name: Resolve RLN version
+        id: rln
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
-            echo "rgb_lib_version=${{ github.event.client_payload.version }}" >> $GITHUB_OUTPUT
-            echo "is_rgb_lib_trigger=true" >> $GITHUB_OUTPUT
+            VERSION="${{ github.event.client_payload.version }}"
+            echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+            echo "auto=true" >> $GITHUB_OUTPUT
           elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "rgb_lib_version=${{ inputs.rgb_lib_version }}" >> $GITHUB_OUTPUT
-            echo "is_rgb_lib_trigger=true" >> $GITHUB_OUTPUT
+            VERSION="${{ inputs.rln_version }}"
+            echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+            echo "auto=true" >> $GITHUB_OUTPUT
           else
-            echo "is_rgb_lib_trigger=false" >> $GITHUB_OUTPUT
+            echo "auto=false" >> $GITHUB_OUTPUT
           fi
-        shell: bash
+
+      - name: Update RLN version in download script
+        if: steps.rln.outputs.auto == 'true'
+        run: |
+          RLN_VERSION="${{ steps.rln.outputs.version }}"
+          sed -i "s/const VERSION = '[^']*'/const VERSION = '${RLN_VERSION}'/" scripts/download-rln-bindings.js
+          echo "Pinned RLN VERSION → ${RLN_VERSION}"
+
+      - name: Bump package prerelease version
+        if: steps.rln.outputs.auto == 'true'
+        run: npm version prerelease --preid=beta --no-git-tag-version
+
+      - name: Commit and push version bump
+        if: steps.rln.outputs.auto == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scripts/download-rln-bindings.js package.json
+          git commit -m "chore: bump RLN bindings to v${{ steps.rln.outputs.version }}"
+          git push
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -69,23 +91,23 @@ jobs:
           echo "version=v$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        if: github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch'
+        if: steps.rln.outputs.auto == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.pkg_version.outputs.version }}
           name: Release ${{ steps.pkg_version.outputs.version }}
           body: |
             ## rgb-sdk-rn ${{ steps.pkg_version.outputs.version }}
-            
+
             React Native SDK for RGB Protocol.
-            
-            Built with rgb-lib ${{ steps.version.outputs.rgb_lib_version }}
-            
+
+            Built with RGB Lightning Node v${{ steps.rln.outputs.version }}
+
             ### Installation
             ```bash
             npm install @utexo/rgb-sdk-rn
             ```
-            
+
             ### Supported Platforms
             - iOS
             - Android
@@ -93,4 +115,3 @@ jobs:
           prerelease: ${{ contains(steps.pkg_version.outputs.version, 'beta') || contains(steps.pkg_version.outputs.version, 'alpha') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

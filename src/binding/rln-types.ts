@@ -57,6 +57,7 @@ export interface RlnNodeInfo {
   channelAssetMaxAmount?: number;
   networkNodes?: number;
   networkChannels?: number;
+  latestRgsSnapshotTimestamp?: number | null;
 }
 
 export interface RlnNetworkInfo {

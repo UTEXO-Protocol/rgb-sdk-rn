@@ -995,9 +995,9 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func initWithNativeExternalSigner(signer: NativeExternalSigner) throws
 
-    func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+    func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 
-    func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+    func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 }
 
 open class SdkNode:
@@ -1484,13 +1484,13 @@ open class SdkNode:
         }
     }
 
-    open func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+    open func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_attached_external_signer(self.uniffiClonePointer(),
-                                                                                             FfiConverterString.lower(bitcoindRpcUsername),
-                                                                                             FfiConverterString.lower(bitcoindRpcPassword),
-                                                                                             FfiConverterString.lower(bitcoindRpcHost),
-                                                                                             FfiConverterUInt16.lower(bitcoindRpcPort),
+                                                                                             FfiConverterOptionString.lower(bitcoindRpcUsername),
+                                                                                             FfiConverterOptionString.lower(bitcoindRpcPassword),
+                                                                                             FfiConverterOptionString.lower(bitcoindRpcHost),
+                                                                                             FfiConverterOptionUInt16.lower(bitcoindRpcPort),
                                                                                              FfiConverterOptionString.lower(indexerUrl),
                                                                                              FfiConverterOptionString.lower(proxyEndpoint),
                                                                                              FfiConverterSequenceString.lower(announceAddresses),
@@ -1498,14 +1498,14 @@ open class SdkNode:
         }
     }
 
-    open func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+    open func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_native_external_signer(self.uniffiClonePointer(),
                                                                                            FfiConverterTypeNativeExternalSigner.lower(signer),
-                                                                                           FfiConverterString.lower(bitcoindRpcUsername),
-                                                                                           FfiConverterString.lower(bitcoindRpcPassword),
-                                                                                           FfiConverterString.lower(bitcoindRpcHost),
-                                                                                           FfiConverterUInt16.lower(bitcoindRpcPort),
+                                                                                           FfiConverterOptionString.lower(bitcoindRpcUsername),
+                                                                                           FfiConverterOptionString.lower(bitcoindRpcPassword),
+                                                                                           FfiConverterOptionString.lower(bitcoindRpcHost),
+                                                                                           FfiConverterOptionUInt16.lower(bitcoindRpcPort),
                                                                                            FfiConverterOptionString.lower(indexerUrl),
                                                                                            FfiConverterOptionString.lower(proxyEndpoint),
                                                                                            FfiConverterSequenceString.lower(announceAddresses),
@@ -4175,10 +4175,11 @@ public struct NodeInfo {
     public var channelAssetMaxAmount: UInt64
     public var networkNodes: UInt64
     public var networkChannels: UInt64
+    public var latestRgsSnapshotTimestamp: UInt64?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(pubkey: PublicKey, numChannels: UInt64, numUsableChannels: UInt64, localBalanceSat: UInt64, eventualCloseFeesSat: UInt64, pendingOutboundPaymentsSat: UInt64, numPeers: UInt64, accountXpubVanilla: String, accountXpubColored: String, maxMediaUploadSizeMb: UInt16, rgbHtlcMinMsat: UInt64, rgbChannelCapacityMinSat: UInt64, channelCapacityMinSat: UInt64, channelCapacityMaxSat: UInt64, channelAssetMinAmount: UInt64, channelAssetMaxAmount: UInt64, networkNodes: UInt64, networkChannels: UInt64) {
+    public init(pubkey: PublicKey, numChannels: UInt64, numUsableChannels: UInt64, localBalanceSat: UInt64, eventualCloseFeesSat: UInt64, pendingOutboundPaymentsSat: UInt64, numPeers: UInt64, accountXpubVanilla: String, accountXpubColored: String, maxMediaUploadSizeMb: UInt16, rgbHtlcMinMsat: UInt64, rgbChannelCapacityMinSat: UInt64, channelCapacityMinSat: UInt64, channelCapacityMaxSat: UInt64, channelAssetMinAmount: UInt64, channelAssetMaxAmount: UInt64, networkNodes: UInt64, networkChannels: UInt64, latestRgsSnapshotTimestamp: UInt64? = nil) {
         self.pubkey = pubkey
         self.numChannels = numChannels
         self.numUsableChannels = numUsableChannels
@@ -4197,6 +4198,7 @@ public struct NodeInfo {
         self.channelAssetMaxAmount = channelAssetMaxAmount
         self.networkNodes = networkNodes
         self.networkChannels = networkChannels
+        self.latestRgsSnapshotTimestamp = latestRgsSnapshotTimestamp
     }
 }
 
@@ -4256,6 +4258,9 @@ extension NodeInfo: Equatable, Hashable {
         if lhs.networkChannels != rhs.networkChannels {
             return false
         }
+        if lhs.latestRgsSnapshotTimestamp != rhs.latestRgsSnapshotTimestamp {
+            return false
+        }
         return true
     }
 
@@ -4278,6 +4283,7 @@ extension NodeInfo: Equatable, Hashable {
         hasher.combine(channelAssetMaxAmount)
         hasher.combine(networkNodes)
         hasher.combine(networkChannels)
+        hasher.combine(latestRgsSnapshotTimestamp)
     }
 }
 
@@ -4305,7 +4311,8 @@ public struct FfiConverterTypeNodeInfo: FfiConverterRustBuffer {
                 channelAssetMinAmount: FfiConverterUInt64.read(from: &buf),
                 channelAssetMaxAmount: FfiConverterUInt64.read(from: &buf),
                 networkNodes: FfiConverterUInt64.read(from: &buf),
-                networkChannels: FfiConverterUInt64.read(from: &buf)
+                networkChannels: FfiConverterUInt64.read(from: &buf),
+                latestRgsSnapshotTimestamp: FfiConverterOptionUInt64.read(from: &buf)
             )
     }
 
@@ -4328,6 +4335,7 @@ public struct FfiConverterTypeNodeInfo: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.channelAssetMaxAmount, into: &buf)
         FfiConverterUInt64.write(value.networkNodes, into: &buf)
         FfiConverterUInt64.write(value.networkChannels, into: &buf)
+        FfiConverterOptionUInt64.write(value.latestRgsSnapshotTimestamp, into: &buf)
     }
 }
 
@@ -6949,18 +6957,19 @@ public func FfiConverterTypeSdkTakerRequest_lower(_ value: SdkTakerRequest) -> R
 
 public struct SdkUnlockRequest {
     public var password: String
-    public var bitcoindRpcUsername: String
-    public var bitcoindRpcPassword: String
-    public var bitcoindRpcHost: String
-    public var bitcoindRpcPort: UInt16
+    public var bitcoindRpcUsername: String?
+    public var bitcoindRpcPassword: String?
+    public var bitcoindRpcHost: String?
+    public var bitcoindRpcPort: UInt16?
     public var indexerUrl: String?
     public var proxyEndpoint: String?
     public var announceAddresses: [String]
     public var announceAlias: String?
+    public var gossipRgsServerUrl: String?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(password: String, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) {
+    public init(password: String, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?, gossipRgsServerUrl: String? = nil) {
         self.password = password
         self.bitcoindRpcUsername = bitcoindRpcUsername
         self.bitcoindRpcPassword = bitcoindRpcPassword
@@ -6970,6 +6979,7 @@ public struct SdkUnlockRequest {
         self.proxyEndpoint = proxyEndpoint
         self.announceAddresses = announceAddresses
         self.announceAlias = announceAlias
+        self.gossipRgsServerUrl = gossipRgsServerUrl
     }
 }
 
@@ -7002,6 +7012,9 @@ extension SdkUnlockRequest: Equatable, Hashable {
         if lhs.announceAlias != rhs.announceAlias {
             return false
         }
+        if lhs.gossipRgsServerUrl != rhs.gossipRgsServerUrl {
+            return false
+        }
         return true
     }
 
@@ -7015,6 +7028,7 @@ extension SdkUnlockRequest: Equatable, Hashable {
         hasher.combine(proxyEndpoint)
         hasher.combine(announceAddresses)
         hasher.combine(announceAlias)
+        hasher.combine(gossipRgsServerUrl)
     }
 }
 
@@ -7026,27 +7040,29 @@ public struct FfiConverterTypeSdkUnlockRequest: FfiConverterRustBuffer {
         return
             try SdkUnlockRequest(
                 password: FfiConverterString.read(from: &buf),
-                bitcoindRpcUsername: FfiConverterString.read(from: &buf),
-                bitcoindRpcPassword: FfiConverterString.read(from: &buf),
-                bitcoindRpcHost: FfiConverterString.read(from: &buf),
-                bitcoindRpcPort: FfiConverterUInt16.read(from: &buf),
+                bitcoindRpcUsername: FfiConverterOptionString.read(from: &buf),
+                bitcoindRpcPassword: FfiConverterOptionString.read(from: &buf),
+                bitcoindRpcHost: FfiConverterOptionString.read(from: &buf),
+                bitcoindRpcPort: FfiConverterOptionUInt16.read(from: &buf),
                 indexerUrl: FfiConverterOptionString.read(from: &buf),
                 proxyEndpoint: FfiConverterOptionString.read(from: &buf),
                 announceAddresses: FfiConverterSequenceString.read(from: &buf),
-                announceAlias: FfiConverterOptionString.read(from: &buf)
+                announceAlias: FfiConverterOptionString.read(from: &buf),
+                gossipRgsServerUrl: FfiConverterOptionString.read(from: &buf)
             )
     }
 
     public static func write(_ value: SdkUnlockRequest, into buf: inout [UInt8]) {
         FfiConverterString.write(value.password, into: &buf)
-        FfiConverterString.write(value.bitcoindRpcUsername, into: &buf)
-        FfiConverterString.write(value.bitcoindRpcPassword, into: &buf)
-        FfiConverterString.write(value.bitcoindRpcHost, into: &buf)
-        FfiConverterUInt16.write(value.bitcoindRpcPort, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindRpcUsername, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindRpcPassword, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindRpcHost, into: &buf)
+        FfiConverterOptionUInt16.write(value.bitcoindRpcPort, into: &buf)
         FfiConverterOptionString.write(value.indexerUrl, into: &buf)
         FfiConverterOptionString.write(value.proxyEndpoint, into: &buf)
         FfiConverterSequenceString.write(value.announceAddresses, into: &buf)
         FfiConverterOptionString.write(value.announceAlias, into: &buf)
+        FfiConverterOptionString.write(value.gossipRgsServerUrl, into: &buf)
     }
 }
 
@@ -10584,10 +10600,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_init_with_native_external_signer() != 35000 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 48853 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 4385 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 58434 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 24108 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_externalsignerhost_call() != 9685 {

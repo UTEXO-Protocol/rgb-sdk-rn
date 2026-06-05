@@ -36,14 +36,15 @@ export interface Spec extends TurboModule {
   rlnUnlockNodeWithNativeExternalSigner(
     nodeId: number,
     signerId: number,
-    bitcoindRpcUsername: string,
-    bitcoindRpcPassword: string,
-    bitcoindRpcHost: string,
-    bitcoindRpcPort: number,
+    bitcoindRpcUsername: string | null,
+    bitcoindRpcPassword: string | null,
+    bitcoindRpcHost: string | null,
+    bitcoindRpcPort: number | null,
     indexerUrl: string | null,
     proxyEndpoint: string | null,
     announceAddresses: string[],
-    announceAlias: string | null
+    announceAlias: string | null,
+    gossipRgsServerUrl: string | null
   ): Promise<void>;
   rlnDestroyNativeExternalSigner(signerId: number): Promise<void>;
   rlnInitNodeWithExternalSigner(
@@ -58,14 +59,15 @@ export interface Spec extends TurboModule {
   rlnUnlockNode(
     nodeId: number,
     password: string,
-    bitcoindRpcUsername: string,
-    bitcoindRpcPassword: string,
-    bitcoindRpcHost: string,
-    bitcoindRpcPort: number,
+    bitcoindRpcUsername: string | null,
+    bitcoindRpcPassword: string | null,
+    bitcoindRpcHost: string | null,
+    bitcoindRpcPort: number | null,
     indexerUrl: string | null,
     proxyEndpoint: string | null,
     announceAddresses: string[],
-    announceAlias: string | null
+    announceAlias: string | null,
+    gossipRgsServerUrl: string | null
   ): Promise<void>;
   rlnDestroyNode(nodeId: number): Promise<void>;
   rlnNodeInfo(nodeId: number): Promise<object>;

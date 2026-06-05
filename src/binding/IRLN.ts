@@ -45,14 +45,15 @@ export interface IRLNNodeCreateParams {
 }
 
 export interface IRLNUnlockParams {
-  bitcoindRpcUsername: string;
-  bitcoindRpcPassword: string;
-  bitcoindRpcHost: string;
-  bitcoindRpcPort: number;
+  bitcoindRpcUsername?: string | null;
+  bitcoindRpcPassword?: string | null;
+  bitcoindRpcHost?: string | null;
+  bitcoindRpcPort?: number | null;
   indexerUrl?: string | null;
   proxyEndpoint?: string | null;
   announceAddresses?: string[];
   announceAlias?: string | null;
+  gossipRgsServerUrl?: string | null;
 }
 
 export interface IRLNExternalSignerBootstrap {

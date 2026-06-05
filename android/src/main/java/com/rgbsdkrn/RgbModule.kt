@@ -190,14 +190,15 @@ class RgbModule(reactContext: ReactApplicationContext) :
   override fun rlnUnlockNode(
     nodeId: Double,
     password: String,
-    bitcoindRpcUsername: String,
-    bitcoindRpcPassword: String,
-    bitcoindRpcHost: String,
-    bitcoindRpcPort: Double,
+    bitcoindRpcUsername: String?,
+    bitcoindRpcPassword: String?,
+    bitcoindRpcHost: String?,
+    bitcoindRpcPort: Double?,
     indexerUrl: String?,
     proxyEndpoint: String?,
     announceAddresses: ReadableArray,
     announceAlias: String?,
+    gossipRgsServerUrl: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -234,11 +235,12 @@ class RgbModule(reactContext: ReactApplicationContext) :
             bitcoindRpcUsername = bitcoindRpcUsername,
             bitcoindRpcPassword = bitcoindRpcPassword,
             bitcoindRpcHost = bitcoindRpcHost,
-            bitcoindRpcPort = bitcoindRpcPort.toInt().toUShort(),
+            bitcoindRpcPort = bitcoindRpcPort?.toInt()?.toUShort(),
             indexerUrl = indexerUrl,
             proxyEndpoint = proxyEndpoint,
             announceAddresses = announceAddressesList,
-            announceAlias = announceAlias
+            announceAlias = announceAlias,
+            gossipRgsServerUrl = gossipRgsServerUrl
           )
         )
         android.util.Log.d("RgbModule", "[rlnUnlockNode] succeeded")
@@ -320,14 +322,15 @@ class RgbModule(reactContext: ReactApplicationContext) :
   override fun rlnUnlockNodeWithNativeExternalSigner(
     nodeId: Double,
     signerId: Double,
-    bitcoindRpcUsername: String,
-    bitcoindRpcPassword: String,
-    bitcoindRpcHost: String,
-    bitcoindRpcPort: Double,
+    bitcoindRpcUsername: String?,
+    bitcoindRpcPassword: String?,
+    bitcoindRpcHost: String?,
+    bitcoindRpcPort: Double?,
     indexerUrl: String?,
     proxyEndpoint: String?,
     announceAddresses: ReadableArray,
     announceAlias: String?,
+    gossipRgsServerUrl: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -357,7 +360,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           bitcoindRpcUsername = bitcoindRpcUsername,
           bitcoindRpcPassword = bitcoindRpcPassword,
           bitcoindRpcHost = bitcoindRpcHost,
-          bitcoindRpcPort = bitcoindRpcPort.toInt().toUShort(),
+          bitcoindRpcPort = bitcoindRpcPort?.toInt()?.toUShort(),
           indexerUrl = indexerUrl,
           proxyEndpoint = proxyEndpoint,
           announceAddresses = announceAddressesList,
@@ -418,6 +421,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putDouble("numUsableChannels", info.numUsableChannels.toDouble())
         map.putDouble("localBalanceSat", info.localBalanceSat.toDouble())
         map.putDouble("numPeers", info.numPeers.toDouble())
+        info.latestRgsSnapshotTimestamp?.let { map.putDouble("latestRgsSnapshotTimestamp", it.toDouble()) }
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {

@@ -123,14 +123,15 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
 
 - (void)rlnUnlockNode:(double)nodeId
              password:(NSString *)password
-  bitcoindRpcUsername:(NSString *)bitcoindRpcUsername
-  bitcoindRpcPassword:(NSString *)bitcoindRpcPassword
-      bitcoindRpcHost:(NSString *)bitcoindRpcHost
-      bitcoindRpcPort:(double)bitcoindRpcPort
+  bitcoindRpcUsername:(NSString * _Nullable)bitcoindRpcUsername
+  bitcoindRpcPassword:(NSString * _Nullable)bitcoindRpcPassword
+      bitcoindRpcHost:(NSString * _Nullable)bitcoindRpcHost
+      bitcoindRpcPort:(NSNumber * _Nullable)bitcoindRpcPort
             indexerUrl:(NSString *)indexerUrl
          proxyEndpoint:(NSString *)proxyEndpoint
      announceAddresses:(NSArray<NSString *> *)announceAddresses
          announceAlias:(NSString *)announceAlias
+    gossipRgsServerUrl:(NSString * _Nullable)gossipRgsServerUrl
                resolve:(RCTPromiseResolveBlock)resolve
                 reject:(RCTPromiseRejectBlock)reject
 {
@@ -140,11 +141,12 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
                                            bitcoindRpcUsername:bitcoindRpcUsername
                                            bitcoindRpcPassword:bitcoindRpcPassword
                                                bitcoindRpcHost:bitcoindRpcHost
-                                               bitcoindRpcPort:@(bitcoindRpcPort)
+                                               bitcoindRpcPort:bitcoindRpcPort
                                                      indexerUrl:indexerUrl
                                                   proxyEndpoint:proxyEndpoint
                                               announceAddresses:announceAddresses
-                                                  announceAlias:announceAlias];
+                                                  announceAlias:announceAlias
+                                             gossipRgsServerUrl:gossipRgsServerUrl];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_UNLOCK_NODE_ERROR", errorMessage, nil);
@@ -932,14 +934,15 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
 
 - (void)rlnUnlockNodeWithNativeExternalSigner:(double)nodeId
                                      signerId:(double)signerId
-                          bitcoindRpcUsername:(NSString *)bitcoindRpcUsername
-                          bitcoindRpcPassword:(NSString *)bitcoindRpcPassword
-                              bitcoindRpcHost:(NSString *)bitcoindRpcHost
-                              bitcoindRpcPort:(double)bitcoindRpcPort
+                          bitcoindRpcUsername:(NSString * _Nullable)bitcoindRpcUsername
+                          bitcoindRpcPassword:(NSString * _Nullable)bitcoindRpcPassword
+                              bitcoindRpcHost:(NSString * _Nullable)bitcoindRpcHost
+                              bitcoindRpcPort:(NSNumber * _Nullable)bitcoindRpcPort
                                    indexerUrl:(NSString *)indexerUrl
                                 proxyEndpoint:(NSString *)proxyEndpoint
                             announceAddresses:(NSArray<NSString *> *)announceAddresses
                                 announceAlias:(NSString *)announceAlias
+                           gossipRgsServerUrl:(NSString * _Nullable)gossipRgsServerUrl
                                       resolve:(RCTPromiseResolveBlock)resolve
                                        reject:(RCTPromiseRejectBlock)reject
 {
@@ -950,11 +953,12 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
             bitcoindRpcUsername:bitcoindRpcUsername
             bitcoindRpcPassword:bitcoindRpcPassword
             bitcoindRpcHost:bitcoindRpcHost
-            bitcoindRpcPort:@(bitcoindRpcPort)
+            bitcoindRpcPort:bitcoindRpcPort
             indexerUrl:indexerUrl
             proxyEndpoint:proxyEndpoint
             announceAddresses:announceAddresses
-            announceAlias:announceAlias];
+            announceAlias:announceAlias
+            gossipRgsServerUrl:gossipRgsServerUrl];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_UNLOCK_NODE_NATIVE_SIGNER_ERROR", errorMessage, nil);

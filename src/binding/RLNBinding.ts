@@ -124,14 +124,15 @@ export class RLNBinding implements IRLN {
         Rgb.rlnUnlockNode(
           nodeId,
           request.password,
-          request.bitcoindRpcUsername,
-          request.bitcoindRpcPassword,
-          request.bitcoindRpcHost,
-          request.bitcoindRpcPort,
+          request.bitcoindRpcUsername ?? null,
+          request.bitcoindRpcPassword ?? null,
+          request.bitcoindRpcHost ?? null,
+          request.bitcoindRpcPort ?? null,
           request.indexerUrl ?? null,
           request.proxyEndpoint ?? null,
           request.announceAddresses ?? [],
-          request.announceAlias ?? null
+          request.announceAlias ?? null,
+          request.gossipRgsServerUrl ?? null
         );
 
       const maxConflictRetries = 4;
@@ -241,14 +242,15 @@ export class RLNBinding implements IRLN {
         Rgb.rlnUnlockNodeWithNativeExternalSigner(
           nodeId,
           signerId,
-          request.bitcoindRpcUsername,
-          request.bitcoindRpcPassword,
-          request.bitcoindRpcHost,
-          request.bitcoindRpcPort,
+          request.bitcoindRpcUsername ?? null,
+          request.bitcoindRpcPassword ?? null,
+          request.bitcoindRpcHost ?? null,
+          request.bitcoindRpcPort ?? null,
           request.indexerUrl ?? null,
           request.proxyEndpoint ?? null,
           request.announceAddresses ?? [],
-          request.announceAlias ?? null
+          request.announceAlias ?? null,
+          request.gossipRgsServerUrl ?? null
         );
 
       const maxConflictRetries = 4;

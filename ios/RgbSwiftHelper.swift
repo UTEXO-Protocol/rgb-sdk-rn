@@ -102,18 +102,19 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnUnlockNode:password:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:)
+  @objc(_rlnUnlockNode:password:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:gossipRgsServerUrl:)
   public static func _rlnUnlockNode(
     _ nodeId: NSNumber,
     password: String,
-    bitcoindRpcUsername: String,
-    bitcoindRpcPassword: String,
-    bitcoindRpcHost: String,
-    bitcoindRpcPort: NSNumber,
+    bitcoindRpcUsername: String?,
+    bitcoindRpcPassword: String?,
+    bitcoindRpcHost: String?,
+    bitcoindRpcPort: NSNumber?,
     indexerUrl: String?,
     proxyEndpoint: String?,
     announceAddresses: [String],
-    announceAlias: String?
+    announceAlias: String?,
+    gossipRgsServerUrl: String?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -125,11 +126,12 @@ public class RgbSwiftHelper: NSObject {
           bitcoindRpcUsername: bitcoindRpcUsername,
           bitcoindRpcPassword: bitcoindRpcPassword,
           bitcoindRpcHost: bitcoindRpcHost,
-          bitcoindRpcPort: UInt16(truncating: bitcoindRpcPort),
+          bitcoindRpcPort: bitcoindRpcPort.map { UInt16(truncating: $0) },
           indexerUrl: indexerUrl,
           proxyEndpoint: proxyEndpoint,
           announceAddresses: announceAddresses,
-          announceAlias: announceAlias
+          announceAlias: announceAlias,
+          gossipRgsServerUrl: gossipRgsServerUrl
         )
       )
       return [:] as NSDictionary
@@ -157,6 +159,7 @@ public class RgbSwiftHelper: NSObject {
         "numUsableChannels": NSNumber(value: info.numUsableChannels),
         "localBalanceSat": NSNumber(value: info.localBalanceSat),
         "numPeers": NSNumber(value: info.numPeers),
+        "latestRgsSnapshotTimestamp": info.latestRgsSnapshotTimestamp.map { NSNumber(value: $0) } as Any,
       ] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -1329,18 +1332,19 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnUnlockNodeWithNativeExternalSigner:signerId:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:)
+  @objc(_rlnUnlockNodeWithNativeExternalSigner:signerId:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:gossipRgsServerUrl:)
   public static func _rlnUnlockNodeWithNativeExternalSigner(
     _ nodeId: NSNumber,
     signerId: NSNumber,
-    bitcoindRpcUsername: String,
-    bitcoindRpcPassword: String,
-    bitcoindRpcHost: String,
-    bitcoindRpcPort: NSNumber,
+    bitcoindRpcUsername: String?,
+    bitcoindRpcPassword: String?,
+    bitcoindRpcHost: String?,
+    bitcoindRpcPort: NSNumber?,
     indexerUrl: String?,
     proxyEndpoint: String?,
     announceAddresses: [String],
-    announceAlias: String?
+    announceAlias: String?,
+    gossipRgsServerUrl: String?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -1354,7 +1358,7 @@ public class RgbSwiftHelper: NSObject {
         bitcoindRpcUsername: bitcoindRpcUsername,
         bitcoindRpcPassword: bitcoindRpcPassword,
         bitcoindRpcHost: bitcoindRpcHost,
-        bitcoindRpcPort: UInt16(truncating: bitcoindRpcPort),
+        bitcoindRpcPort: bitcoindRpcPort.map { UInt16(truncating: $0) },
         indexerUrl: indexerUrl,
         proxyEndpoint: proxyEndpoint,
         announceAddresses: announceAddresses,

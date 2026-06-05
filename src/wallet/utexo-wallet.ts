@@ -61,6 +61,7 @@ import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
 import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../binding/IRLN';
 import { toNativeNetwork } from '../binding/Interfaces';
+import { resolveUnlockParams } from './network-defaults';
 import type {
   RlnNodeInfo,
   RlnNetworkInfo,
@@ -399,7 +400,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   /** Unlock the node (every start). Accepts the same params as IRLNUnlockParams. */
   async unlock(params: IRLNUnlockParams): Promise<void> {
-    await this.signer.unlockNode(this.rln, params);
+    await this.signer.unlockNode(this.rln, resolveUnlockParams(this.params.network, params));
   }
 
   /**
@@ -410,7 +411,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   async reinit(params?: IRLNUnlockParams): Promise<void> {
     this.rln = createRLNManager();
     await this.rln.rlnCreateNode(this.buildNodeParams());
-    if (params) await this.signer.unlockNode(this.rln, params);
+    if (params) await this.signer.unlockNode(this.rln, resolveUnlockParams(this.params.network, params));
   }
 
   /** Stop the node. Bridge marks the entry as SHUTDOWN (restartable via reinit). */

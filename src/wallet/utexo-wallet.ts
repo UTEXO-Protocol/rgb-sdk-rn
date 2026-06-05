@@ -129,9 +129,6 @@ export interface UTEXOWalletNodeParams {
   vssAllowEmptyRestore?: boolean;
   lspBaseUrl?: string | null;
   lspBearerToken?: string | null;
-  xpubVan: string;
-  xpubCol: string;
-  masterFingerprint: string;
 }
 
 // ── Type-mapping helpers (module-private) ─────────────────────────────────────
@@ -448,7 +445,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   getXpub(): { xpubVan: string; xpubCol: string } {
-    return { xpubVan: this.params.xpubVan, xpubCol: this.params.xpubCol };
+    throw new Error('UTEXOWallet.getXpub: not implemented');
   }
 
   getNetwork(): Network {

@@ -1,9 +1,82 @@
-
 # RGB SDK for React Native
 
-React Native SDK for RGB client applications. Provides TypeScript/React Native bindings for managing RGB assets and Lightning payments through the **RGB Lightning Node (RLN)** — a native LDK-based node that runs directly on-device.
+[`@utexo/rgb-sdk-rn`](https://www.npmjs.com/package/@utexo/rgb-sdk-rn)
 
-> **Note**: This is the React Native version of the [original RGB SDK for Node.js](https://github.com/UTEXO-Protocol/rgb-sdk). If you're building a Node.js application, use the original SDK instead.
+> **Beta release** — APIs may change between releases. 
+> Report issues on [GitHub](https://github.com/UTEXO-Protocol/rgb-sdk-rn/issues).
+
+React Native SDK for on-device RGB assets and Lightning payments via the **RGB Lightning Node (RLN)** — a native LDK-based node that runs directly on iOS and Android.
+
+[![npm version](https://img.shields.io/npm/v/@utexo/rgb-sdk-rn)](https://www.npmjs.com/package/@utexo/rgb-sdk-rn)
+[![license](https://img.shields.io/npm/l/@utexo/rgb-sdk-rn)](https://www.npmjs.com/package/@utexo/rgb-sdk-rn)
+
+> **Note**: React Native port of the [original RGB SDK for Node.js](https://github.com/UTEXO-Protocol/rgb-sdk). Use that SDK for Node.js applications.
+
+## Requirements
+
+- React Native with **New Architecture** enabled (TurboModule `Rgb`)
+- iOS and Android
+- Android `minSdkVersion` 24
+- At unlock time: an Electrum indexer and/or bitcoind RPC, plus an RGB proxy endpoint (known networks get defaults — see [`IRLNUnlockParams`](#irlnunlockparams))
+
+## Install
+
+```bash
+npm install @utexo/rgb-sdk-rn
+```
+
+**iOS** — the native framework (`RGBLightningNode.xcframework`) is downloaded automatically during `postinstall`:
+
+```bash
+cd ios && pod install
+```
+
+**Android** — the native binding (`com.utexo:rgb-lightning-node-android`) resolves from Maven Central via Gradle; no extra repository configuration needed.
+
+## Quick start
+
+```typescript
+import {
+  UTEXOWallet,
+  PasswordRLNSigner,
+  generateKeys,
+} from '@utexo/rgb-sdk-rn';
+
+const network = 'utexo';
+const keys = await generateKeys(network);
+
+const wallet = new UTEXOWallet(
+  {
+    storageDirPath: '/path/to/node-storage',
+    daemonListeningPort: 9735,
+    ldkPeerListeningPort: 9736,
+    network,
+  },
+  new PasswordRLNSigner('my-secure-password', keys.mnemonic),
+);
+
+// All fields optional — omit any that should use network defaults
+const unlockParams = {
+  // indexerUrl: '...',        // optional, falls back to network default
+  // proxyEndpoint: '...',     // optional
+};
+
+await wallet.init();
+await wallet.unlock(unlockParams);
+
+// Fund the wallet, then carve out colored UTXOs for RGB
+const address = await wallet.getAddress();
+// ... send BTC to `address` ...
+
+await wallet.syncWallet();
+await wallet.createUtxos({ upTo: false, num: 4, feeRate: 1 });
+
+// Blind RGB invoice — share with the sender (omit assetId/amount if you don't hold the asset yet)
+const { invoice } = await wallet.blindReceive({ minConfirmations: 1 });
+console.log('RGB invoice:', invoice);
+```
+
+After shutdown, restart on the same instance with `await wallet.reinit(unlockParams)` — no new `UTEXOWallet` needed.
 
 ---
 
@@ -57,7 +130,7 @@ const wallet = new UTEXOWallet(
 | `storageDirPath` | `string` | Directory where the node persists its data |
 | `daemonListeningPort` | `number` | RLN daemon HTTP port |
 | `ldkPeerListeningPort` | `number` | LDK peer-to-peer port |
-| `network` | `string` | Bitcoin network (`'regtest'`, `'testnet'`, `'mainnet'`, …) |
+| `network` | `string` | Bitcoin network (`'utexo'`, `'regtest'`, `'testnet'`, `'mainnet'`, …) |
 | `maxMediaUploadSizeMb` | `number?` | Max media upload size in MB (default 20) |
 | `enableVirtualChannelsV0` | `boolean?` | Enable virtual channel support |
 | `vssUrl` | `string?` | VSS server URL for encrypted remote backup |
@@ -285,28 +358,6 @@ See **[docs/lsp.md](./docs/lsp.md)** for `UtexoLsp` composed flows and full exam
 
 ---
 
-## Getting Started
-
-### Installation
-
-```bash
-npm install @utexo/rgb-sdk-rn
-```
-
-### iOS Setup
-
-The native framework (`RGBLightningNode.xcframework`) is automatically downloaded and extracted during `postinstall`.
-
-```bash
-cd ios && pod install
-```
-
-### Android Setup
-
-The library requires `minSdkVersion` 24. The native binding (`com.utexo:rgb-lightning-node-android`) is published to Maven Central and resolved by Gradle automatically — no extra repository configuration needed.
-
----
-
 ## Core Workflows
 
 ### First-Time Wallet Init
@@ -319,7 +370,7 @@ import {
 } from '@utexo/rgb-sdk-rn';
 import * as FileSystem from 'expo-file-system/legacy';
 
-const network = 'regtest';
+const network = 'utexo';
 const keys = await generateKeys(network);
 
 const storageDir = `${FileSystem.documentDirectory}my-node`.replace('file://', '');
@@ -335,9 +386,14 @@ const wallet = new UTEXOWallet(
   new NativeExternalRLNSigner(keys.mnemonic, network),
 );
 
+// All fields optional — omit any that should use network defaults
 const unlockParams = {
-  indexerUrl: '127.0.0.1:50001',
-  proxyEndpoint: 'rpc://127.0.0.1:3000/json-rpc',
+  // indexerUrl: '...',        // optional, falls back to network default
+  // proxyEndpoint: '...',     // optional
+  // bitcoindRpcUsername: 'user',        // optional (electrum mode doesn't need these)
+  // bitcoindRpcPassword: 'password',
+  // bitcoindRpcHost: '127.0.0.1',
+  // bitcoindRpcPort: 18443,
 };
 
 // First run: write keys + connect
@@ -962,7 +1018,7 @@ for (const p of payments) {
 
 ## Demo App
 
-A full working demo is available at **[rgb-sdk-rn-playground](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo)**. It demonstrates:
+A full working demo is available at **[rgb-sdk-rn-demo](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo)**. It demonstrates:
 
 - `UTEXOWallet` full lifecycle: `init()` → `unlock()` → fund → `createUtxos()` → issue asset → channel → payment → `reinit()` → second payment → `destroy()`
 - Both signer types: `NativeExternalRLNSigner` (nodeA) and `PasswordRLNSigner` (nodeB)

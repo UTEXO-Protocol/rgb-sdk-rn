@@ -873,6 +873,8 @@ public func FfiConverterTypeNativeExternalSigner_lower(_ value: NativeExternalSi
 public protocol SdkNodeProtocol: AnyObject {
     func address() throws -> AddressInfo
 
+    func apayNew(hostNodeId: String) throws -> AsyncOrderNewResponse
+
     func assetBalance(assetId: ContractId) throws -> AssetBalanceInfo
 
     func assetMetadata(assetId: ContractId) throws -> AssetMetadataInfo
@@ -981,6 +983,10 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func unlock(request: SdkUnlockRequest) throws
 
+    func vssBackup() throws -> Int64
+
+    func vssClearFence(request: SdkVssClearFenceRequest) throws
+
     func attachExternalSigner(host: ExternalSignerHost, bootstrap: SdkExternalSignerBootstrap) throws
 
     func attachNativeExternalSigner(signer: NativeExternalSigner) throws
@@ -989,9 +995,9 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func initWithNativeExternalSigner(signer: NativeExternalSigner) throws
 
-    func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+    func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 
-    func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+    func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 }
 
 open class SdkNode:
@@ -1054,6 +1060,13 @@ open class SdkNode:
     open func address() throws -> AddressInfo {
         return try FfiConverterTypeAddressInfo.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_address(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func apayNew(hostNodeId: String) throws -> AsyncOrderNewResponse {
+        return try FfiConverterTypeAsyncOrderNewResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_apay_new(self.uniffiClonePointer(),
+                                                                 FfiConverterString.lower(hostNodeId), $0)
         })
     }
 
@@ -1430,6 +1443,19 @@ open class SdkNode:
         }
     }
 
+    open func vssBackup() throws -> Int64 {
+        return try FfiConverterInt64.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_vss_backup(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func vssClearFence(request: SdkVssClearFenceRequest) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_vss_clear_fence(self.uniffiClonePointer(),
+                                                                        FfiConverterTypeSdkVssClearFenceRequest.lower(request), $0)
+        }
+    }
+
     open func attachExternalSigner(host: ExternalSignerHost, bootstrap: SdkExternalSignerBootstrap) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_attach_external_signer(self.uniffiClonePointer(),
@@ -1458,13 +1484,13 @@ open class SdkNode:
         }
     }
 
-    open func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+    open func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_attached_external_signer(self.uniffiClonePointer(),
-                                                                                             FfiConverterString.lower(bitcoindRpcUsername),
-                                                                                             FfiConverterString.lower(bitcoindRpcPassword),
-                                                                                             FfiConverterString.lower(bitcoindRpcHost),
-                                                                                             FfiConverterUInt16.lower(bitcoindRpcPort),
+                                                                                             FfiConverterOptionString.lower(bitcoindRpcUsername),
+                                                                                             FfiConverterOptionString.lower(bitcoindRpcPassword),
+                                                                                             FfiConverterOptionString.lower(bitcoindRpcHost),
+                                                                                             FfiConverterOptionUInt16.lower(bitcoindRpcPort),
                                                                                              FfiConverterOptionString.lower(indexerUrl),
                                                                                              FfiConverterOptionString.lower(proxyEndpoint),
                                                                                              FfiConverterSequenceString.lower(announceAddresses),
@@ -1472,14 +1498,14 @@ open class SdkNode:
         }
     }
 
-    open func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+    open func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_native_external_signer(self.uniffiClonePointer(),
                                                                                            FfiConverterTypeNativeExternalSigner.lower(signer),
-                                                                                           FfiConverterString.lower(bitcoindRpcUsername),
-                                                                                           FfiConverterString.lower(bitcoindRpcPassword),
-                                                                                           FfiConverterString.lower(bitcoindRpcHost),
-                                                                                           FfiConverterUInt16.lower(bitcoindRpcPort),
+                                                                                           FfiConverterOptionString.lower(bitcoindRpcUsername),
+                                                                                           FfiConverterOptionString.lower(bitcoindRpcPassword),
+                                                                                           FfiConverterOptionString.lower(bitcoindRpcHost),
+                                                                                           FfiConverterOptionUInt16.lower(bitcoindRpcPort),
                                                                                            FfiConverterOptionString.lower(indexerUrl),
                                                                                            FfiConverterOptionString.lower(proxyEndpoint),
                                                                                            FfiConverterSequenceString.lower(announceAddresses),
@@ -2420,6 +2446,208 @@ public func FfiConverterTypeAssetUda_lower(_ value: AssetUda) -> RustBuffer {
     return FfiConverterTypeAssetUda.lower(value)
 }
 
+public struct AsyncOrderNewHashWire {
+    public var hashIndex: UInt64
+    public var paymentHash: String
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(hashIndex: UInt64, paymentHash: String) {
+        self.hashIndex = hashIndex
+        self.paymentHash = paymentHash
+    }
+}
+
+extension AsyncOrderNewHashWire: Equatable, Hashable {
+    public static func == (lhs: AsyncOrderNewHashWire, rhs: AsyncOrderNewHashWire) -> Bool {
+        if lhs.hashIndex != rhs.hashIndex {
+            return false
+        }
+        if lhs.paymentHash != rhs.paymentHash {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(hashIndex)
+        hasher.combine(paymentHash)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAsyncOrderNewHashWire: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AsyncOrderNewHashWire {
+        return
+            try AsyncOrderNewHashWire(
+                hashIndex: FfiConverterUInt64.read(from: &buf),
+                paymentHash: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: AsyncOrderNewHashWire, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.hashIndex, into: &buf)
+        FfiConverterString.write(value.paymentHash, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncOrderNewHashWire_lift(_ buf: RustBuffer) throws -> AsyncOrderNewHashWire {
+    return try FfiConverterTypeAsyncOrderNewHashWire.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncOrderNewHashWire_lower(_ value: AsyncOrderNewHashWire) -> RustBuffer {
+    return FfiConverterTypeAsyncOrderNewHashWire.lower(value)
+}
+
+public struct AsyncOrderNewResponse {
+    public var requestId: String
+    public var hostNodeId: String
+    public var protocolVersion: UInt64
+    public var orderId: String
+    public var status: String
+    public var acceptedThroughIndex: UInt64
+    public var nextIndexExpected: UInt64
+    public var unusedHashes: UInt64
+    public var refillBatchSize: UInt64
+    public var firstHashIndex: UInt64
+    public var lastHashIndex: UInt64
+    public var hashes: [AsyncOrderNewHashWire]
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(requestId: String, hostNodeId: String, protocolVersion: UInt64, orderId: String, status: String, acceptedThroughIndex: UInt64, nextIndexExpected: UInt64, unusedHashes: UInt64, refillBatchSize: UInt64, firstHashIndex: UInt64, lastHashIndex: UInt64, hashes: [AsyncOrderNewHashWire]) {
+        self.requestId = requestId
+        self.hostNodeId = hostNodeId
+        self.protocolVersion = protocolVersion
+        self.orderId = orderId
+        self.status = status
+        self.acceptedThroughIndex = acceptedThroughIndex
+        self.nextIndexExpected = nextIndexExpected
+        self.unusedHashes = unusedHashes
+        self.refillBatchSize = refillBatchSize
+        self.firstHashIndex = firstHashIndex
+        self.lastHashIndex = lastHashIndex
+        self.hashes = hashes
+    }
+}
+
+extension AsyncOrderNewResponse: Equatable, Hashable {
+    public static func == (lhs: AsyncOrderNewResponse, rhs: AsyncOrderNewResponse) -> Bool {
+        if lhs.requestId != rhs.requestId {
+            return false
+        }
+        if lhs.hostNodeId != rhs.hostNodeId {
+            return false
+        }
+        if lhs.protocolVersion != rhs.protocolVersion {
+            return false
+        }
+        if lhs.orderId != rhs.orderId {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.acceptedThroughIndex != rhs.acceptedThroughIndex {
+            return false
+        }
+        if lhs.nextIndexExpected != rhs.nextIndexExpected {
+            return false
+        }
+        if lhs.unusedHashes != rhs.unusedHashes {
+            return false
+        }
+        if lhs.refillBatchSize != rhs.refillBatchSize {
+            return false
+        }
+        if lhs.firstHashIndex != rhs.firstHashIndex {
+            return false
+        }
+        if lhs.lastHashIndex != rhs.lastHashIndex {
+            return false
+        }
+        if lhs.hashes != rhs.hashes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(requestId)
+        hasher.combine(hostNodeId)
+        hasher.combine(protocolVersion)
+        hasher.combine(orderId)
+        hasher.combine(status)
+        hasher.combine(acceptedThroughIndex)
+        hasher.combine(nextIndexExpected)
+        hasher.combine(unusedHashes)
+        hasher.combine(refillBatchSize)
+        hasher.combine(firstHashIndex)
+        hasher.combine(lastHashIndex)
+        hasher.combine(hashes)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAsyncOrderNewResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AsyncOrderNewResponse {
+        return
+            try AsyncOrderNewResponse(
+                requestId: FfiConverterString.read(from: &buf),
+                hostNodeId: FfiConverterString.read(from: &buf),
+                protocolVersion: FfiConverterUInt64.read(from: &buf),
+                orderId: FfiConverterString.read(from: &buf),
+                status: FfiConverterString.read(from: &buf),
+                acceptedThroughIndex: FfiConverterUInt64.read(from: &buf),
+                nextIndexExpected: FfiConverterUInt64.read(from: &buf),
+                unusedHashes: FfiConverterUInt64.read(from: &buf),
+                refillBatchSize: FfiConverterUInt64.read(from: &buf),
+                firstHashIndex: FfiConverterUInt64.read(from: &buf),
+                lastHashIndex: FfiConverterUInt64.read(from: &buf),
+                hashes: FfiConverterSequenceTypeAsyncOrderNewHashWire.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: AsyncOrderNewResponse, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.requestId, into: &buf)
+        FfiConverterString.write(value.hostNodeId, into: &buf)
+        FfiConverterUInt64.write(value.protocolVersion, into: &buf)
+        FfiConverterString.write(value.orderId, into: &buf)
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterUInt64.write(value.acceptedThroughIndex, into: &buf)
+        FfiConverterUInt64.write(value.nextIndexExpected, into: &buf)
+        FfiConverterUInt64.write(value.unusedHashes, into: &buf)
+        FfiConverterUInt64.write(value.refillBatchSize, into: &buf)
+        FfiConverterUInt64.write(value.firstHashIndex, into: &buf)
+        FfiConverterUInt64.write(value.lastHashIndex, into: &buf)
+        FfiConverterSequenceTypeAsyncOrderNewHashWire.write(value.hashes, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncOrderNewResponse_lift(_ buf: RustBuffer) throws -> AsyncOrderNewResponse {
+    return try FfiConverterTypeAsyncOrderNewResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAsyncOrderNewResponse_lower(_ value: AsyncOrderNewResponse) -> RustBuffer {
+    return FfiConverterTypeAsyncOrderNewResponse.lower(value)
+}
+
 public struct BlockTime {
     public var height: UInt32
     public var timestamp: UInt64
@@ -3037,11 +3265,12 @@ public struct DecodeLnInvoiceResponse {
     public var paymentHash: PaymentHash
     public var paymentSecret: String
     public var payeePubkey: PublicKey?
+    public var minFinalCltvExpiryDelta: UInt64
     public var network: String
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amtMsat: UInt64?, expirySec: UInt64, timestamp: UInt64, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash, paymentSecret: String, payeePubkey: PublicKey?, network: String) {
+    public init(amtMsat: UInt64?, expirySec: UInt64, timestamp: UInt64, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash, paymentSecret: String, payeePubkey: PublicKey?, minFinalCltvExpiryDelta: UInt64, network: String) {
         self.amtMsat = amtMsat
         self.expirySec = expirySec
         self.timestamp = timestamp
@@ -3050,6 +3279,7 @@ public struct DecodeLnInvoiceResponse {
         self.paymentHash = paymentHash
         self.paymentSecret = paymentSecret
         self.payeePubkey = payeePubkey
+        self.minFinalCltvExpiryDelta = minFinalCltvExpiryDelta
         self.network = network
     }
 }
@@ -3080,6 +3310,9 @@ extension DecodeLnInvoiceResponse: Equatable, Hashable {
         if lhs.payeePubkey != rhs.payeePubkey {
             return false
         }
+        if lhs.minFinalCltvExpiryDelta != rhs.minFinalCltvExpiryDelta {
+            return false
+        }
         if lhs.network != rhs.network {
             return false
         }
@@ -3095,6 +3328,7 @@ extension DecodeLnInvoiceResponse: Equatable, Hashable {
         hasher.combine(paymentHash)
         hasher.combine(paymentSecret)
         hasher.combine(payeePubkey)
+        hasher.combine(minFinalCltvExpiryDelta)
         hasher.combine(network)
     }
 }
@@ -3114,6 +3348,7 @@ public struct FfiConverterTypeDecodeLnInvoiceResponse: FfiConverterRustBuffer {
                 paymentHash: FfiConverterTypePaymentHash.read(from: &buf),
                 paymentSecret: FfiConverterString.read(from: &buf),
                 payeePubkey: FfiConverterOptionTypePublicKey.read(from: &buf),
+                minFinalCltvExpiryDelta: FfiConverterUInt64.read(from: &buf),
                 network: FfiConverterString.read(from: &buf)
             )
     }
@@ -3127,6 +3362,7 @@ public struct FfiConverterTypeDecodeLnInvoiceResponse: FfiConverterRustBuffer {
         FfiConverterTypePaymentHash.write(value.paymentHash, into: &buf)
         FfiConverterString.write(value.paymentSecret, into: &buf)
         FfiConverterOptionTypePublicKey.write(value.payeePubkey, into: &buf)
+        FfiConverterUInt64.write(value.minFinalCltvExpiryDelta, into: &buf)
         FfiConverterString.write(value.network, into: &buf)
     }
 }
@@ -3582,16 +3818,18 @@ public struct LnInvoiceRequest {
     public var assetAmount: UInt64?
     public var paymentHash: PaymentHash?
     public var descriptionHash: String?
+    public var minFinalCltvExpiryDelta: UInt16?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amtMsat: UInt64?, expirySec: UInt32, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash?, descriptionHash: String?) {
+    public init(amtMsat: UInt64?, expirySec: UInt32, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash?, descriptionHash: String?, minFinalCltvExpiryDelta: UInt16?) {
         self.amtMsat = amtMsat
         self.expirySec = expirySec
         self.assetId = assetId
         self.assetAmount = assetAmount
         self.paymentHash = paymentHash
         self.descriptionHash = descriptionHash
+        self.minFinalCltvExpiryDelta = minFinalCltvExpiryDelta
     }
 }
 
@@ -3615,6 +3853,9 @@ extension LnInvoiceRequest: Equatable, Hashable {
         if lhs.descriptionHash != rhs.descriptionHash {
             return false
         }
+        if lhs.minFinalCltvExpiryDelta != rhs.minFinalCltvExpiryDelta {
+            return false
+        }
         return true
     }
 
@@ -3625,6 +3866,7 @@ extension LnInvoiceRequest: Equatable, Hashable {
         hasher.combine(assetAmount)
         hasher.combine(paymentHash)
         hasher.combine(descriptionHash)
+        hasher.combine(minFinalCltvExpiryDelta)
     }
 }
 
@@ -3640,7 +3882,8 @@ public struct FfiConverterTypeLnInvoiceRequest: FfiConverterRustBuffer {
                 assetId: FfiConverterOptionTypeContractId.read(from: &buf),
                 assetAmount: FfiConverterOptionUInt64.read(from: &buf),
                 paymentHash: FfiConverterOptionTypePaymentHash.read(from: &buf),
-                descriptionHash: FfiConverterOptionString.read(from: &buf)
+                descriptionHash: FfiConverterOptionString.read(from: &buf),
+                minFinalCltvExpiryDelta: FfiConverterOptionUInt16.read(from: &buf)
             )
     }
 
@@ -3651,6 +3894,7 @@ public struct FfiConverterTypeLnInvoiceRequest: FfiConverterRustBuffer {
         FfiConverterOptionUInt64.write(value.assetAmount, into: &buf)
         FfiConverterOptionTypePaymentHash.write(value.paymentHash, into: &buf)
         FfiConverterOptionString.write(value.descriptionHash, into: &buf)
+        FfiConverterOptionUInt16.write(value.minFinalCltvExpiryDelta, into: &buf)
     }
 }
 
@@ -3931,10 +4175,11 @@ public struct NodeInfo {
     public var channelAssetMaxAmount: UInt64
     public var networkNodes: UInt64
     public var networkChannels: UInt64
+    public var latestRgsSnapshotTimestamp: UInt64?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(pubkey: PublicKey, numChannels: UInt64, numUsableChannels: UInt64, localBalanceSat: UInt64, eventualCloseFeesSat: UInt64, pendingOutboundPaymentsSat: UInt64, numPeers: UInt64, accountXpubVanilla: String, accountXpubColored: String, maxMediaUploadSizeMb: UInt16, rgbHtlcMinMsat: UInt64, rgbChannelCapacityMinSat: UInt64, channelCapacityMinSat: UInt64, channelCapacityMaxSat: UInt64, channelAssetMinAmount: UInt64, channelAssetMaxAmount: UInt64, networkNodes: UInt64, networkChannels: UInt64) {
+    public init(pubkey: PublicKey, numChannels: UInt64, numUsableChannels: UInt64, localBalanceSat: UInt64, eventualCloseFeesSat: UInt64, pendingOutboundPaymentsSat: UInt64, numPeers: UInt64, accountXpubVanilla: String, accountXpubColored: String, maxMediaUploadSizeMb: UInt16, rgbHtlcMinMsat: UInt64, rgbChannelCapacityMinSat: UInt64, channelCapacityMinSat: UInt64, channelCapacityMaxSat: UInt64, channelAssetMinAmount: UInt64, channelAssetMaxAmount: UInt64, networkNodes: UInt64, networkChannels: UInt64, latestRgsSnapshotTimestamp: UInt64? = nil) {
         self.pubkey = pubkey
         self.numChannels = numChannels
         self.numUsableChannels = numUsableChannels
@@ -3953,6 +4198,7 @@ public struct NodeInfo {
         self.channelAssetMaxAmount = channelAssetMaxAmount
         self.networkNodes = networkNodes
         self.networkChannels = networkChannels
+        self.latestRgsSnapshotTimestamp = latestRgsSnapshotTimestamp
     }
 }
 
@@ -4012,6 +4258,9 @@ extension NodeInfo: Equatable, Hashable {
         if lhs.networkChannels != rhs.networkChannels {
             return false
         }
+        if lhs.latestRgsSnapshotTimestamp != rhs.latestRgsSnapshotTimestamp {
+            return false
+        }
         return true
     }
 
@@ -4034,6 +4283,7 @@ extension NodeInfo: Equatable, Hashable {
         hasher.combine(channelAssetMaxAmount)
         hasher.combine(networkNodes)
         hasher.combine(networkChannels)
+        hasher.combine(latestRgsSnapshotTimestamp)
     }
 }
 
@@ -4061,7 +4311,8 @@ public struct FfiConverterTypeNodeInfo: FfiConverterRustBuffer {
                 channelAssetMinAmount: FfiConverterUInt64.read(from: &buf),
                 channelAssetMaxAmount: FfiConverterUInt64.read(from: &buf),
                 networkNodes: FfiConverterUInt64.read(from: &buf),
-                networkChannels: FfiConverterUInt64.read(from: &buf)
+                networkChannels: FfiConverterUInt64.read(from: &buf),
+                latestRgsSnapshotTimestamp: FfiConverterOptionUInt64.read(from: &buf)
             )
     }
 
@@ -4084,6 +4335,7 @@ public struct FfiConverterTypeNodeInfo: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.channelAssetMaxAmount, into: &buf)
         FfiConverterUInt64.write(value.networkNodes, into: &buf)
         FfiConverterUInt64.write(value.networkChannels, into: &buf)
+        FfiConverterOptionUInt64.write(value.latestRgsSnapshotTimestamp, into: &buf)
     }
 }
 
@@ -4926,10 +5178,13 @@ public struct SdkInitRequest {
     public var virtualPeerPubkeys: [PublicKey]?
     public var lspBaseUrl: String?
     public var lspBearerToken: String?
+    public var vssUrl: String?
+    public var vssAllowHttp: Bool
+    public var vssAllowEmptyRestore: Bool
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(storageDirPath: String, daemonListeningPort: UInt16, ldkPeerListeningPort: UInt16, network: String, maxMediaUploadSizeMb: UInt16, enableVirtualChannelsV0: Bool?, virtualPeerPubkeys: [PublicKey]?, lspBaseUrl: String?, lspBearerToken: String?) {
+    public init(storageDirPath: String, daemonListeningPort: UInt16, ldkPeerListeningPort: UInt16, network: String, maxMediaUploadSizeMb: UInt16, enableVirtualChannelsV0: Bool?, virtualPeerPubkeys: [PublicKey]?, lspBaseUrl: String?, lspBearerToken: String?, vssUrl: String? = nil, vssAllowHttp: Bool = false, vssAllowEmptyRestore: Bool = false) {
         self.storageDirPath = storageDirPath
         self.daemonListeningPort = daemonListeningPort
         self.ldkPeerListeningPort = ldkPeerListeningPort
@@ -4939,6 +5194,9 @@ public struct SdkInitRequest {
         self.virtualPeerPubkeys = virtualPeerPubkeys
         self.lspBaseUrl = lspBaseUrl
         self.lspBearerToken = lspBearerToken
+        self.vssUrl = vssUrl
+        self.vssAllowHttp = vssAllowHttp
+        self.vssAllowEmptyRestore = vssAllowEmptyRestore
     }
 }
 
@@ -4971,6 +5229,15 @@ extension SdkInitRequest: Equatable, Hashable {
         if lhs.lspBearerToken != rhs.lspBearerToken {
             return false
         }
+        if lhs.vssUrl != rhs.vssUrl {
+            return false
+        }
+        if lhs.vssAllowHttp != rhs.vssAllowHttp {
+            return false
+        }
+        if lhs.vssAllowEmptyRestore != rhs.vssAllowEmptyRestore {
+            return false
+        }
         return true
     }
 
@@ -4984,6 +5251,9 @@ extension SdkInitRequest: Equatable, Hashable {
         hasher.combine(virtualPeerPubkeys)
         hasher.combine(lspBaseUrl)
         hasher.combine(lspBearerToken)
+        hasher.combine(vssUrl)
+        hasher.combine(vssAllowHttp)
+        hasher.combine(vssAllowEmptyRestore)
     }
 }
 
@@ -5002,7 +5272,10 @@ public struct FfiConverterTypeSdkInitRequest: FfiConverterRustBuffer {
                 enableVirtualChannelsV0: FfiConverterOptionBool.read(from: &buf),
                 virtualPeerPubkeys: FfiConverterOptionSequenceTypePublicKey.read(from: &buf),
                 lspBaseUrl: FfiConverterOptionString.read(from: &buf),
-                lspBearerToken: FfiConverterOptionString.read(from: &buf)
+                lspBearerToken: FfiConverterOptionString.read(from: &buf),
+                vssUrl: FfiConverterOptionString.read(from: &buf),
+                vssAllowHttp: FfiConverterBool.read(from: &buf),
+                vssAllowEmptyRestore: FfiConverterBool.read(from: &buf)
             )
     }
 
@@ -5016,6 +5289,9 @@ public struct FfiConverterTypeSdkInitRequest: FfiConverterRustBuffer {
         FfiConverterOptionSequenceTypePublicKey.write(value.virtualPeerPubkeys, into: &buf)
         FfiConverterOptionString.write(value.lspBaseUrl, into: &buf)
         FfiConverterOptionString.write(value.lspBearerToken, into: &buf)
+        FfiConverterOptionString.write(value.vssUrl, into: &buf)
+        FfiConverterBool.write(value.vssAllowHttp, into: &buf)
+        FfiConverterBool.write(value.vssAllowEmptyRestore, into: &buf)
     }
 }
 
@@ -6681,18 +6957,19 @@ public func FfiConverterTypeSdkTakerRequest_lower(_ value: SdkTakerRequest) -> R
 
 public struct SdkUnlockRequest {
     public var password: String
-    public var bitcoindRpcUsername: String
-    public var bitcoindRpcPassword: String
-    public var bitcoindRpcHost: String
-    public var bitcoindRpcPort: UInt16
+    public var bitcoindRpcUsername: String?
+    public var bitcoindRpcPassword: String?
+    public var bitcoindRpcHost: String?
+    public var bitcoindRpcPort: UInt16?
     public var indexerUrl: String?
     public var proxyEndpoint: String?
     public var announceAddresses: [String]
     public var announceAlias: String?
+    public var gossipRgsServerUrl: String?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(password: String, bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) {
+    public init(password: String, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?, gossipRgsServerUrl: String? = nil) {
         self.password = password
         self.bitcoindRpcUsername = bitcoindRpcUsername
         self.bitcoindRpcPassword = bitcoindRpcPassword
@@ -6702,6 +6979,7 @@ public struct SdkUnlockRequest {
         self.proxyEndpoint = proxyEndpoint
         self.announceAddresses = announceAddresses
         self.announceAlias = announceAlias
+        self.gossipRgsServerUrl = gossipRgsServerUrl
     }
 }
 
@@ -6734,6 +7012,9 @@ extension SdkUnlockRequest: Equatable, Hashable {
         if lhs.announceAlias != rhs.announceAlias {
             return false
         }
+        if lhs.gossipRgsServerUrl != rhs.gossipRgsServerUrl {
+            return false
+        }
         return true
     }
 
@@ -6747,6 +7028,7 @@ extension SdkUnlockRequest: Equatable, Hashable {
         hasher.combine(proxyEndpoint)
         hasher.combine(announceAddresses)
         hasher.combine(announceAlias)
+        hasher.combine(gossipRgsServerUrl)
     }
 }
 
@@ -6758,27 +7040,29 @@ public struct FfiConverterTypeSdkUnlockRequest: FfiConverterRustBuffer {
         return
             try SdkUnlockRequest(
                 password: FfiConverterString.read(from: &buf),
-                bitcoindRpcUsername: FfiConverterString.read(from: &buf),
-                bitcoindRpcPassword: FfiConverterString.read(from: &buf),
-                bitcoindRpcHost: FfiConverterString.read(from: &buf),
-                bitcoindRpcPort: FfiConverterUInt16.read(from: &buf),
+                bitcoindRpcUsername: FfiConverterOptionString.read(from: &buf),
+                bitcoindRpcPassword: FfiConverterOptionString.read(from: &buf),
+                bitcoindRpcHost: FfiConverterOptionString.read(from: &buf),
+                bitcoindRpcPort: FfiConverterOptionUInt16.read(from: &buf),
                 indexerUrl: FfiConverterOptionString.read(from: &buf),
                 proxyEndpoint: FfiConverterOptionString.read(from: &buf),
                 announceAddresses: FfiConverterSequenceString.read(from: &buf),
-                announceAlias: FfiConverterOptionString.read(from: &buf)
+                announceAlias: FfiConverterOptionString.read(from: &buf),
+                gossipRgsServerUrl: FfiConverterOptionString.read(from: &buf)
             )
     }
 
     public static func write(_ value: SdkUnlockRequest, into buf: inout [UInt8]) {
         FfiConverterString.write(value.password, into: &buf)
-        FfiConverterString.write(value.bitcoindRpcUsername, into: &buf)
-        FfiConverterString.write(value.bitcoindRpcPassword, into: &buf)
-        FfiConverterString.write(value.bitcoindRpcHost, into: &buf)
-        FfiConverterUInt16.write(value.bitcoindRpcPort, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindRpcUsername, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindRpcPassword, into: &buf)
+        FfiConverterOptionString.write(value.bitcoindRpcHost, into: &buf)
+        FfiConverterOptionUInt16.write(value.bitcoindRpcPort, into: &buf)
         FfiConverterOptionString.write(value.indexerUrl, into: &buf)
         FfiConverterOptionString.write(value.proxyEndpoint, into: &buf)
         FfiConverterSequenceString.write(value.announceAddresses, into: &buf)
         FfiConverterOptionString.write(value.announceAlias, into: &buf)
+        FfiConverterOptionString.write(value.gossipRgsServerUrl, into: &buf)
     }
 }
 
@@ -6796,20 +7080,71 @@ public func FfiConverterTypeSdkUnlockRequest_lower(_ value: SdkUnlockRequest) ->
     return FfiConverterTypeSdkUnlockRequest.lower(value)
 }
 
+public struct SdkVssClearFenceRequest {
+    public var password: String
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(password: String) {
+        self.password = password
+    }
+}
+
+extension SdkVssClearFenceRequest: Equatable, Hashable {
+    public static func == (lhs: SdkVssClearFenceRequest, rhs: SdkVssClearFenceRequest) -> Bool {
+        if lhs.password != rhs.password {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(password)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkVssClearFenceRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkVssClearFenceRequest {
+        return
+            try SdkVssClearFenceRequest(
+                password: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: SdkVssClearFenceRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.password, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkVssClearFenceRequest_lift(_ buf: RustBuffer) throws -> SdkVssClearFenceRequest {
+    return try FfiConverterTypeSdkVssClearFenceRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkVssClearFenceRequest_lower(_ value: SdkVssClearFenceRequest) -> RustBuffer {
+    return FfiConverterTypeSdkVssClearFenceRequest.lower(value)
+}
+
 public struct SendRgbRequest {
     public var donation: Bool
     public var feeRate: UInt64
     public var minConfirmations: UInt8
-    public var skipSync: Bool
     public var recipientGroups: [AssetRecipients]
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(donation: Bool, feeRate: UInt64, minConfirmations: UInt8, skipSync: Bool, recipientGroups: [AssetRecipients]) {
+    public init(donation: Bool, feeRate: UInt64, minConfirmations: UInt8, recipientGroups: [AssetRecipients]) {
         self.donation = donation
         self.feeRate = feeRate
         self.minConfirmations = minConfirmations
-        self.skipSync = skipSync
         self.recipientGroups = recipientGroups
     }
 }
@@ -6825,9 +7160,6 @@ extension SendRgbRequest: Equatable, Hashable {
         if lhs.minConfirmations != rhs.minConfirmations {
             return false
         }
-        if lhs.skipSync != rhs.skipSync {
-            return false
-        }
         if lhs.recipientGroups != rhs.recipientGroups {
             return false
         }
@@ -6838,7 +7170,6 @@ extension SendRgbRequest: Equatable, Hashable {
         hasher.combine(donation)
         hasher.combine(feeRate)
         hasher.combine(minConfirmations)
-        hasher.combine(skipSync)
         hasher.combine(recipientGroups)
     }
 }
@@ -6853,7 +7184,6 @@ public struct FfiConverterTypeSendRgbRequest: FfiConverterRustBuffer {
                 donation: FfiConverterBool.read(from: &buf),
                 feeRate: FfiConverterUInt64.read(from: &buf),
                 minConfirmations: FfiConverterUInt8.read(from: &buf),
-                skipSync: FfiConverterBool.read(from: &buf),
                 recipientGroups: FfiConverterSequenceTypeAssetRecipients.read(from: &buf)
             )
     }
@@ -6862,7 +7192,6 @@ public struct FfiConverterTypeSendRgbRequest: FfiConverterRustBuffer {
         FfiConverterBool.write(value.donation, into: &buf)
         FfiConverterUInt64.write(value.feeRate, into: &buf)
         FfiConverterUInt8.write(value.minConfirmations, into: &buf)
-        FfiConverterBool.write(value.skipSync, into: &buf)
         FfiConverterSequenceTypeAssetRecipients.write(value.recipientGroups, into: &buf)
     }
 }
@@ -8254,6 +8583,32 @@ public enum RlnError {
 
     case Conflict(message: String)
 
+    case FailedBitcoindConnection(message: String)
+
+    case FailedBdkSync(message: String)
+
+    case FailedBroadcast(message: String)
+
+    case FailedPeerConnection(message: String)
+
+    case InsufficientCapacity(message: String)
+
+    case InsufficientFunds(message: String)
+
+    case NoAvailableUtxos(message: String)
+
+    case NoRoute(message: String)
+
+    case ExternalSignerRequired(message: String)
+
+    case ExternalSignerMismatch(message: String)
+
+    case ExternalSignerUnavailable(message: String)
+
+    case ExternalSignerProtocolError(message: String)
+
+    case UnsupportedInExternalSignerMode(message: String)
+
     case Internal(message: String)
 }
 
@@ -8282,7 +8637,59 @@ public struct FfiConverterTypeRlnError: FfiConverterRustBuffer {
                 message: FfiConverterString.read(from: &buf)
             )
 
-        case 5: return try .Internal(
+        case 5: return try .FailedBitcoindConnection(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 6: return try .FailedBdkSync(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 7: return try .FailedBroadcast(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 8: return try .FailedPeerConnection(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 9: return try .InsufficientCapacity(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 10: return try .InsufficientFunds(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 11: return try .NoAvailableUtxos(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 12: return try .NoRoute(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 13: return try .ExternalSignerRequired(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 14: return try .ExternalSignerMismatch(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 15: return try .ExternalSignerUnavailable(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 16: return try .ExternalSignerProtocolError(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 17: return try .UnsupportedInExternalSignerMode(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 18: return try .Internal(
                 message: FfiConverterString.read(from: &buf)
             )
 
@@ -8300,8 +8707,34 @@ public struct FfiConverterTypeRlnError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         case .Conflict(_ /* message is ignored*/ ):
             writeInt(&buf, Int32(4))
-        case .Internal(_ /* message is ignored*/ ):
+        case .FailedBitcoindConnection(_ /* message is ignored*/ ):
             writeInt(&buf, Int32(5))
+        case .FailedBdkSync(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(6))
+        case .FailedBroadcast(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(7))
+        case .FailedPeerConnection(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(8))
+        case .InsufficientCapacity(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(9))
+        case .InsufficientFunds(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(10))
+        case .NoAvailableUtxos(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(11))
+        case .NoRoute(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(12))
+        case .ExternalSignerRequired(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(13))
+        case .ExternalSignerMismatch(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(14))
+        case .ExternalSignerUnavailable(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(15))
+        case .ExternalSignerProtocolError(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(16))
+        case .UnsupportedInExternalSignerMode(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(17))
+        case .Internal(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(18))
         }
     }
 }
@@ -8391,7 +8824,8 @@ public enum TransactionType {
     case rgbSend
     case drain
     case createUtxos
-    case user
+    case sendBtc
+    case incoming
 }
 
 #if swift(>=5.8)
@@ -8409,7 +8843,9 @@ public struct FfiConverterTypeTransactionType: FfiConverterRustBuffer {
 
         case 3: return .createUtxos
 
-        case 4: return .user
+        case 4: return .sendBtc
+
+        case 5: return .incoming
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -8426,8 +8862,11 @@ public struct FfiConverterTypeTransactionType: FfiConverterRustBuffer {
         case .createUtxos:
             writeInt(&buf, Int32(3))
 
-        case .user:
+        case .sendBtc:
             writeInt(&buf, Int32(4))
+
+        case .incoming:
+            writeInt(&buf, Int32(5))
         }
     }
 }
@@ -8467,6 +8906,30 @@ private struct FfiConverterOptionUInt8: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterUInt8.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterOptionUInt16: FfiConverterRustBuffer {
+    typealias SwiftType = UInt16?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt16.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt16.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -9251,6 +9714,31 @@ private struct FfiConverterSequenceTypeAssetUda: FfiConverterRustBuffer {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+private struct FfiConverterSequenceTypeAsyncOrderNewHashWire: FfiConverterRustBuffer {
+    typealias SwiftType = [AsyncOrderNewHashWire]
+
+    static func write(_ value: [AsyncOrderNewHashWire], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAsyncOrderNewHashWire.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AsyncOrderNewHashWire] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AsyncOrderNewHashWire]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeAsyncOrderNewHashWire.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
 private struct FfiConverterSequenceTypeChannel: FfiConverterRustBuffer {
     typealias SwiftType = [Channel]
 
@@ -9929,6 +10417,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_address() != 59336 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_apay_new() != 7684 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_asset_balance() != 20956 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10091,6 +10582,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock() != 60312 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_vss_backup() != 63911 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_vss_clear_fence() != 9846 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_attach_external_signer() != 568 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10103,10 +10600,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_init_with_native_external_signer() != 35000 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 48853 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 4385 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 58434 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 24108 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_externalsignerhost_call() != 9685 {

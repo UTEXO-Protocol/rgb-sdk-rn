@@ -44,6 +44,11 @@ ldkPeerListeningPort:(double)ldkPeerListeningPort
               network:(NSString *)network
   maxMediaUploadSizeMb:(double)maxMediaUploadSizeMb
 enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
+               vssUrl:(NSString *)vssUrl
+         vssAllowHttp:(BOOL)vssAllowHttp
+  vssAllowEmptyRestore:(BOOL)vssAllowEmptyRestore
+           lspBaseUrl:(NSString *)lspBaseUrl
+       lspBearerToken:(NSString *)lspBearerToken
               resolve:(RCTPromiseResolveBlock)resolve
                reject:(RCTPromiseRejectBlock)reject
 {
@@ -55,6 +60,11 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
             @"network": network ?: @"",
             @"maxMediaUploadSizeMb": @(maxMediaUploadSizeMb),
             @"enableVirtualChannelsV0": enableVirtualChannelsV0 ?: [NSNull null],
+            @"vssUrl": vssUrl ?: [NSNull null],
+            @"vssAllowHttp": @(vssAllowHttp),
+            @"vssAllowEmptyRestore": @(vssAllowEmptyRestore),
+            @"lspBaseUrl": lspBaseUrl ?: [NSNull null],
+            @"lspBearerToken": lspBearerToken ?: [NSNull null],
         };
         NSDictionary *result = [RgbSwiftHelper _rlnCreateNode:request];
         NSString *errorMessage = result[@"error"];
@@ -113,14 +123,15 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
 
 - (void)rlnUnlockNode:(double)nodeId
              password:(NSString *)password
-  bitcoindRpcUsername:(NSString *)bitcoindRpcUsername
-  bitcoindRpcPassword:(NSString *)bitcoindRpcPassword
-      bitcoindRpcHost:(NSString *)bitcoindRpcHost
-      bitcoindRpcPort:(double)bitcoindRpcPort
+  bitcoindRpcUsername:(NSString * _Nullable)bitcoindRpcUsername
+  bitcoindRpcPassword:(NSString * _Nullable)bitcoindRpcPassword
+      bitcoindRpcHost:(NSString * _Nullable)bitcoindRpcHost
+      bitcoindRpcPort:(NSNumber * _Nullable)bitcoindRpcPort
             indexerUrl:(NSString *)indexerUrl
          proxyEndpoint:(NSString *)proxyEndpoint
      announceAddresses:(NSArray<NSString *> *)announceAddresses
          announceAlias:(NSString *)announceAlias
+    gossipRgsServerUrl:(NSString * _Nullable)gossipRgsServerUrl
                resolve:(RCTPromiseResolveBlock)resolve
                 reject:(RCTPromiseRejectBlock)reject
 {
@@ -130,11 +141,12 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
                                            bitcoindRpcUsername:bitcoindRpcUsername
                                            bitcoindRpcPassword:bitcoindRpcPassword
                                                bitcoindRpcHost:bitcoindRpcHost
-                                               bitcoindRpcPort:@(bitcoindRpcPort)
+                                               bitcoindRpcPort:bitcoindRpcPort
                                                      indexerUrl:indexerUrl
                                                   proxyEndpoint:proxyEndpoint
                                               announceAddresses:announceAddresses
-                                                  announceAlias:announceAlias];
+                                                  announceAlias:announceAlias
+                                             gossipRgsServerUrl:gossipRgsServerUrl];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_UNLOCK_NODE_ERROR", errorMessage, nil);
@@ -655,14 +667,65 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
             expirySec:(double)expirySec
               assetId:(NSString *)assetId
           assetAmount:(NSNumber *)assetAmount
+          paymentHash:(NSString *)paymentHash
+minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
               resolve:(RCTPromiseResolveBlock)resolve
                reject:(RCTPromiseRejectBlock)reject
 {
     EXEC_ASYNC({
-        NSDictionary *result = [RgbSwiftHelper _rlnLnInvoice:@(nodeId) amtMsat:amtMsat expirySec:@(expirySec) assetId:assetId assetAmount:assetAmount];
+        NSDictionary *result = [RgbSwiftHelper _rlnLnInvoice:@(nodeId) amtMsat:amtMsat expirySec:@(expirySec) assetId:assetId assetAmount:assetAmount paymentHash:paymentHash minFinalCltvExpiryDelta:minFinalCltvExpiryDelta];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_LN_INVOICE_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
+- (void)rlnClaimHodlInvoice:(double)nodeId
+                paymentHash:(NSString *)paymentHash
+             paymentPreimage:(NSString *)paymentPreimage
+                     resolve:(RCTPromiseResolveBlock)resolve
+                      reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnClaimHodlInvoice:@(nodeId) paymentHash:paymentHash paymentPreimage:paymentPreimage];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_CLAIM_HODL_INVOICE_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
+- (void)rlnCancelHodlInvoice:(double)nodeId
+                  paymentHash:(NSString *)paymentHash
+                      resolve:(RCTPromiseResolveBlock)resolve
+                       reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnCancelHodlInvoice:@(nodeId) paymentHash:paymentHash];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_CANCEL_HODL_INVOICE_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
+- (void)rlnApayNew:(double)nodeId
+         hostNodeId:(NSString *)hostNodeId
+            resolve:(RCTPromiseResolveBlock)resolve
+             reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnApayNew:@(nodeId) hostNodeId:hostNodeId];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_APAY_NEW_ERROR", errorMessage, nil);
         } else {
             resolve(result);
         }
@@ -798,6 +861,22 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
     });
 }
 
+- (void)rlnVssClearFence:(double)nodeId
+                password:(NSString *)password
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnVssClearFence:@(nodeId) password:password];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_VSS_CLEAR_FENCE_ERROR", errorMessage, nil);
+        } else {
+            resolve(nil);
+        }
+    });
+}
+
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {
@@ -855,14 +934,15 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
 
 - (void)rlnUnlockNodeWithNativeExternalSigner:(double)nodeId
                                      signerId:(double)signerId
-                          bitcoindRpcUsername:(NSString *)bitcoindRpcUsername
-                          bitcoindRpcPassword:(NSString *)bitcoindRpcPassword
-                              bitcoindRpcHost:(NSString *)bitcoindRpcHost
-                              bitcoindRpcPort:(double)bitcoindRpcPort
+                          bitcoindRpcUsername:(NSString * _Nullable)bitcoindRpcUsername
+                          bitcoindRpcPassword:(NSString * _Nullable)bitcoindRpcPassword
+                              bitcoindRpcHost:(NSString * _Nullable)bitcoindRpcHost
+                              bitcoindRpcPort:(NSNumber * _Nullable)bitcoindRpcPort
                                    indexerUrl:(NSString *)indexerUrl
                                 proxyEndpoint:(NSString *)proxyEndpoint
                             announceAddresses:(NSArray<NSString *> *)announceAddresses
                                 announceAlias:(NSString *)announceAlias
+                           gossipRgsServerUrl:(NSString * _Nullable)gossipRgsServerUrl
                                       resolve:(RCTPromiseResolveBlock)resolve
                                        reject:(RCTPromiseRejectBlock)reject
 {
@@ -873,11 +953,12 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
             bitcoindRpcUsername:bitcoindRpcUsername
             bitcoindRpcPassword:bitcoindRpcPassword
             bitcoindRpcHost:bitcoindRpcHost
-            bitcoindRpcPort:@(bitcoindRpcPort)
+            bitcoindRpcPort:bitcoindRpcPort
             indexerUrl:indexerUrl
             proxyEndpoint:proxyEndpoint
             announceAddresses:announceAddresses
-            announceAlias:announceAlias];
+            announceAlias:announceAlias
+            gossipRgsServerUrl:gossipRgsServerUrl];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_UNLOCK_NODE_NATIVE_SIGNER_ERROR", errorMessage, nil);

@@ -8,7 +8,12 @@ export interface Spec extends TurboModule {
     ldkPeerListeningPort: number,
     network: string,
     maxMediaUploadSizeMb: number,
-    enableVirtualChannelsV0: boolean | null
+    enableVirtualChannelsV0: boolean | null,
+    vssUrl: string | null,
+    vssAllowHttp: boolean,
+    vssAllowEmptyRestore: boolean,
+    lspBaseUrl: string | null,
+    lspBearerToken: string | null
   ): Promise<number>;
   rlnInitNode(
     nodeId: number,
@@ -31,14 +36,15 @@ export interface Spec extends TurboModule {
   rlnUnlockNodeWithNativeExternalSigner(
     nodeId: number,
     signerId: number,
-    bitcoindRpcUsername: string,
-    bitcoindRpcPassword: string,
-    bitcoindRpcHost: string,
-    bitcoindRpcPort: number,
+    bitcoindRpcUsername: string | null,
+    bitcoindRpcPassword: string | null,
+    bitcoindRpcHost: string | null,
+    bitcoindRpcPort: number | null,
     indexerUrl: string | null,
     proxyEndpoint: string | null,
     announceAddresses: string[],
-    announceAlias: string | null
+    announceAlias: string | null,
+    gossipRgsServerUrl: string | null
   ): Promise<void>;
   rlnDestroyNativeExternalSigner(signerId: number): Promise<void>;
   rlnInitNodeWithExternalSigner(
@@ -53,14 +59,15 @@ export interface Spec extends TurboModule {
   rlnUnlockNode(
     nodeId: number,
     password: string,
-    bitcoindRpcUsername: string,
-    bitcoindRpcPassword: string,
-    bitcoindRpcHost: string,
-    bitcoindRpcPort: number,
+    bitcoindRpcUsername: string | null,
+    bitcoindRpcPassword: string | null,
+    bitcoindRpcHost: string | null,
+    bitcoindRpcPort: number | null,
     indexerUrl: string | null,
     proxyEndpoint: string | null,
     announceAddresses: string[],
-    announceAlias: string | null
+    announceAlias: string | null,
+    gossipRgsServerUrl: string | null
   ): Promise<void>;
   rlnDestroyNode(nodeId: number): Promise<void>;
   rlnNodeInfo(nodeId: number): Promise<object>;
@@ -137,8 +144,17 @@ export interface Spec extends TurboModule {
     amtMsat: number | null,
     expirySec: number,
     assetId: string | null,
-    assetAmount: number | null
+    assetAmount: number | null,
+    paymentHash: string | null,
+    minFinalCltvExpiryDelta: number | null
   ): Promise<object>;
+  rlnClaimHodlInvoice(
+    nodeId: number,
+    paymentHash: string,
+    paymentPreimage: string
+  ): Promise<object>;
+  rlnCancelHodlInvoice(nodeId: number, paymentHash: string): Promise<void>;
+  rlnApayNew(nodeId: number, hostNodeId: string): Promise<object>;
   rlnRefreshTransfers(nodeId: number, skipSync: boolean): Promise<void>;
   rlnRgbInvoice(
     nodeId: number,
@@ -210,6 +226,9 @@ export interface Spec extends TurboModule {
     mediaFileDigest: string | null,
     attachmentsFileDigests: string[]
   ): Promise<any>;
+
+  // ── VSS ─────────────────────────────────────────────────────────────────────
+  rlnVssClearFence(nodeId: number, password: string): Promise<void>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Rgb');

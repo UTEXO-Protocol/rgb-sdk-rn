@@ -57,6 +57,7 @@ export interface RlnNodeInfo {
   channelAssetMaxAmount?: number;
   networkNodes?: number;
   networkChannels?: number;
+  latestRgsSnapshotTimestamp?: number | null;
 }
 
 export interface RlnNetworkInfo {
@@ -124,6 +125,7 @@ export interface RlnPayment {
 export interface RlnSendPaymentResponse {
   paymentId: string;
   paymentHash?: string;
+  paymentSecret?: string;
   status: RlnPaymentStatus;
 }
 
@@ -296,6 +298,34 @@ export interface RlnTransfer {
   transportEndpoints?: RlnTransportEndpoint[];
   requestedAssignment?: string;
   assignments?: string[];
+}
+
+// ── HODL invoices ─────────────────────────────────────────────────────────────
+
+export interface RlnClaimHodlInvoiceResponse {
+  changed: boolean;
+}
+
+// ── Async payments (APay) ─────────────────────────────────────────────────────
+
+export interface RlnApayHashEntry {
+  hashIndex: number;
+  paymentHash: string;
+}
+
+export interface RlnApayNewResponse {
+  requestId: string;
+  hostNodeId: string;
+  protocolVersion: number;
+  orderId: string;
+  status: string;
+  acceptedThroughIndex: number;
+  nextIndexExpected: number;
+  unusedHashes: number;
+  refillBatchSize: number;
+  firstHashIndex: number;
+  lastHashIndex: number;
+  hashes: RlnApayHashEntry[];
 }
 
 // ── Send RGB ──────────────────────────────────────────────────────────────────

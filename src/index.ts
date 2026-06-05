@@ -8,6 +8,8 @@ export { RLNManager, createRLNManager } from './wallet/rln-manager';
 // UTEXO wallet (implements IWalletManager + IUTEXOProtocol, backed by RLN)
 export { UTEXOWallet } from './wallet/utexo-wallet';
 export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
+export { getNetworkDefaults, resolveUnlockParams } from './wallet/network-defaults';
+export type { NetworkEndpoints } from './wallet/network-defaults';
 export {
   PasswordRLNSigner,
   NativeExternalRLNSigner,
@@ -24,6 +26,46 @@ export type {
   IRLNUnlockParams,
   IRLNExternalSignerBootstrap,
 } from './binding/IRLN';
+
+// LSP client + types (temporary in rgb-sdk-rn; moves to @utexo/rgb-sdk-core next release)
+export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
+export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
+export type {
+  LspClientConfig,
+  LspGetInfoResponse,
+  LspLnParams,
+  LspOnchainSendRequest,
+  LspOnchainSendResponse,
+  LspRgbParams,
+  LspLightningReceiveRequest,
+  LspLightningReceiveResponse,
+  LspLnurlpCallbackResponse,
+  LspLightningAddressByPubkeyResponse,
+  CreateHodlInvoiceParams,
+  HodlInvoice,
+  HodlInvoiceResult,
+  ApayHashEntry,
+  ApayNewResponse,
+  // New LSP types
+  LspPeer,
+  ReceiveStatus,
+  ChannelReadyInfo,
+} from './lsp/lsp-types';
+export { normalizeReceiveStatus, peerUri } from './lsp/lsp-types';
+
+// UtexoLsp — composed LSP flows (connect, channel wait, receive, send, pay address, APay)
+export { UtexoLsp } from './lsp/UtexoLsp';
+export type {
+  WaitOptions,
+  ReceiveAssetOptions,
+  ReceiveAssetResult,
+  SendAssetOptions,
+  SendAssetResult,
+  PayAddressOptions,
+  LightningAddressInfo,
+  ClaimResult,
+} from './lsp/UtexoLsp';
+export { LspChannelTimeoutError, LspSettlementError } from './lsp/LspErrors';
 
 // Crypto — PSBT signing stubs (bdk-rn removed; throws — use NativeExternalRLNSigner for PSBT)
 export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';

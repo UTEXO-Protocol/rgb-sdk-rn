@@ -31,6 +31,8 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnClaimHodlInvoiceResponse,
+  RlnApayNewResponse,
 } from '../binding/rln-types';
 
 export class RLNManager implements IRLN {
@@ -187,14 +189,33 @@ export class RLNManager implements IRLN {
     amtMsat: number | null,
     expirySec: number,
     assetId: string | null,
-    assetAmount: number | null
+    assetAmount: number | null,
+    paymentHash?: string | null,
+    minFinalCltvExpiryDelta?: number | null
   ): Promise<RlnLnInvoiceResponse> {
     return this.rlnBinding.rlnLnInvoice(
       amtMsat,
       expirySec,
       assetId,
-      assetAmount
+      assetAmount,
+      paymentHash,
+      minFinalCltvExpiryDelta
     );
+  }
+
+  rlnClaimHodlInvoice(
+    paymentHash: string,
+    paymentPreimage: string
+  ): Promise<RlnClaimHodlInvoiceResponse> {
+    return this.rlnBinding.rlnClaimHodlInvoice(paymentHash, paymentPreimage);
+  }
+
+  rlnCancelHodlInvoice(paymentHash: string): Promise<void> {
+    return this.rlnBinding.rlnCancelHodlInvoice(paymentHash);
+  }
+
+  rlnApayNew(hostNodeId: string): Promise<RlnApayNewResponse> {
+    return this.rlnBinding.rlnApayNew(hostNodeId);
   }
 
   rlnDecodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse> {
@@ -423,6 +444,12 @@ export class RLNManager implements IRLN {
 
   rlnBackup(backupPath: string, password: string): Promise<void> {
     return this.rlnBinding.rlnBackup(backupPath, password);
+  }
+
+  // ── VSS ──────────────────────────────────────────────────────────────────────
+
+  rlnVssClearFence(password: string): Promise<void> {
+    return this.rlnBinding.rlnVssClearFence(password);
   }
 }
 

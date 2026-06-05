@@ -44,6 +44,10 @@ import org.utexo.rgblightningnode.SdkIssueAssetCfaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetIfaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetNiaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetUdaRequest
+import org.utexo.rgblightningnode.SdkVssClearFenceRequest
+import org.utexo.rgblightningnode.CancelHodlInvoiceRequest
+import org.utexo.rgblightningnode.ClaimHodlInvoiceRequest
+import org.utexo.rgblightningnode.AsyncOrderNewHashWire
 
 @ReactModule(name = RgbModule.NAME)
 class RgbModule(reactContext: ReactApplicationContext) :
@@ -68,10 +72,16 @@ class RgbModule(reactContext: ReactApplicationContext) :
     network: String,
     maxMediaUploadSizeMb: Double,
     enableVirtualChannelsV0: Boolean?,
+    vssUrl: String?,
+    vssAllowHttp: Boolean,
+    vssAllowEmptyRestore: Boolean,
+    lspBaseUrl: String?,
+    lspBearerToken: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
       try {
+        android.util.Log.d("RgbModule", "[rlnCreateNode] network=$network vssUrl=$vssUrl lspBaseUrl=$lspBaseUrl daemonPort=$daemonListeningPort ldkPort=$ldkPeerListeningPort")
         val initRequest = SdkInitRequest(
           storageDirPath = storageDirPath,
           daemonListeningPort = daemonListeningPort.toInt().toUShort(),
@@ -80,13 +90,18 @@ class RgbModule(reactContext: ReactApplicationContext) :
           maxMediaUploadSizeMb = maxMediaUploadSizeMb.toInt().toUShort(),
           enableVirtualChannelsV0 = enableVirtualChannelsV0,
           virtualPeerPubkeys = null,
-          lspBaseUrl = "",
-          lspBearerToken = ""
+          lspBaseUrl = lspBaseUrl,
+          lspBearerToken = lspBearerToken,
+          vssUrl = vssUrl,
+          vssAllowHttp = vssAllowHttp,
+          vssAllowEmptyRestore = vssAllowEmptyRestore
         )
         val node = SdkNode.create(initRequest)
+        android.util.Log.d("RgbModule", "[rlnCreateNode] SdkNode.create succeeded")
         val nodeId = RlnNodeStore.create(node, storageDirPath)
         withContext(Dispatchers.Main) { promise.resolve(nodeId) }
       } catch (e: Exception) {
+        android.util.Log.e("RgbModule", "[rlnCreateNode] FAILED ${e.javaClass.name}: ${e.message}", e)
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
         }
@@ -98,6 +113,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     coroutineScope.launch(Dispatchers.IO) {
       val intNodeId = nodeId.toInt()
       try {
+        android.util.Log.d("RgbModule", "[rlnInitNode] nodeId=$intNodeId hasMnemonic=${mnemonic != null}")
         val node = RlnNodeStore.get(intNodeId)
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val state = RlnNodeStore.getState(intNodeId)
@@ -106,9 +122,11 @@ class RgbModule(reactContext: ReactApplicationContext) :
           throw IllegalStateException("RLN init is not allowed while node is in state: $state")
         }
         val nodePubkey = node.init(password, mnemonic)
+        android.util.Log.d("RgbModule", "[rlnInitNode] succeeded pubkey=${nodePubkey.take(16)}...")
         RlnNodeStore.markInitialized(intNodeId)
         withContext(Dispatchers.Main) { promise.resolve(nodePubkey) }
       } catch (e: Exception) {
+        android.util.Log.e("RgbModule", "[rlnInitNode] FAILED ${e.javaClass.name}: ${e.message}", e)
         val node = RlnNodeStore.get(intNodeId)
         if (node != null && isConflictLike(e)) {
           // RLN may already be initialized on disk after restart/recreate.
@@ -172,14 +190,15 @@ class RgbModule(reactContext: ReactApplicationContext) :
   override fun rlnUnlockNode(
     nodeId: Double,
     password: String,
-    bitcoindRpcUsername: String,
-    bitcoindRpcPassword: String,
-    bitcoindRpcHost: String,
-    bitcoindRpcPort: Double,
+    bitcoindRpcUsername: String?,
+    bitcoindRpcPassword: String?,
+    bitcoindRpcHost: String?,
+    bitcoindRpcPort: Double?,
     indexerUrl: String?,
     proxyEndpoint: String?,
     announceAddresses: ReadableArray,
     announceAlias: String?,
+    gossipRgsServerUrl: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -209,22 +228,26 @@ class RgbModule(reactContext: ReactApplicationContext) :
         for (i in 0 until announceAddresses.size()) {
           announceAddressesList.add(announceAddresses.getString(i) ?: "")
         }
+        android.util.Log.d("RgbModule", "[rlnUnlockNode] host=$bitcoindRpcHost port=$bitcoindRpcPort indexerUrl=$indexerUrl proxyEndpoint=$proxyEndpoint")
         node.unlock(
           SdkUnlockRequest(
             password = password,
             bitcoindRpcUsername = bitcoindRpcUsername,
             bitcoindRpcPassword = bitcoindRpcPassword,
             bitcoindRpcHost = bitcoindRpcHost,
-            bitcoindRpcPort = bitcoindRpcPort.toInt().toUShort(),
+            bitcoindRpcPort = bitcoindRpcPort?.toInt()?.toUShort(),
             indexerUrl = indexerUrl,
             proxyEndpoint = proxyEndpoint,
             announceAddresses = announceAddressesList,
-            announceAlias = announceAlias
+            announceAlias = announceAlias,
+            gossipRgsServerUrl = gossipRgsServerUrl
           )
         )
+        android.util.Log.d("RgbModule", "[rlnUnlockNode] succeeded")
         RlnNodeStore.markUnlocked(intNodeId)
         withContext(Dispatchers.Main) { promise.resolve(null) }
       } catch (e: Exception) {
+        android.util.Log.e("RgbModule", "[rlnUnlockNode] FAILED ${e.javaClass.name}: ${e.message}", e)
         val node = RlnNodeStore.get(intNodeId)
         if (node != null && isConflictLike(e) && probeNodeReady(node, attempts = 12, delayMs = 500L)) {
           RlnNodeStore.markUnlocked(intNodeId)
@@ -299,14 +322,15 @@ class RgbModule(reactContext: ReactApplicationContext) :
   override fun rlnUnlockNodeWithNativeExternalSigner(
     nodeId: Double,
     signerId: Double,
-    bitcoindRpcUsername: String,
-    bitcoindRpcPassword: String,
-    bitcoindRpcHost: String,
-    bitcoindRpcPort: Double,
+    bitcoindRpcUsername: String?,
+    bitcoindRpcPassword: String?,
+    bitcoindRpcHost: String?,
+    bitcoindRpcPort: Double?,
     indexerUrl: String?,
     proxyEndpoint: String?,
     announceAddresses: ReadableArray,
     announceAlias: String?,
+    gossipRgsServerUrl: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -336,7 +360,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           bitcoindRpcUsername = bitcoindRpcUsername,
           bitcoindRpcPassword = bitcoindRpcPassword,
           bitcoindRpcHost = bitcoindRpcHost,
-          bitcoindRpcPort = bitcoindRpcPort.toInt().toUShort(),
+          bitcoindRpcPort = bitcoindRpcPort?.toInt()?.toUShort(),
           indexerUrl = indexerUrl,
           proxyEndpoint = proxyEndpoint,
           announceAddresses = announceAddressesList,
@@ -397,6 +421,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putDouble("numUsableChannels", info.numUsableChannels.toDouble())
         map.putDouble("localBalanceSat", info.localBalanceSat.toDouble())
         map.putDouble("numPeers", info.numPeers.toDouble())
+        info.latestRgsSnapshotTimestamp?.let { map.putDouble("latestRgsSnapshotTimestamp", it.toDouble()) }
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -645,6 +670,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putDouble("settled", b.settled.toDouble())
         map.putDouble("future", b.future.toDouble())
         map.putDouble("spendable", b.spendable.toDouble())
+        map.putDouble("offchainOutbound", b.offchainOutbound.toDouble())
+        map.putDouble("offchainInbound", b.offchainInbound.toDouble())
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1097,6 +1124,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
     expirySec: Double,
     assetId: String?,
     assetAmount: Double?,
+    paymentHash: String?,
+    minFinalCltvExpiryDelta: Double?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -1109,12 +1138,88 @@ class RgbModule(reactContext: ReactApplicationContext) :
             expirySec = expirySec.toInt().toUInt(),
             assetId = assetId,
             assetAmount = assetAmount?.toULong(),
-            paymentHash = null,
-            descriptionHash = null
+            paymentHash = paymentHash,
+            descriptionHash = null,
+            minFinalCltvExpiryDelta = minFinalCltvExpiryDelta?.toInt()?.toUShort()
           )
         )
         val map = Arguments.createMap()
         map.putString("invoice", res.invoice)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnClaimHodlInvoice(
+    nodeId: Double,
+    paymentHash: String,
+    paymentPreimage: String,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val res = node.claimhodlinvoice(
+          ClaimHodlInvoiceRequest(paymentHash = paymentHash, paymentPreimage = paymentPreimage)
+        )
+        val map = Arguments.createMap()
+        map.putBoolean("changed", res.changed)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnCancelHodlInvoice(nodeId: Double, paymentHash: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.cancelhodlinvoice(CancelHodlInvoiceRequest(paymentHash = paymentHash))
+        withContext(Dispatchers.Main) { promise.resolve(null) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnApayNew(nodeId: Double, hostNodeId: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        android.util.Log.d("RNRgb", "rlnApayNew: nodeId=$nodeId hostNodeId=$hostNodeId")
+        val res = node.apayNew(hostNodeId)
+        val map = Arguments.createMap()
+        map.putString("requestId", res.requestId)
+        map.putString("hostNodeId", res.hostNodeId)
+        map.putDouble("protocolVersion", res.protocolVersion.toDouble())
+        map.putString("orderId", res.orderId)
+        map.putString("status", res.status)
+        map.putDouble("acceptedThroughIndex", res.acceptedThroughIndex.toDouble())
+        map.putDouble("nextIndexExpected", res.nextIndexExpected.toDouble())
+        map.putDouble("unusedHashes", res.unusedHashes.toDouble())
+        map.putDouble("refillBatchSize", res.refillBatchSize.toDouble())
+        map.putDouble("firstHashIndex", res.firstHashIndex.toDouble())
+        map.putDouble("lastHashIndex", res.lastHashIndex.toDouble())
+        val hashesArr = Arguments.createArray()
+        res.hashes.forEach { h: AsyncOrderNewHashWire ->
+          val hMap = Arguments.createMap()
+          hMap.putDouble("hashIndex", h.hashIndex.toDouble())
+          hMap.putString("paymentHash", h.paymentHash)
+          hashesArr.pushMap(hMap)
+        }
+        map.putArray("hashes", hashesArr)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1230,6 +1335,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val map = Arguments.createMap()
         map.putString("paymentId", res.paymentId)
         map.putString("paymentHash", res.paymentHash)
+        map.putString("paymentSecret", res.paymentSecret)
         map.putString("status", res.status.toString())
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
@@ -1267,7 +1373,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
             donation = donation,
             feeRate = feeRate.toULong(),
             minConfirmations = minConfirmations.toInt().toUByte(),
-            skipSync = skipSync,
             recipientGroups = listOf(
               AssetRecipients(
                 assetId = assetId,
@@ -1450,6 +1555,21 @@ class RgbModule(reactContext: ReactApplicationContext) :
           attachmentsFileDigests = digestsList
         ))
         withContext(Dispatchers.Main) { promise.resolve(rlnAssetUdaToMap(asset)) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnVssClearFence(nodeId: Double, password: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        node.vssClearFence(SdkVssClearFenceRequest(password = password))
+        withContext(Dispatchers.Main) { promise.resolve(null) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)

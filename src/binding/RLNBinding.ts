@@ -32,6 +32,8 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnClaimHodlInvoiceResponse,
+  RlnApayNewResponse,
 } from './rln-types';
 
 // The native layer may return BtcBalance as its Rust Display string
@@ -86,7 +88,12 @@ export class RLNBinding implements IRLN {
         params.ldkPeerListeningPort,
         params.network,
         params.maxMediaUploadSizeMb,
-        params.enableVirtualChannelsV0 ?? null
+        params.enableVirtualChannelsV0 ?? null,
+        params.vssUrl ?? null,
+        params.vssAllowHttp ?? false,
+        params.vssAllowEmptyRestore ?? false,
+        params.lspBaseUrl ?? null,
+        params.lspBearerToken ?? null
       );
       this.rlnNodeId = nodeId;
       this.lifecycleState = 'active';
@@ -117,14 +124,15 @@ export class RLNBinding implements IRLN {
         Rgb.rlnUnlockNode(
           nodeId,
           request.password,
-          request.bitcoindRpcUsername,
-          request.bitcoindRpcPassword,
-          request.bitcoindRpcHost,
-          request.bitcoindRpcPort,
+          request.bitcoindRpcUsername ?? null,
+          request.bitcoindRpcPassword ?? null,
+          request.bitcoindRpcHost ?? null,
+          request.bitcoindRpcPort ?? null,
           request.indexerUrl ?? null,
           request.proxyEndpoint ?? null,
           request.announceAddresses ?? [],
-          request.announceAlias ?? null
+          request.announceAlias ?? null,
+          request.gossipRgsServerUrl ?? null
         );
 
       const maxConflictRetries = 4;
@@ -234,14 +242,15 @@ export class RLNBinding implements IRLN {
         Rgb.rlnUnlockNodeWithNativeExternalSigner(
           nodeId,
           signerId,
-          request.bitcoindRpcUsername,
-          request.bitcoindRpcPassword,
-          request.bitcoindRpcHost,
-          request.bitcoindRpcPort,
+          request.bitcoindRpcUsername ?? null,
+          request.bitcoindRpcPassword ?? null,
+          request.bitcoindRpcHost ?? null,
+          request.bitcoindRpcPort ?? null,
           request.indexerUrl ?? null,
           request.proxyEndpoint ?? null,
           request.announceAddresses ?? [],
-          request.announceAlias ?? null
+          request.announceAlias ?? null,
+          request.gossipRgsServerUrl ?? null
         );
 
       const maxConflictRetries = 4;
@@ -410,11 +419,42 @@ export class RLNBinding implements IRLN {
     amtMsat: number | null,
     expirySec: number,
     assetId: string | null,
-    assetAmount: number | null
+    assetAmount: number | null,
+    paymentHash?: string | null,
+    minFinalCltvExpiryDelta?: number | null
   ): Promise<RlnLnInvoiceResponse> {
     return this.withNodeOperation((nodeId) =>
-      Rgb.rlnLnInvoice(nodeId, amtMsat, expirySec, assetId, assetAmount)
+      Rgb.rlnLnInvoice(
+        nodeId,
+        amtMsat,
+        expirySec,
+        assetId,
+        assetAmount,
+        paymentHash ?? null,
+        minFinalCltvExpiryDelta ?? null
+      )
     ) as Promise<RlnLnInvoiceResponse>;
+  }
+
+  async rlnClaimHodlInvoice(
+    paymentHash: string,
+    paymentPreimage: string
+  ): Promise<RlnClaimHodlInvoiceResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnClaimHodlInvoice(nodeId, paymentHash, paymentPreimage)
+    ) as Promise<RlnClaimHodlInvoiceResponse>;
+  }
+
+  async rlnCancelHodlInvoice(paymentHash: string): Promise<void> {
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnCancelHodlInvoice(nodeId, paymentHash)
+    );
+  }
+
+  async rlnApayNew(hostNodeId: string): Promise<RlnApayNewResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnApayNew(nodeId, hostNodeId)
+    ) as Promise<RlnApayNewResponse>;
   }
 
   async rlnDecodeLnInvoice(
@@ -698,6 +738,14 @@ export class RLNBinding implements IRLN {
   async rlnBackup(backupPath: string, password: string): Promise<void> {
     await this.withNodeOperation((nodeId) =>
       Rgb.rlnBackup(nodeId, backupPath, password)
+    );
+  }
+
+  // ── VSS ─────────────────────────────────────────────────────────────────────
+
+  async rlnVssClearFence(password: string): Promise<void> {
+    await this.withNodeOperation((nodeId) =>
+      Rgb.rlnVssClearFence(nodeId, password)
     );
   }
 

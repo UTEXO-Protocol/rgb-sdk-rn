@@ -61,6 +61,7 @@ import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
 import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../binding/IRLN';
 import { toNativeNetwork } from '../binding/Interfaces';
+import { resolveUnlockParams } from './network-defaults';
 import type {
   RlnNodeInfo,
   RlnNetworkInfo,
@@ -83,7 +84,17 @@ import type {
   RlnTransaction,
   RlnTransfer,
   RlnUnspent,
+  RlnPayment,
 } from '../binding/rln-types';
+import type {
+  CreateHodlInvoiceParams,
+  HodlInvoice,
+  HodlInvoiceResult,
+  ApayNewResponse,
+  LspPeer,
+} from '../lsp/lsp-types';
+import { UtexoLsp } from '../lsp/UtexoLsp';
+import { UtexoLSPClient } from '../lsp/UtexoLSPClient';
 
 // ── Extended send request models ─────────────────────────────────────────────
 // These extend the core interfaces with RLN-specific fields without modifying core.
@@ -113,9 +124,11 @@ export interface UTEXOWalletNodeParams {
   network: string;
   maxMediaUploadSizeMb?: number;
   enableVirtualChannelsV0?: boolean;
-  xpubVan: string;
-  xpubCol: string;
-  masterFingerprint: string;
+  vssUrl?: string | null;
+  vssAllowHttp?: boolean;
+  vssAllowEmptyRestore?: boolean;
+  lspBaseUrl?: string | null;
+  lspBearerToken?: string | null;
 }
 
 // ── Type-mapping helpers (module-private) ─────────────────────────────────────
@@ -149,12 +162,13 @@ function mapBalance(b: RlnAssetBalance): Balance {
 }
 
 function mapAssetBalance(b: RlnAssetBalance): AssetBalance {
+  const raw = b as any;
   return {
     settled: b.settled,
     future: b.future,
     spendable: b.spendable,
-    offchainOutbound: b.offchainOutbound,
-    offchainInbound: b.offchainInbound,
+    offchainOutbound: b.offchainOutbound ?? raw.offchain_outbound,
+    offchainInbound:  b.offchainInbound  ?? raw.offchain_inbound,
   };
 }
 
@@ -383,7 +397,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   /** Unlock the node (every start). Accepts the same params as IRLNUnlockParams. */
   async unlock(params: IRLNUnlockParams): Promise<void> {
-    await this.signer.unlockNode(this.rln, params);
+    await this.signer.unlockNode(this.rln, resolveUnlockParams(this.params.network, params));
   }
 
   /**
@@ -394,7 +408,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   async reinit(params?: IRLNUnlockParams): Promise<void> {
     this.rln = createRLNManager();
     await this.rln.rlnCreateNode(this.buildNodeParams());
-    if (params) await this.signer.unlockNode(this.rln, params);
+    if (params) await this.signer.unlockNode(this.rln, resolveUnlockParams(this.params.network, params));
   }
 
   /** Stop the node. Bridge marks the entry as SHUTDOWN (restartable via reinit). */
@@ -431,7 +445,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   getXpub(): { xpubVan: string; xpubCol: string } {
-    return { xpubVan: this.params.xpubVan, xpubCol: this.params.xpubCol };
+    throw new Error('UTEXOWallet.getXpub: not implemented');
   }
 
   getNetwork(): Network {
@@ -715,7 +729,10 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
 
   async createLightningInvoice(
-    params: CreateLightningInvoiceRequestModel
+    params: CreateLightningInvoiceRequestModel & {
+      paymentHash?: string | null;
+      minFinalCltvExpiryDelta?: number | null;
+    }
   ): Promise<LightningReceiveRequest> {
     const amtMsat = params.amountSats != null ? params.amountSats * 1000 : null;
     const assetId = params.asset?.assetId || null;
@@ -724,9 +741,100 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       amtMsat,
       params.expirySeconds ?? 3600,
       assetId,
-      assetAmount
+      assetAmount,
+      params.paymentHash ?? null,
+      params.minFinalCltvExpiryDelta ?? null
     );
     return { lnInvoice: resp.invoice };
+  }
+
+  async createHodlInvoice(params: CreateHodlInvoiceParams): Promise<HodlInvoice> {
+    const resp = await this.rln.rlnLnInvoice(
+      params.amtMsat ?? null,
+      params.expirySec,
+      params.assetId ?? null,
+      params.assetAmount ?? null,
+      params.paymentHash,
+      params.minFinalCltvExpiryDelta ?? null
+    );
+    return { bolt11: resp.invoice, paymentHash: params.paymentHash };
+  }
+
+  async claimHodlInvoice(
+    paymentHash: string,
+    preimage: string
+  ): Promise<HodlInvoiceResult> {
+    const resp = await this.rln.rlnClaimHodlInvoice(paymentHash, preimage);
+    return { changed: resp.changed };
+  }
+
+  async cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult> {
+    await this.rln.rlnCancelHodlInvoice(paymentHash);
+    return { changed: true };
+  }
+
+  async listPaymentsRaw(): Promise<RlnPayment[]> {
+    return this.rln.rlnListPayments();
+  }
+
+  async apayNew(hostNodeId: string): Promise<ApayNewResponse> {
+    const raw = await this.rln.rlnApayNew(hostNodeId);
+    return {
+      requestId: raw.requestId,
+      hostNodeId: raw.hostNodeId,
+      protocolVersion: raw.protocolVersion,
+      orderId: raw.orderId,
+      status: raw.status,
+      acceptedThroughIndex: raw.acceptedThroughIndex,
+      nextIndexExpected: raw.nextIndexExpected,
+      unusedHashes: raw.unusedHashes,
+      refillBatchSize: raw.refillBatchSize,
+      firstHashIndex: raw.firstHashIndex,
+      lastHashIndex: raw.lastHashIndex,
+      hashes: raw.hashes,
+    };
+  }
+
+  // ── LSP ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * Create an UtexoLsp instance for composed LSP flows.
+   *
+   * No-arg form — auto-discovers peer info from the wallet's lspBaseUrl:
+   *   const lsp = await wallet.createLsp();
+   *   // pubkey from GET /get_info, host from lspBaseUrl, port defaults to 9735
+   *
+   * Explicit form — use when you already have the peer details:
+   *   const lsp = await wallet.createLsp({ baseUrl, peerPubkey, peerHost, peerPort });
+   */
+  async createLsp(peer?: LspPeer, peerPort = 9735): Promise<UtexoLsp> {
+    if (peer) return new UtexoLsp(this, peer);
+
+    const baseUrl = this.params.lspBaseUrl;
+    if (!baseUrl) throw new Error('createLsp: lspBaseUrl not set — pass a LspPeer explicitly or set lspBaseUrl in wallet params');
+
+    const http     = new UtexoLSPClient({ baseUrl, bearerToken: this.params.lspBearerToken ?? undefined });
+    const info     = await http.getInfo();
+    const peerHost = new URL(baseUrl).hostname;
+
+    return new UtexoLsp(this, {
+      baseUrl,
+      peerPubkey:  info.pubkey,
+      peerHost,
+      peerPort,
+      bearerToken: this.params.lspBearerToken ?? undefined,
+    });
+  }
+
+  /**
+   * Returns the lspBaseUrl and bearer token this node was initialized with.
+   * Useful for confirming APay config matches the UtexoLsp peer config.
+   */
+  getLspConfig(): { baseUrl: string | null; bearerToken: string | null } {
+    return {
+      baseUrl:     this.params.lspBaseUrl     ?? null,
+      bearerToken: this.params.lspBearerToken ?? null,
+    };
   }
 
   async getLightningReceiveRequest(
@@ -772,14 +880,14 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   async payLightningInvoice(
-    params: PayLightningInvoiceRequestModel
+    params: PayLightningInvoiceRequestModel & { assetAmount?: number }
   ): Promise<LightningSendRequest> {
     const amtMsat = params.amount != null ? params.amount * 1000 : null;
     const resp = await this.rln.rlnSendPayment(
       params.lnInvoice,
       amtMsat,
       params.assetId ?? null,
-      null
+      params.assetAmount ?? null
     );
     return { txid: resp.paymentHash ?? resp.paymentId, status: resp.status };
   }
@@ -922,6 +1030,17 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.rln.rlnCheckProxyEndpoint(endpoint);
   }
 
+  // ── VSS ───────────────────────────────────────────────────────────────────
+
+  /**
+   * Clears the VSS single-writer fence lock. Call this while the node is
+   * locked (before unlock) to recover from an unclean shutdown that left a
+   * stale fence blocking re-initialization.
+   */
+  vssClearFence(password: string): Promise<void> {
+    return this.rln.rlnVssClearFence(password);
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────────
 
   private buildNodeParams(): IRLNNodeCreateParams {
@@ -932,6 +1051,11 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       network: toNativeNetwork(this.params.network as BitcoinNetwork),
       maxMediaUploadSizeMb: this.params.maxMediaUploadSizeMb ?? 20,
       enableVirtualChannelsV0: this.params.enableVirtualChannelsV0 ?? null,
+      vssUrl: this.params.vssUrl ?? null,
+      vssAllowHttp: this.params.vssAllowHttp ?? false,
+      vssAllowEmptyRestore: this.params.vssAllowEmptyRestore ?? false,
+      lspBaseUrl: this.params.lspBaseUrl ?? null,
+      lspBearerToken: this.params.lspBearerToken ?? null,
     };
   }
 }

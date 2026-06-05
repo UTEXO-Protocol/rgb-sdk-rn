@@ -3,13 +3,17 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// iOS xcframework is downloaded from GitHub releases.
-// Android Kotlin bindings are pulled via Gradle (com.utexo:rgb-lightning-node-android).
+// iOS xcframework is downloaded from GitHub releases,
+// or used from a local zip in src/bindings/ if present.
+// Android AAR is resolved from Maven Central by Gradle — no download needed here.
 
-const VERSION = '0.3.0-beta.1';
+const VERSION = '0.5.1-beta.1';
 const BASE_URL = `https://github.com/UTEXO-Protocol/rgb-lightning-node/releases/download/v${VERSION}`;
 
 const ROOT = path.join(__dirname, '..');
+const SRC_BINDINGS = path.join(ROOT, 'src', 'bindings');
+const LOCAL_IOS_ZIP = path.join(SRC_BINDINGS, 'swift-release.zip');
+
 const IOS_DIR = path.join(ROOT, 'ios');
 const IOS_ZIP = path.join(IOS_DIR, 'rgb-lightning-node-swift.zip');
 const IOS_FRAMEWORK_DIR = path.join(IOS_DIR, 'RGBLightningNode.xcframework');
@@ -84,9 +88,6 @@ async function setupIos() {
     return;
   }
 
-  const url = `${BASE_URL}/rgb-lightning-node-swift-${VERSION}.zip`;
-  console.log(`[rln] Downloading iOS xcframework (${VERSION})...`);
-
   if (!fs.existsSync(IOS_DIR)) fs.mkdirSync(IOS_DIR, { recursive: true });
 
   // Extract to a temp dir — the zip contains a swift/ subdirectory
@@ -95,7 +96,25 @@ async function setupIos() {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   fs.mkdirSync(tmpDir, { recursive: true });
 
-  await downloadFile(url, IOS_ZIP);
+  if (fs.existsSync(LOCAL_IOS_ZIP)) {
+    // Local wrapper zip found — extract the inner release zip from it
+    console.log(`[rln] Using local iOS zip: ${LOCAL_IOS_ZIP}`);
+    const innerTmp = path.join(IOS_DIR, '.tmp-rln-swift-inner');
+    if (fs.existsSync(innerTmp))
+      fs.rmSync(innerTmp, { recursive: true, force: true });
+    fs.mkdirSync(innerTmp, { recursive: true });
+    unzip(LOCAL_IOS_ZIP, innerTmp);
+    const innerZip = fs.readdirSync(innerTmp).find((f) => f.endsWith('.zip'));
+    if (!innerZip)
+      throw new Error('No inner zip found inside swift-release.zip');
+    fs.renameSync(path.join(innerTmp, innerZip), IOS_ZIP);
+    fs.rmSync(innerTmp, { recursive: true, force: true });
+  } else {
+    const url = `${BASE_URL}/rgb-lightning-node-swift-${VERSION}.zip`;
+    console.log(`[rln] Downloading iOS xcframework (${VERSION})...`);
+    await downloadFile(url, IOS_ZIP);
+  }
+
   console.log('[rln] Extracting...');
   unzip(IOS_ZIP, tmpDir);
   fs.unlinkSync(IOS_ZIP);
@@ -129,7 +148,6 @@ async function setupIos() {
 (async () => {
   try {
     await setupIos();
-    // Android: com.utexo:rgb-lightning-node-android is resolved by Gradle automatically.
     console.log('[rln] Done.');
   } catch (err) {
     console.error(`[rln] Error: ${err.message}`);

@@ -24,6 +24,8 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnClaimHodlInvoiceResponse,
+  RlnApayNewResponse,
 } from './rln-types';
 
 // ── RLN node parameter types ──────────────────────────────────────────────────
@@ -35,17 +37,23 @@ export interface IRLNNodeCreateParams {
   network: string;
   maxMediaUploadSizeMb: number;
   enableVirtualChannelsV0?: boolean | null;
+  vssUrl?: string | null;
+  vssAllowHttp?: boolean;
+  vssAllowEmptyRestore?: boolean;
+  lspBaseUrl?: string | null;
+  lspBearerToken?: string | null;
 }
 
 export interface IRLNUnlockParams {
-  bitcoindRpcUsername: string;
-  bitcoindRpcPassword: string;
-  bitcoindRpcHost: string;
-  bitcoindRpcPort: number;
+  bitcoindRpcUsername?: string | null;
+  bitcoindRpcPassword?: string | null;
+  bitcoindRpcHost?: string | null;
+  bitcoindRpcPort?: number | null;
   indexerUrl?: string | null;
   proxyEndpoint?: string | null;
   announceAddresses?: string[];
   announceAlias?: string | null;
+  gossipRgsServerUrl?: string | null;
 }
 
 export interface IRLNExternalSignerBootstrap {
@@ -139,8 +147,19 @@ export interface IRLN {
     amtMsat: number | null,
     expirySec: number,
     assetId: string | null,
-    assetAmount: number | null
+    assetAmount: number | null,
+    paymentHash?: string | null,
+    minFinalCltvExpiryDelta?: number | null
   ): Promise<RlnLnInvoiceResponse>;
+
+  rlnClaimHodlInvoice(
+    paymentHash: string,
+    paymentPreimage: string
+  ): Promise<RlnClaimHodlInvoiceResponse>;
+
+  rlnCancelHodlInvoice(paymentHash: string): Promise<void>;
+
+  rlnApayNew(hostNodeId: string): Promise<RlnApayNewResponse>;
 
   rlnDecodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse>;
   rlnDecodeRgbInvoice(invoice: string): Promise<RlnDecodeRgbInvoiceResponse>;
@@ -249,4 +268,8 @@ export interface IRLN {
   // ── Backup ───────────────────────────────────────────────────────────────────
 
   rlnBackup(backupPath: string, password: string): Promise<void>;
+
+  // ── VSS ──────────────────────────────────────────────────────────────────────
+
+  rlnVssClearFence(password: string): Promise<void>;
 }

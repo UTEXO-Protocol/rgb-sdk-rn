@@ -235,175 +235,6 @@ await wallet.destroy();
 
 See **[docs/lsp.md](./docs/lsp.md)** for `UtexoLsp` composed flows and full examples.
 
----
-
-#### Async payments (APay) — detailed reference
-
-Async payments let a recipient receive RGB Lightning payments while their wallet is offline. The payer sends a BOLT11 invoice; the LSP holds the HTLC until the recipient comes online and claims it.
-
-**Flow overview:**
-
-```
-Recipient                    LSP (Host RLN)              Sender
-    │                              │                        │
-    │── apayNew(hostNodeId) ──────►│ registers hash pool    │
-    │◄─ ApayNewResponse ───────────│ creates Lightning Addr  │
-    │                              │                        │
-    │   (goes offline)             │                        │
-    │                              │◄── payLightningInvoice ─│
-    │                              │    HTLC held            │
-    │                              │                        │
-    │   (comes back online)        │                        │
-    │── listPaymentsRaw() ─────────┤ finds InboundHodl      │
-    │── claimHodlInvoice() ───────►│ reveals preimage        │
-    │                              │──── settles HTLC ──────►│
-```
-
-##### `apayNew(hostNodeId)`
-
-Register a payment hash pool with the LSP host node. The host node (LSP) stores the hashes and uses them to create HODL invoices when senders pay the recipient's Lightning Address. Must be called with a live P2P connection to the host.
-
-```typescript
-const pool = await wallet.apayNew(lspPeerPubkey);
-```
-
-**Returns:** `ApayNewResponse`
-
-```typescript
-interface ApayNewResponse {
-  requestId:            string;
-  hostNodeId:           string;
-  protocolVersion:      number;
-  orderId:              string;
-  status:               string;         // 'active'
-  acceptedThroughIndex: number;
-  nextIndexExpected:    number;
-  unusedHashes:         number;
-  refillBatchSize:      number;
-  firstHashIndex:       number;
-  lastHashIndex:        number;
-  hashes: Array<{
-    hashIndex:    number;
-    paymentHash:  string;
-  }>;
-}
-```
-
-The `hashes` array contains the payment hashes sent to the LSP. The LSP uses them to create HODL invoices for each incoming payment to the recipient's Lightning Address. Once `unusedHashes` drops below a threshold the pool should be refilled by calling `apayNew` again.
-
----
-
-##### `createHodlInvoice(params)`
-
-Create a BOLT11 HODL invoice tied to a specific `paymentHash`. The invoice will not auto-settle when paid — the HTLC is held at the payer's node until `claimHodlInvoice` is called with the matching preimage.
-
-```typescript
-const invoice = await wallet.createHodlInvoice({
-  paymentHash:              '6fb3720c…',  // 32-byte hex
-  amtMsat:                  3_000_000,    // optional — omit for any-amount invoice
-  expirySec:                3_600,
-  assetId:                  'rgb:abc…',   // optional — RGB asset
-  assetAmount:              1,            // optional
-  minFinalCltvExpiryDelta:  null,         // optional — LDK default used if null
-});
-// invoice.bolt11      — the BOLT11 invoice string
-// invoice.paymentHash — echoed back for convenience
-```
-
-**Params:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `paymentHash` | `string` | 32-byte hex. Must be the SHA-256 of the preimage you will reveal at claim time |
-| `amtMsat` | `number \| null` | Amount in millisatoshis. `null` = any-amount invoice |
-| `expirySec` | `number` | Invoice expiry in seconds |
-| `assetId` | `string \| null` | RGB asset ID — omit for sats-only |
-| `assetAmount` | `number \| null` | RGB asset amount |
-| `minFinalCltvExpiryDelta` | `number \| null` | CLTV delta for the final hop. `null` uses LDK default (min 42) |
-
-**Returns:** `{ bolt11: string; paymentHash: string }`
-
----
-
-##### `claimHodlInvoice(paymentHash, preimage)`
-
-Reveal the preimage for an inbound HODL payment. The node verifies `sha256(preimage) === paymentHash`, then settles the held HTLC — releasing the funds to the recipient and completing the payment from the sender's perspective.
-
-```typescript
-const result = await wallet.claimHodlInvoice(
-  hodlPayment.paymentHash,
-  hodlPayment.preimage,
-);
-// result.changed — true if the invoice state was updated
-```
-
-Call this after `listPaymentsRaw()` finds a payment with `status === 'Claimable'`.
-
----
-
-##### `cancelHodlInvoice(paymentHash)`
-
-Cancel a pending HODL invoice. The held HTLC is failed back to the sender. Use when the recipient decides not to accept the payment or when the invoice expires.
-
-```typescript
-const result = await wallet.cancelHodlInvoice(paymentHash);
-// result.changed — true if the invoice was cancelled
-```
-
----
-
-##### `listPaymentsRaw()`
-
-Return all payments the node knows about, including held inbound HODL payments. Use this after coming online to find payments that arrived while offline.
-
-```typescript
-const payments = await wallet.listPaymentsRaw();
-
-const claimable = payments.filter(
-  p => p.paymentType === 'InboundHodl' && p.status === 'Claimable'
-);
-```
-
-**Each payment (`RlnPayment`):**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `paymentHash` | `string` | Payment identifier |
-| `paymentType` | `'Outbound' \| 'InboundAutoClaim' \| 'InboundHodl'` | `InboundHodl` = held, waiting for claim |
-| `status` | `'Pending' \| 'Claimable' \| 'Claiming' \| 'Succeeded' \| 'Cancelled' \| 'Failed'` | |
-| `preimage` | `string?` | Present when `status === 'Claimable'` — pass to `claimHodlInvoice` |
-| `amtMsat` | `number?` | Payment amount |
-| `assetId` | `string?` | RGB asset ID if RGB payment |
-| `assetAmount` | `number?` | RGB asset amount |
-| `payeePubkey` | `string` | Sender's pubkey |
-| `createdAt` | `number` | Unix timestamp |
-
----
-
-##### Full async payment example
-
-```typescript
-// ── Recipient: register once after unlock ────────────────────────────────────
-const pool = await wallet.apayNew(lspPeerPubkey);
-console.log(`Hash pool registered — ${pool.hashes.length} hashes issued`);
-console.log(`Unused: ${pool.unusedHashes}  Order: ${pool.orderId}`);
-
-// ── Recipient: come online and claim ────────────────────────────────────────
-await wallet.syncWallet();
-const payments = await wallet.listPaymentsRaw();
-
-for (const p of payments) {
-  if (p.paymentType !== 'InboundHodl' || p.status !== 'Claimable') continue;
-  if (!p.preimage) continue;
-
-  const result = await wallet.claimHodlInvoice(p.paymentHash, p.preimage);
-  if (result.changed) {
-    console.log(`Claimed payment: ${p.amtMsat} msat  hash=${p.paymentHash}`);
-  }
-}
-```
-
-> **Note:** `UtexoLsp.claimPendingPayments()` encapsulates the filter + loop above. Use it when you don't need per-payment result inspection.
 
 #### IUTEXOProtocol — Onchain (RGB)
 
@@ -632,7 +463,6 @@ try {
 }
 ```
 
----
 
 ## VSS — Encrypted Remote Backup
 
@@ -952,6 +782,174 @@ await lsp.payAddress({
 **Full reference → [docs/lsp.md](./docs/lsp.md)**
 
 ---
+
+#### Async payments (APay)
+
+Async payments let a recipient receive RGB Lightning payments while their wallet is offline. The payer sends a BOLT11 invoice; the LSP holds the HTLC until the recipient comes online and claims it.
+
+**Flow overview:**
+
+```
+Recipient                    LSP (Host RLN)              Sender
+    │                              │                        │
+    │── apayNew(hostNodeId) ──────►│ registers hash pool    │
+    │◄─ ApayNewResponse ───────────│ creates Lightning Addr  │
+    │                              │                        │
+    │   (goes offline)             │                        │
+    │                              │◄── payLightningInvoice ─│
+    │                              │    HTLC held            │
+    │                              │                        │
+    │   (comes back online)        │                        │
+    │── listPaymentsRaw() ─────────┤ finds InboundHodl      │
+    │── claimHodlInvoice() ───────►│ reveals preimage        │
+    │                              │──── settles HTLC ──────►│
+```
+
+##### `apayNew(hostNodeId)`
+
+Register a payment hash pool with the LSP host node. The host node (LSP) stores the hashes and uses them to create HODL invoices when senders pay the recipient's Lightning Address. Must be called with a live P2P connection to the host.
+
+```typescript
+const pool = await wallet.apayNew(lspPeerPubkey);
+```
+
+**Returns:** `ApayNewResponse`
+
+```typescript
+interface ApayNewResponse {
+  requestId:            string;
+  hostNodeId:           string;
+  protocolVersion:      number;
+  orderId:              string;
+  status:               string;         // 'active'
+  acceptedThroughIndex: number;
+  nextIndexExpected:    number;
+  unusedHashes:         number;
+  refillBatchSize:      number;
+  firstHashIndex:       number;
+  lastHashIndex:        number;
+  hashes: Array<{
+    hashIndex:    number;
+    paymentHash:  string;
+  }>;
+}
+```
+
+The `hashes` array contains the payment hashes sent to the LSP. The LSP uses them to create HODL invoices for each incoming payment to the recipient's Lightning Address. Once `unusedHashes` drops below a threshold the pool should be refilled by calling `apayNew` again.
+
+---
+
+##### `createHodlInvoice(params)`
+
+Create a BOLT11 HODL invoice tied to a specific `paymentHash`. The invoice will not auto-settle when paid — the HTLC is held at the payer's node until `claimHodlInvoice` is called with the matching preimage.
+
+```typescript
+const invoice = await wallet.createHodlInvoice({
+  paymentHash:              '6fb3720c…',  // 32-byte hex
+  amtMsat:                  3_000_000,    // optional — omit for any-amount invoice
+  expirySec:                3_600,
+  assetId:                  'rgb:abc…',   // optional — RGB asset
+  assetAmount:              1,            // optional
+  minFinalCltvExpiryDelta:  null,         // optional — LDK default used if null
+});
+// invoice.bolt11      — the BOLT11 invoice string
+// invoice.paymentHash — echoed back for convenience
+```
+
+**Params:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `paymentHash` | `string` | 32-byte hex. Must be the SHA-256 of the preimage you will reveal at claim time |
+| `amtMsat` | `number \| null` | Amount in millisatoshis. `null` = any-amount invoice |
+| `expirySec` | `number` | Invoice expiry in seconds |
+| `assetId` | `string \| null` | RGB asset ID — omit for sats-only |
+| `assetAmount` | `number \| null` | RGB asset amount |
+| `minFinalCltvExpiryDelta` | `number \| null` | CLTV delta for the final hop. `null` uses LDK default (min 42) |
+
+**Returns:** `{ bolt11: string; paymentHash: string }`
+
+---
+
+##### `claimHodlInvoice(paymentHash, preimage)`
+
+Reveal the preimage for an inbound HODL payment. The node verifies `sha256(preimage) === paymentHash`, then settles the held HTLC — releasing the funds to the recipient and completing the payment from the sender's perspective.
+
+```typescript
+const result = await wallet.claimHodlInvoice(
+  hodlPayment.paymentHash,
+  hodlPayment.preimage,
+);
+// result.changed — true if the invoice state was updated
+```
+
+Call this after `listPaymentsRaw()` finds a payment with `status === 'Claimable'`.
+
+---
+
+##### `cancelHodlInvoice(paymentHash)`
+
+Cancel a pending HODL invoice. The held HTLC is failed back to the sender. Use when the recipient decides not to accept the payment or when the invoice expires.
+
+```typescript
+const result = await wallet.cancelHodlInvoice(paymentHash);
+// result.changed — true if the invoice was cancelled
+```
+
+---
+
+##### `listPaymentsRaw()`
+
+Return all payments the node knows about, including held inbound HODL payments. Use this after coming online to find payments that arrived while offline.
+
+```typescript
+const payments = await wallet.listPaymentsRaw();
+
+const claimable = payments.filter(
+  p => p.paymentType === 'InboundHodl' && p.status === 'Claimable'
+);
+```
+
+**Each payment (`RlnPayment`):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `paymentHash` | `string` | Payment identifier |
+| `paymentType` | `'Outbound' \| 'InboundAutoClaim' \| 'InboundHodl'` | `InboundHodl` = held, waiting for claim |
+| `status` | `'Pending' \| 'Claimable' \| 'Claiming' \| 'Succeeded' \| 'Cancelled' \| 'Failed'` | |
+| `preimage` | `string?` | Present when `status === 'Claimable'` — pass to `claimHodlInvoice` |
+| `amtMsat` | `number?` | Payment amount |
+| `assetId` | `string?` | RGB asset ID if RGB payment |
+| `assetAmount` | `number?` | RGB asset amount |
+| `payeePubkey` | `string` | Sender's pubkey |
+| `createdAt` | `number` | Unix timestamp |
+
+---
+
+##### Full async payment example
+
+```typescript
+// ── Recipient: register once after unlock ────────────────────────────────────
+const pool = await wallet.apayNew(lspPeerPubkey);
+console.log(`Hash pool registered — ${pool.hashes.length} hashes issued`);
+console.log(`Unused: ${pool.unusedHashes}  Order: ${pool.orderId}`);
+
+// ── Recipient: come online and claim ────────────────────────────────────────
+await wallet.syncWallet();
+const payments = await wallet.listPaymentsRaw();
+
+for (const p of payments) {
+  if (p.paymentType !== 'InboundHodl' || p.status !== 'Claimable') continue;
+  if (!p.preimage) continue;
+
+  const result = await wallet.claimHodlInvoice(p.paymentHash, p.preimage);
+  if (result.changed) {
+    console.log(`Claimed payment: ${p.amtMsat} msat  hash=${p.paymentHash}`);
+  }
+}
+```
+
+> **Note:** `UtexoLsp.claimPendingPayments()` encapsulates the filter + loop above. Use it when you don't need per-payment result inspection.
 
 ## Further reading
 

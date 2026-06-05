@@ -46,13 +46,6 @@ jobs:
             echo "auto=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Update RLN version in download script
-        if: steps.rln.outputs.auto == 'true'
-        run: |
-          RLN_VERSION="${{ steps.rln.outputs.version }}"
-          sed -i "s/const VERSION = '[^']*'/const VERSION = '${RLN_VERSION}'/" scripts/download-rln-bindings.js
-          echo "Pinned RLN VERSION → ${RLN_VERSION}"
-
       - name: Bump package prerelease version
         if: steps.rln.outputs.auto == 'true'
         run: npm version prerelease --preid=beta --no-git-tag-version
@@ -62,7 +55,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add scripts/download-rln-bindings.js package.json
+          git add package.json
           git commit -m "chore: bump RLN bindings to v${{ steps.rln.outputs.version }}"
           git push
 

@@ -750,6 +750,61 @@ try {
 
 ---
 
+## Virtual Channels
+
+Virtual channels are Lightning channels that become usable immediately — the funding UTXO is never broadcast to Bitcoin. The LSP opens a `trusted_no_broadcast` channel directly to the client wallet; no block confirmations required, no on-chain footprint.
+
+### Setup
+
+```typescript
+// Client wallet — enable virtual channels and optionally restrict to a specific LSP
+const wallet = new UTEXOWallet({
+  ...nodeParams,
+  enableVirtualChannelsV0: true,
+  virtualPeerPubkeys: ['02lspPubkey…'],  // omit or pass null/[] to accept from any host
+  lspBaseUrl: 'https://lsp-signet.utexo.com',
+}, signer);
+
+await wallet.init();
+await wallet.unlock(unlockParams);
+```
+
+### Receiving a virtual channel (client side)
+
+The LSP opens the channel — nothing extra needed on the client. Once `enableVirtualChannelsV0: true` is set and the LSP pubkey is in `virtualPeerPubkeys` (or the list is empty), the channel is accepted automatically.
+
+```typescript
+// Poll until the virtual channel is ready
+let ready = false;
+while (!ready) {
+  const channels = await wallet.listChannels();
+  ready = channels.some(
+    c => c.virtualOpenMode === 'trusted_no_broadcast' && c.ready && c.isUsable
+  );
+  if (!ready) await new Promise(r => setTimeout(r, 1000));
+}
+```
+
+### Payments over a virtual channel
+
+Virtual channels are transparent to the payment APIs — use the same `createLightningInvoice` / `payLightningInvoice` calls as for regular channels.
+
+```typescript
+// Receive
+const { lnInvoice } = await wallet.createLightningInvoice({
+  amountSats: 3_000,
+  expirySeconds: 900,
+  asset: { assetId: ASSET_ID, amount: 1 },
+});
+
+// Send
+const { txid: paymentHash } = await wallet.payLightningInvoice({ lnInvoice });
+```
+
+**Full reference → [docs/virtual-channels.md](./docs/virtual-channels.md)**
+
+---
+
 ## LSP Integration
 
 `utexo-lsp` bridges on-chain RGB assets with Lightning payments. The SDK exposes it through `UtexoLsp` — a composed flow class created from the wallet.

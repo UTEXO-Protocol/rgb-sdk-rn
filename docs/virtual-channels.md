@@ -163,22 +163,6 @@ Virtual channels appear in `listChannels` with a `virtualOpenMode` field. The `f
 
 ---
 
-## Relevant Rust tests
-
-| Test | What it verifies |
-|---|---|
-| `virtual_open_non_allowlisted_host_does_not_become_operational` | Client with wrong pubkey in allowlist never gets an operational channel |
-| `virtual_open_rejects_duplicate_peer_pair_concurrently_and_sequentially` | Exactly one virtual channel per peer pair; concurrent + sequential duplicates rejected |
-| `virtual_open_rejects_invalid_requests` | `enable_virtual_channels_v0=false`, unknown mode, `public=true` all return 400 |
-| `virtual_trusted_no_broadcast_survives_funding_timeout_and_routes_btc_and_rgb_payments` | Channel stays live past 2017 blocks; BTC + RGB payments succeed; multi-client routing works |
-| `virtual_hodl_invoice_cancel_clears_pending_artifacts_and_allows_close` | Cancelling a HODL invoice over a virtual channel clears all pending RGB artifacts |
-| `virtual_close_succeeds_after_client_returns_full_btc_and_rgb` | Host can only close once counterparty returns full balance |
-| `virtual_reconciliation_ignores_orphan_pending_rgb_entries` | Orphan KVStore RGB entries don't block payments |
-
-Source: [`src/test/virtual_channels.rs`](https://github.com/UTEXO-Protocol/rgb-lightning-node/blob/dev/src/test/virtual_channels.rs)
-
----
-
 ## Demo
 
 The demo app includes a virtual channel flow at [`flows/async-pay/`](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo) — it shows wallet construction with `enableVirtualChannelsV0: true`, LSP channel setup, and RGB payments over the virtual channel.

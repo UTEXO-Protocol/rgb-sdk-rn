@@ -72,6 +72,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     network: String,
     maxMediaUploadSizeMb: Double,
     enableVirtualChannelsV0: Boolean?,
+    virtualPeerPubkeys: ReadableArray?,
     vssUrl: String?,
     vssAllowHttp: Boolean,
     vssAllowEmptyRestore: Boolean,
@@ -82,6 +83,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
     coroutineScope.launch(Dispatchers.IO) {
       try {
         android.util.Log.d("RgbModule", "[rlnCreateNode] network=$network vssUrl=$vssUrl lspBaseUrl=$lspBaseUrl daemonPort=$daemonListeningPort ldkPort=$ldkPeerListeningPort")
+        val peerPubkeysList: List<String>? = virtualPeerPubkeys?.let { arr ->
+          (0 until arr.size()).map { arr.getString(it) ?: "" }.filter { it.isNotEmpty() }
+        }
         val initRequest = SdkInitRequest(
           storageDirPath = storageDirPath,
           daemonListeningPort = daemonListeningPort.toInt().toUShort(),
@@ -89,7 +93,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           network = network,
           maxMediaUploadSizeMb = maxMediaUploadSizeMb.toInt().toUShort(),
           enableVirtualChannelsV0 = enableVirtualChannelsV0,
-          virtualPeerPubkeys = null,
+          virtualPeerPubkeys = peerPubkeysList,
           lspBaseUrl = lspBaseUrl,
           lspBearerToken = lspBearerToken,
           vssUrl = vssUrl,

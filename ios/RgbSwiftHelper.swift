@@ -39,6 +39,7 @@ public class RgbSwiftHelper: NSObject {
             let maxMediaUploadSizeMb = request["maxMediaUploadSizeMb"] as? NSNumber else {
         return ["error": "Invalid rlnCreateNode request"] as NSDictionary
       }
+      let virtualPeerPubkeys: [String]? = (request["virtualPeerPubkeys"] as? [String]).flatMap { $0.isEmpty ? nil : $0 }
       let initReq = SdkInitRequest(
         storageDirPath: storageDirPath,
         daemonListeningPort: UInt16(truncating: daemonListeningPort),
@@ -46,7 +47,7 @@ public class RgbSwiftHelper: NSObject {
         network: network,
         maxMediaUploadSizeMb: UInt16(truncating: maxMediaUploadSizeMb),
         enableVirtualChannelsV0: request["enableVirtualChannelsV0"] as? Bool,
-        virtualPeerPubkeys: nil,
+        virtualPeerPubkeys: virtualPeerPubkeys,
         lspBaseUrl: request["lspBaseUrl"] as? String,
         lspBearerToken: request["lspBearerToken"] as? String,
         vssUrl: request["vssUrl"] as? String,

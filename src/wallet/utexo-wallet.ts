@@ -124,6 +124,7 @@ export interface UTEXOWalletNodeParams {
   network: string;
   maxMediaUploadSizeMb?: number;
   enableVirtualChannelsV0?: boolean;
+  virtualPeerPubkeys?: string[] | null;
   vssUrl?: string | null;
   vssAllowHttp?: boolean;
   vssAllowEmptyRestore?: boolean;
@@ -1051,6 +1052,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       network: toNativeNetwork(this.params.network as BitcoinNetwork),
       maxMediaUploadSizeMb: this.params.maxMediaUploadSizeMb ?? 20,
       enableVirtualChannelsV0: this.params.enableVirtualChannelsV0 ?? null,
+      virtualPeerPubkeys: this.params.virtualPeerPubkeys ?? null,
       vssUrl: this.params.vssUrl ?? null,
       vssAllowHttp: this.params.vssAllowHttp ?? false,
       vssAllowEmptyRestore: this.params.vssAllowEmptyRestore ?? false,

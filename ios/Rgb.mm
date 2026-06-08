@@ -44,6 +44,7 @@ ldkPeerListeningPort:(double)ldkPeerListeningPort
               network:(NSString *)network
   maxMediaUploadSizeMb:(double)maxMediaUploadSizeMb
 enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
+  virtualPeerPubkeys:(NSArray *)virtualPeerPubkeys
                vssUrl:(NSString *)vssUrl
          vssAllowHttp:(BOOL)vssAllowHttp
   vssAllowEmptyRestore:(BOOL)vssAllowEmptyRestore
@@ -60,6 +61,7 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
             @"network": network ?: @"",
             @"maxMediaUploadSizeMb": @(maxMediaUploadSizeMb),
             @"enableVirtualChannelsV0": enableVirtualChannelsV0 ?: [NSNull null],
+            @"virtualPeerPubkeys": virtualPeerPubkeys ?: [NSNull null],
             @"vssUrl": vssUrl ?: [NSNull null],
             @"vssAllowHttp": @(vssAllowHttp),
             @"vssAllowEmptyRestore": @(vssAllowEmptyRestore),

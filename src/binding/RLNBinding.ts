@@ -89,6 +89,7 @@ export class RLNBinding implements IRLN {
         params.network,
         params.maxMediaUploadSizeMb,
         params.enableVirtualChannelsV0 ?? null,
+        params.virtualPeerPubkeys ?? null,
         params.vssUrl ?? null,
         params.vssAllowHttp ?? false,
         params.vssAllowEmptyRestore ?? false,

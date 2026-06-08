@@ -9,6 +9,7 @@ export interface Spec extends TurboModule {
     network: string,
     maxMediaUploadSizeMb: number,
     enableVirtualChannelsV0: boolean | null,
+    virtualPeerPubkeys: string[] | null,
     vssUrl: string | null,
     vssAllowHttp: boolean,
     vssAllowEmptyRestore: boolean,

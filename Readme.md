@@ -86,6 +86,7 @@ After shutdown, restart on the same instance with `await wallet.reinit(unlockPar
 - Open Lightning channels and send/receive BTC or RGB asset payments
 - LSP integration: receive RGB via Lightning, send RGB to on-chain recipients, Lightning Address — see [docs/lsp.md](./docs/lsp.md)
 - Async payments (APay): hash pool + Lightning Address via utexo-lsp — see [docs/async-payments.md](./docs/async-payments.md)
+- Virtual channels: instant-usable channels with no on-chain footprint via trusted `no-broadcast` mode — see [docs/virtual-channels.md](./docs/virtual-channels.md)
 - Issue, transfer, and manage RGB assets (NIA, CFA, IFA, UDA)
 - Manage UTXOs and BTC on-chain sends
 - Use a hardware-wallet–style **external signer** or a simple **password signer**
@@ -132,7 +133,8 @@ const wallet = new UTEXOWallet(
 | `ldkPeerListeningPort` | `number` | LDK peer-to-peer port |
 | `network` | `string` | Bitcoin network (`'utexo'`, `'regtest'`, `'testnet'`, `'mainnet'`, …) |
 | `maxMediaUploadSizeMb` | `number?` | Max media upload size in MB (default 20) |
-| `enableVirtualChannelsV0` | `boolean?` | Enable virtual channel support |
+| `enableVirtualChannelsV0` | `boolean?` | Enable virtual channel support (required on both host and client) |
+| `virtualPeerPubkeys` | `string[]?` | Host pubkeys allowed to open inbound virtual channels. `null`/`[]` = accept from anyone |
 | `vssUrl` | `string?` | VSS server URL for encrypted remote backup |
 | `vssAllowHttp` | `boolean?` | Allow plain HTTP VSS endpoint (default `false`) |
 | `vssAllowEmptyRestore` | `boolean?` | Allow restoring from VSS when no backup exists yet (default `false`) |
@@ -1013,6 +1015,7 @@ for (const p of payments) {
 |-----|-------------|
 | [docs/lsp.md](./docs/lsp.md) | Full LSP reference: `UtexoLsp`, `LspPeer`, all methods, examples |
 | [docs/async-payments.md](./docs/async-payments.md) | Async payment (APay) protocol, six-step flow diagrams, SDK usage |
+| [docs/virtual-channels.md](./docs/virtual-channels.md) | Virtual channels: trusted no-broadcast, host-key allowlist, `virtualPeerPubkeys`, SDK usage |
 
 ---
 

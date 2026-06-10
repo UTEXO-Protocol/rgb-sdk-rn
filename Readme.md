@@ -304,7 +304,7 @@ await wallet.destroy();
 | `getLspConfig()` | Return `{ baseUrl, bearerToken }` this node was initialized with |
 | `apayNew(hostNodeId)` | Register a hash pool with the host LSP node |
 | `createHodlInvoice(params)` | Create a HODL invoice tied to a specific payment hash |
-| `claimHodlInvoice(paymentHash, preimage)` | Claim an inbound HODL payment by revealing the preimage |
+| `claimHodlInvoice(paymentHash, preimage)` | Reveal preimage to claim an inbound HODL payment |
 | `cancelHodlInvoice(paymentHash)` | Cancel a HODL invoice |
 | `listPaymentsRaw()` | Return all payments including `InboundHodl` with preimage |
 
@@ -855,8 +855,8 @@ const { lnInvoice, rgbInvoice } = await lsp.receiveAsset({
 });
 
 // 3. Share rgbInvoice with the on-chain sender
-// 4. Wait for settlement
-await lsp.awaitReceiveSettlement(lnInvoice, {
+// 4. Wait for settlement ('settled' | 'timed_out')
+const outcome = await lsp.awaitReceiveSettlement(lnInvoice, {
   onProgress: (s) => console.log('status:', s),
 });
 ```
@@ -872,14 +872,17 @@ const { sendResult } = await lsp.sendAsset({
 });
 ```
 
-### Lightning Address (offline receive)
+### Lightning Address (APay / offline receive)
 
 ```typescript
+await lsp.connect();
+await lsp.waitForChannel(ASSET_ID, { … });
+
 const { address } = await lsp.enableLightningAddress();
 // → 'username@lsp-signet.utexo.com'
 
-// On every unlock — claim payments received while offline
-const claimed = await lsp.claimPendingPayments();
+// While app is foreground: lsp.connect() periodically so LSP outbox can reach you.
+// Settlement is automatic — see docs/async-payments.md.
 ```
 
 ### Pay a Lightning Address
@@ -898,25 +901,25 @@ await lsp.payAddress({
 
 #### Async payments (APay)
 
-Async payments let a recipient receive RGB Lightning payments while their wallet is offline. The payer sends a BOLT11 invoice; the LSP holds the HTLC until the recipient comes online and claims it.
+Async payments let a recipient receive RGB Lightning while **offline at payment time**. The payer pays a HODL BOLT11 via LNURL; the LSP holds the HTLC until the recipient is **reachable over P2P**, then the **LSP outbox** settles automatically.
 
 **Flow overview:**
 
 ```
 Recipient                    LSP (Host RLN)              Sender
     │                              │                        │
-    │── apayNew(hostNodeId) ──────►│ registers hash pool    │
-    │◄─ ApayNewResponse ───────────│ creates Lightning Addr  │
-    │                              │                        │
-    │   (goes offline)             │                        │
+    │── enableLightningAddress ───►│ hash pool + LN Address │
+    │── lsp.connect() (online)     │                        │
     │                              │◄── payLightningInvoice ─│
     │                              │    HTLC held            │
     │                              │                        │
-    │   (comes back online)        │                        │
-    │── listPaymentsRaw() ─────────┤ finds InboundHodl      │
-    │── claimHodlInvoice() ───────►│ reveals preimage        │
-    │                              │──── settles HTLC ──────►│
+    │   (lsp.connect when online)  │ outbox: pay merchant   │
+    │                              │ auto-claim → preimage  │
+    │                              │──── settles payer HTLC ►│
+    │◄── RGB delivered ────────────│                        │
 ```
+
+Full reference → **[docs/async-payments.md](./docs/async-payments.md)**
 
 ##### `apayNew(hostNodeId)`
 
@@ -954,7 +957,7 @@ The `hashes` array contains the payment hashes sent to the LSP. The LSP uses the
 
 ##### `createHodlInvoice(params)`
 
-Create a BOLT11 HODL invoice tied to a specific `paymentHash`. The invoice will not auto-settle when paid — the HTLC is held at the payer's node until `claimHodlInvoice` is called with the matching preimage.
+Create a BOLT11 HODL invoice tied to a specific `paymentHash`. Use when your app issues the invoice directly (APay Lightning Address checkout uses LNURL → Host `/lninvoice` instead).
 
 ```typescript
 const invoice = await wallet.createHodlInvoice({
@@ -986,7 +989,7 @@ const invoice = await wallet.createHodlInvoice({
 
 ##### `claimHodlInvoice(paymentHash, preimage)`
 
-Reveal the preimage for an inbound HODL payment. The node verifies `sha256(preimage) === paymentHash`, then settles the held HTLC — releasing the funds to the recipient and completing the payment from the sender's perspective.
+Reveal the preimage for an inbound HODL payment created with `createHodlInvoice`.
 
 ```typescript
 const result = await wallet.claimHodlInvoice(
@@ -996,7 +999,7 @@ const result = await wallet.claimHodlInvoice(
 // result.changed — true if the invoice state was updated
 ```
 
-Call this after `listPaymentsRaw()` finds a payment with `status === 'Claimable'`.
+Call after `listPaymentsRaw()` finds a payment with `status === 'Claimable'`.
 
 ---
 
@@ -1013,7 +1016,7 @@ const result = await wallet.cancelHodlInvoice(paymentHash);
 
 ##### `listPaymentsRaw()`
 
-Return all payments the node knows about, including held inbound HODL payments. Use this after coming online to find payments that arrived while offline.
+Return all payments the node knows about. Monitor inbound `INBOUND_HODL` → `Succeeded` for APay receive; filter `Claimable` + call `claimHodlInvoice` for HODL invoices you issued.
 
 ```typescript
 const payments = await wallet.listPaymentsRaw();
@@ -1039,30 +1042,50 @@ const claimable = payments.filter(
 
 ---
 
-##### Full async payment example
+##### Full APay example
+
+See **[docs/async-payments.md](./docs/async-payments.md)** and the demo [`useApayFlow.ts`](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/screens/apay/useApayFlow.ts).
 
 ```typescript
-// ── Recipient: register once after unlock ────────────────────────────────────
-const pool = await wallet.apayNew(lspPeerPubkey);
-console.log(`Hash pool registered — ${pool.hashes.length} hashes issued`);
-console.log(`Unused: ${pool.unusedHashes}  Order: ${pool.orderId}`);
+// ── Recipient ────────────────────────────────────────────────────────────────
+await lsp.connect();
+await lsp.waitForChannel(ASSET_ID, { … });
+const { address } = await lsp.enableLightningAddress();
 
-// ── Recipient: come online and claim ────────────────────────────────────────
-await wallet.syncWallet();
-const payments = await wallet.listPaymentsRaw();
+// ── Sender ───────────────────────────────────────────────────────────────────
+await senderLsp.connect();
+await senderLsp.waitForChannel(ASSET_ID, { … });
+await senderLsp.waitForOutboundLiquidity(3_000_000, { … });
 
-for (const p of payments) {
-  if (p.paymentType !== 'InboundHodl' || p.status !== 'Claimable') continue;
-  if (!p.preimage) continue;
+const { pr } = await senderLsp.http.resolveAddress(username, 3_000_000, ASSET_ID, 1);
+const { txid: paymentHash, status } = await senderWallet.payLightningInvoice({
+  lnInvoice: pr, assetId: ASSET_ID, assetAmount: 1,
+});
 
-  const result = await wallet.claimHodlInvoice(p.paymentHash, p.preimage);
-  if (result.changed) {
-    console.log(`Claimed payment: ${p.amtMsat} msat  hash=${p.paymentHash}`);
-  }
+// ── Settlement (recipient online: lsp.connect()) ─────────────────────────────
+await lsp.connect();
+// Poll until sender Settled + recipient inbound SUCCEEDED
+let settled = false;
+while (!settled) {
+  await senderWallet.syncWallet();
+  await wallet.syncWallet();
+  const sendSt = await senderWallet.getLightningSendRequest(paymentHash!);
+  const inbound = (await wallet.listPaymentsRaw())
+    .find(p => p.paymentHash === paymentHash);
+  if (sendSt === 'Settled' && inbound?.status === 'Succeeded') settled = true;
 }
 ```
 
-> **Note:** `UtexoLsp.claimPendingPayments()` encapsulates the filter + loop above. Use it when you don't need per-payment result inspection.
+##### Claim pending HODL payments
+
+```typescript
+for (const p of await wallet.listPaymentsRaw()) {
+  if (p.paymentType !== 'InboundHodl' || p.status !== 'Claimable') continue;
+  if (!p.preimage) continue;
+  await wallet.claimHodlInvoice(p.paymentHash, p.preimage);
+}
+// Or: await lsp.claimPendingPayments();
+```
 
 ## Further reading
 

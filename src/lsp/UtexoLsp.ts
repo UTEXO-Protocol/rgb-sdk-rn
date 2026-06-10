@@ -8,6 +8,7 @@ import {
   type ChannelReadyInfo,
   type LspOnchainSendResponse,
   type LspLnParams,
+  type ReceiveSettlementOutcome,
   normalizeReceiveStatus,
   peerUri,
 } from './lsp-types';
@@ -196,16 +197,16 @@ export class UtexoLsp {
 
   /**
    * Poll wallet.getLightningReceiveRequest until the invoice reaches a terminal
-   * state. Returns 'Succeeded' on success.
+   * state.
    *
-   * Throws LspSettlementError if status is Failed or Expired.
-   * Returns 'Succeeded' on timeout without throwing — the LSP cron may still
-   * be processing; a timeout is not a confirmed failure.
+   * @returns `'settled'` when status is Succeeded; `'timed_out'` when timeoutMs
+   *   elapses without a terminal status (LSP may still be processing).
+   * @throws LspSettlementError if status is Failed or Expired.
    */
   async awaitReceiveSettlement(
     lnInvoice: string,
     opts: WaitOptions = {},
-  ): Promise<'Succeeded'> {
+  ): Promise<ReceiveSettlementOutcome> {
     const timeoutMs      = opts.timeoutMs      ?? DEFAULT_SETTLEMENT_TIMEOUT_MS;
     const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     const deadline       = Date.now() + timeoutMs;
@@ -219,7 +220,7 @@ export class UtexoLsp {
 
       opts.onProgress?.(status);
 
-      if (status === 'Succeeded') return 'Succeeded';
+      if (status === 'Succeeded') return 'settled';
       if (status === 'Failed' || status === 'Expired') {
         throw new LspSettlementError('ln_invoice', status);
       }
@@ -228,7 +229,7 @@ export class UtexoLsp {
     }
 
     opts.onProgress?.('timeout');
-    return 'Succeeded';
+    return 'timed_out';
   }
 
   // ── 5. Outbound liquidity wait ────────────────────────────────────────────────
@@ -344,11 +345,11 @@ export class UtexoLsp {
     };
   }
 
-  // ── 9. Claim pending async payments ───────────────────────────────────────────
+  // ── 9. Claim pending HODL payments ────────────────────────────────────────────
 
   /**
-   * Find all CLAIMABLE/CLAIMING inbound payments and claim each one.
-   * Call after every unlock() when the wallet comes back online.
+   * Find all CLAIMABLE/CLAIMING inbound payments and claim each one via claimHodlInvoice.
+   * Use for invoices created with createHodlInvoice — e.g. after unlock() when back online.
    */
   async claimPendingPayments(): Promise<ClaimResult[]> {
     const payments  = await this.wallet.listPaymentsRaw();

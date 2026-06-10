@@ -4364,10 +4364,11 @@ public struct Payment {
     public var updatedAt: UInt64
     public var payeePubkey: PublicKey
     public var preimage: String?
+    public var descriptionHash: String?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amtMsat: UInt64?, assetAmount: UInt64?, assetId: ContractId?, paymentHash: PaymentHash, paymentType: PaymentType, status: HtlcStatus, createdAt: UInt64, updatedAt: UInt64, payeePubkey: PublicKey, preimage: String?) {
+    public init(amtMsat: UInt64?, assetAmount: UInt64?, assetId: ContractId?, paymentHash: PaymentHash, paymentType: PaymentType, status: HtlcStatus, createdAt: UInt64, updatedAt: UInt64, payeePubkey: PublicKey, preimage: String?, descriptionHash: String?) {
         self.amtMsat = amtMsat
         self.assetAmount = assetAmount
         self.assetId = assetId
@@ -4378,6 +4379,7 @@ public struct Payment {
         self.updatedAt = updatedAt
         self.payeePubkey = payeePubkey
         self.preimage = preimage
+        self.descriptionHash = descriptionHash
     }
 }
 
@@ -4413,6 +4415,9 @@ extension Payment: Equatable, Hashable {
         if lhs.preimage != rhs.preimage {
             return false
         }
+        if lhs.descriptionHash != rhs.descriptionHash {
+            return false
+        }
         return true
     }
 
@@ -4427,6 +4432,7 @@ extension Payment: Equatable, Hashable {
         hasher.combine(updatedAt)
         hasher.combine(payeePubkey)
         hasher.combine(preimage)
+        hasher.combine(descriptionHash)
     }
 }
 
@@ -4446,7 +4452,8 @@ public struct FfiConverterTypePayment: FfiConverterRustBuffer {
                 createdAt: FfiConverterUInt64.read(from: &buf),
                 updatedAt: FfiConverterUInt64.read(from: &buf),
                 payeePubkey: FfiConverterTypePublicKey.read(from: &buf),
-                preimage: FfiConverterOptionString.read(from: &buf)
+                preimage: FfiConverterOptionString.read(from: &buf),
+                descriptionHash: FfiConverterOptionString.read(from: &buf)
             )
     }
 
@@ -4461,6 +4468,7 @@ public struct FfiConverterTypePayment: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.updatedAt, into: &buf)
         FfiConverterTypePublicKey.write(value.payeePubkey, into: &buf)
         FfiConverterOptionString.write(value.preimage, into: &buf)
+        FfiConverterOptionString.write(value.descriptionHash, into: &buf)
     }
 }
 

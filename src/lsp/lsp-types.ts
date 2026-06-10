@@ -118,6 +118,9 @@ export function peerUri(peer: LspPeer): string {
 
 export type ReceiveStatus = 'Pending' | 'Succeeded' | 'Failed' | 'Expired';
 
+/** Result of awaitReceiveSettlement — distinct from wallet ReceiveStatus. */
+export type ReceiveSettlementOutcome = 'settled' | 'timed_out';
+
 export function normalizeReceiveStatus(raw: string | null | undefined): ReceiveStatus {
   const s = (raw ?? '').toUpperCase();
   if (s === 'SUCCEEDED' || s === 'SETTLED') return 'Succeeded';

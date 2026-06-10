@@ -126,17 +126,18 @@ Internally:
 Poll `wallet.getLightningReceiveRequest(lnInvoice)` until it reaches a terminal state.
 
 ```typescript
-await lsp.awaitReceiveSettlement(lnInvoice, {
+const outcome = await lsp.awaitReceiveSettlement(lnInvoice, {
   timeoutMs:      60_000,
   pollIntervalMs:  2_000,
   onProgress: (status) => setUiStatus(status),
 });
-// Returns 'Succeeded' or throws LspSettlementError({ step: 'ln_invoice', status })
+// outcome: 'settled' | 'timed_out'
+// throws LspSettlementError({ step: 'ln_invoice', status }) on Failed | Expired
 ```
 
-Status progression: `'Pending'` → `'Succeeded'` | `'Failed'` | `'Expired'`
+Wallet status progression: `'Pending'` → `'Succeeded'` | `'Failed'` | `'Expired'`
 
-On timeout the method returns `'Succeeded'` without throwing — a timeout is not a confirmed failure, the LSP cron may still be processing.
+Return value: `'settled'` when Succeeded is confirmed; `'timed_out'` when timeoutMs elapses without a terminal status (LSP cron may still be processing — not a confirmed failure).
 
 ---
 
@@ -213,7 +214,7 @@ The `lspBaseUrl` **and** `lspBearerToken` on the wallet node params must be set 
 
 ### `claimPendingPayments()`
 
-Find all `CLAIMABLE` / `CLAIMING` inbound HODL payments and claim each one by revealing the preimage. Call after every `unlock()` when the wallet comes back online.
+Find all `CLAIMABLE` / `CLAIMING` inbound HODL payments and call `claimHodlInvoice` on each. Use for invoices created with `createHodlInvoice` — e.g. after `unlock()` when the wallet comes back online.
 
 ```typescript
 const results = await lsp.claimPendingPayments();
@@ -320,28 +321,50 @@ const { lnInvoice } = await recipientWallet.createLightningInvoice({
 await wallet.payLightningInvoice({ lnInvoice });
 ```
 
-### Enable Lightning Address (offline receive / APay)
+### APay — Lightning Address (offline receive)
 
 ```typescript
-// wallet node must be constructed with lspBaseUrl + lspBearerToken
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:      'https://lsp-signet.utexo.com',
-  lspBearerToken:  'bearer-token',
+  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  lspBearerToken: 'bearer-token',
 }, signer);
 await wallet.init();
 await wallet.unlock(unlockParams);
 
-const lsp = await wallet.createLsp(LSP_PEER);
+const lsp = await wallet.createLsp();  // or createLsp(undefined, 9737) on regtest
 
-// Register once after first unlock
+await lsp.connect();
+await lsp.waitForChannel(ASSET_ID, { onProgress: (m) => console.log(m) });
+
 const { address } = await lsp.enableLightningAddress();
-console.log('Your Lightning Address:', address);
-// → 'excited-mountain-1234@lsp-signet.utexo.com'
+console.log('Lightning Address:', address);
 
-// On every subsequent unlock, claim any payments received while offline
+// When app is foreground / expecting payment: lsp.connect() so LSP outbox can reach you.
+// Settlement is automatic — poll listPaymentsRaw() or sender getLightningSendRequest until Succeeded.
+```
+
+Sender side:
+
+```typescript
+await senderLsp.connect();
+await senderLsp.waitForChannel(ASSET_ID, { … });
+await senderLsp.waitForOutboundLiquidity(3_000_000, { … });
+
+const { pr } = await senderLsp.http.resolveAddress(username, 3_000_000, ASSET_ID, 1);
+const pay = await senderWallet.payLightningInvoice({ lnInvoice: pr, assetId: ASSET_ID, assetAmount: 1 });
+
+// Poll until Settled
+const status = await senderWallet.getLightningSendRequest(pay.txid!);
+```
+
+Full flow → [async-payments.md](./async-payments.md). Demo → [rgb-sdk-rn-demo `useApayFlow.ts`](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/screens/apay/useApayFlow.ts).
+
+### Claim pending HODL payments
+
+```typescript
 const claimed = await lsp.claimPendingPayments();
-console.log(`Claimed ${claimed.filter(c => c.claimed).length} payments`);
+console.log(`Claimed ${claimed.filter(c => c.claimed).length} HODL payments`);
 ```
 
 ---

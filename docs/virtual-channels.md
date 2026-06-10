@@ -165,4 +165,4 @@ Virtual channels appear in `listChannels` with a `virtualOpenMode` field. The `f
 
 ## Demo
 
-The demo app includes a virtual channel flow at [`flows/async-pay/`](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo) — it shows wallet construction with `enableVirtualChannelsV0: true`, LSP channel setup, and RGB payments over the virtual channel.
+The demo app includes APay flows at [`screens/apay/useApayFlow.ts`](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/screens/apay/useApayFlow.ts) — wallet construction with `enableVirtualChannelsV0: true`, LSP channel setup, LNURL checkout, and LSP outbox settlement.

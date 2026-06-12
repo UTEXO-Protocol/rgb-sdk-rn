@@ -200,17 +200,19 @@ function mapUtxo(u: RlnUnspent): Unspent {
 }
 
 function mapTransaction(t: RlnTransaction): Transaction {
-  const validTypes: TransactionType[] = [
-    'RgbSend',
-    'Drain',
-    'CreateUtxos',
-    'User',
-  ];
+  // RLNBinding canonicalizes the native enum to SCREAMING_SNAKE; map it onto
+  // the core TransactionType vocabulary (SEND_BTC/INCOMING have no core
+  // counterpart and fold into 'User').
+  const typeMap: Record<string, TransactionType> = {
+    RGB_SEND: 'RgbSend',
+    DRAIN: 'Drain',
+    CREATE_UTXOS: 'CreateUtxos',
+    SEND_BTC: 'User',
+    INCOMING: 'User',
+  };
   return {
     txid: t.txid,
-    transactionType: (validTypes.includes(t.transactionType as TransactionType)
-      ? t.transactionType
-      : 'User') as TransactionType,
+    transactionType: typeMap[t.transactionType ?? ''] ?? 'User',
     received: t.received ?? 0,
     sent: t.sent ?? 0,
     fee: t.fee ?? 0,

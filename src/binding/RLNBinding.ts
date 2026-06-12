@@ -68,6 +68,16 @@ function normalizeBtcBalance(raw: any): RlnBtcBalance {
   };
 }
 
+// Android (Kotlin) serializes uniffi enums as SCREAMING_SNAKE ("RGB_SEND"),
+// iOS (Swift) interpolates the case name as lowerCamel ("rgbSend") — convert
+// both to canonical SCREAMING_SNAKE so the TS unions hold on every platform.
+function canonicalEnum(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  const s = String(v);
+  if (/^[A-Z0-9_]+$/.test(s)) return s; // already canonical (Android)
+  return s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+}
+
 export class RLNBinding implements IRLN {
   private nodeOperationQueue: Promise<void> = Promise.resolve();
   private rlnNodeId: number | null = null;
@@ -340,9 +350,13 @@ export class RLNBinding implements IRLN {
   // ── Channels ────────────────────────────────────────────────────────────────
 
   async rlnListChannels(): Promise<RlnChannel[]> {
-    return this.withNodeOperation((nodeId) =>
+    const raw = (await this.withNodeOperation((nodeId) =>
       Rgb.rlnListChannels(nodeId)
-    ) as Promise<RlnChannel[]>;
+    )) as RlnChannel[];
+    return raw.map((c) => ({
+      ...c,
+      status: canonicalEnum((c as any).status) as RlnChannel['status'],
+    }));
   }
 
   async rlnOpenChannel(request: {
@@ -675,9 +689,15 @@ export class RLNBinding implements IRLN {
   }
 
   async rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]> {
-    return this.withNodeOperation((nodeId) =>
+    const raw = (await this.withNodeOperation((nodeId) =>
       Rgb.rlnListTransactions(nodeId, skipSync)
-    ) as Promise<RlnTransaction[]>;
+    )) as RlnTransaction[];
+    return raw.map((t) => ({
+      ...t,
+      transactionType: canonicalEnum(
+        (t as any).transactionType
+      ) as RlnTransaction['transactionType'],
+    }));
   }
 
   async rlnListTransfers(assetId: string): Promise<RlnTransfer[]> {

@@ -6,6 +6,7 @@ import type {
   LspGetInfoWire,
   LspOnchainSendRequest,
   LspOnchainSendResponse,
+  LspOnchainSendWire,
   LspLightningReceiveRequest,
   LspLightningReceiveResponse,
   LspLightningReceiveWire,
@@ -121,8 +122,8 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     return {
       pubkey:            raw.pubkey,
       alias:             raw.alias,
-      numChannels:       raw.num_channels       ?? raw.numChannels       ?? 0,
-      numUsableChannels: raw.num_usable_channels ?? raw.numUsableChannels ?? 0,
+      numChannels:       raw.num_channels,
+      numUsableChannels: raw.num_usable_channels,
     };
   }
 
@@ -195,10 +196,17 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     };
     if (params.ln) body.lninvoice = snakeCaseLnParams(params.ln);
 
-    return this.request<LspOnchainSendResponse>('/onchain_send', {
+    const raw = await this.request<LspOnchainSendWire>('/onchain_send', {
       method: 'POST',
       body: JSON.stringify(body),
     });
+    // utexo-lsp returns snake_case keys — map explicitly
+    // (request<T>() does a plain JSON.parse with no transform).
+    return {
+      lnInvoice:  raw.ln_invoice,
+      rgbInvoice: raw.rgb_invoice,
+      mappingId:  String(raw.mapping_id),
+    };
   }
 
   /**
@@ -221,9 +229,9 @@ export class UtexoLSPClient implements IUtexoLSPClient {
       body: JSON.stringify(body),
     });
     return {
-      lnInvoice:  raw.ln_invoice  ?? raw.lnInvoice  ?? '',
-      rgbInvoice: raw.rgb_invoice ?? raw.rgbInvoice ?? '',
-      mappingId:  String(raw.mapping_id  ?? raw.mappingId  ?? ''),
+      lnInvoice:  raw.ln_invoice,
+      rgbInvoice: raw.rgb_invoice,
+      mappingId:  String(raw.mapping_id),
     };
   }
 }

@@ -523,17 +523,23 @@ class RgbModule(reactContext: ReactApplicationContext) :
           val map = Arguments.createMap()
           map.putString("channelId", ch.channelId)
           map.putString("peerPubkey", ch.peerPubkey)
+          map.putString("status", ch.status.name)
           map.putBoolean("ready", ch.ready)
           map.putBoolean("isUsable", ch.isUsable)
           map.putDouble("capacitySat", ch.capacitySat.toDouble())
           map.putDouble("localBalanceSat", ch.localBalanceSat.toDouble())
           map.putDouble("outboundBalanceMsat", ch.outboundBalanceMsat.toDouble())
           map.putDouble("inboundBalanceMsat", ch.inboundBalanceMsat.toDouble())
+          map.putDouble("nextOutboundHtlcLimitMsat", ch.nextOutboundHtlcLimitMsat.toDouble())
+          map.putDouble("nextOutboundHtlcMinimumMsat", ch.nextOutboundHtlcMinimumMsat.toDouble())
           map.putBoolean("public", ch.public)
           ch.fundingTxid?.let { map.putString("fundingTxid", it) }
+          ch.peerAlias?.let { map.putString("peerAlias", it) }
+          ch.shortChannelId?.let { map.putDouble("shortChannelId", it.toDouble()) }
           ch.assetId?.let { map.putString("assetId", it) }
           ch.assetLocalAmount?.let { map.putDouble("assetLocalAmount", it.toDouble()) }
           ch.assetRemoteAmount?.let { map.putDouble("assetRemoteAmount", it.toDouble()) }
+          ch.virtualOpenMode?.let { map.putString("virtualOpenMode", it) }
           arr.pushMap(map)
         }
         withContext(Dispatchers.Main) { promise.resolve(arr) }

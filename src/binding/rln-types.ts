@@ -73,9 +73,13 @@ export interface RlnPeer {
 
 // ── Channels ──────────────────────────────────────────────────────────────────
 
+/** Canonical SCREAMING_SNAKE — normalized at the RLNBinding boundary. */
+export type RlnChannelStatus = 'OPENING' | 'OPENED' | 'CLOSING';
+
 export interface RlnChannel {
   channelId: string;
   peerPubkey: string;
+  status?: RlnChannelStatus;
   ready: boolean;
   capacitySat: number;
   isUsable?: boolean;
@@ -275,9 +279,17 @@ export interface RlnUnspent {
   rgbAllocations?: RlnRgbAllocation[];
 }
 
+/** Canonical SCREAMING_SNAKE — normalized at the RLNBinding boundary. */
+export type RlnTransactionType =
+  | 'RGB_SEND'
+  | 'DRAIN'
+  | 'CREATE_UTXOS'
+  | 'SEND_BTC'
+  | 'INCOMING';
+
 export interface RlnTransaction {
   txid: string;
-  transactionType?: string;
+  transactionType?: RlnTransactionType;
   received?: number;
   sent?: number;
   fee?: number;

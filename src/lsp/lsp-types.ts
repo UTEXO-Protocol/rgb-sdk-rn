@@ -22,10 +22,8 @@ export interface LspGetInfoResponse {
 export interface LspGetInfoWire {
   pubkey: string;
   alias?: string;
-  num_channels?: number;
-  numChannels?: number;
-  num_usable_channels?: number;
-  numUsableChannels?: number;
+  num_channels: number;
+  num_usable_channels: number;
 }
 
 export interface LspLnParams {
@@ -68,14 +66,18 @@ export interface LspLightningReceiveResponse {
   mappingId: string;
 }
 
-/** Raw wire shape returned by utexo-lsp (snake_case keys). */
+/** Raw wire shape returned by utexo-lsp `/lightning_receive` (snake_case keys). */
 export interface LspLightningReceiveWire {
-  ln_invoice?: string;
-  lnInvoice?: string;
-  rgb_invoice?: string;
-  rgbInvoice?: string;
-  mapping_id?: string | number;
-  mappingId?: string | number;
+  ln_invoice: string;
+  rgb_invoice: string;
+  mapping_id: string | number;
+}
+
+/** Raw wire shape returned by utexo-lsp `/onchain_send` (snake_case keys). */
+export interface LspOnchainSendWire {
+  ln_invoice: string;
+  rgb_invoice: string;
+  mapping_id: string | number;
 }
 
 export interface LspLnurlpCallbackResponse {
@@ -117,6 +119,9 @@ export function peerUri(peer: LspPeer): string {
 // that appear in multiple places in the demo.
 
 export type ReceiveStatus = 'Pending' | 'Succeeded' | 'Failed' | 'Expired';
+
+/** Result of awaitReceiveSettlement — distinct from wallet ReceiveStatus. */
+export type ReceiveSettlementOutcome = 'settled' | 'timed_out';
 
 export function normalizeReceiveStatus(raw: string | null | undefined): ReceiveStatus {
   const s = (raw ?? '').toUpperCase();

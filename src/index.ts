@@ -49,6 +49,7 @@ export type {
   // New LSP types
   LspPeer,
   ReceiveStatus,
+  ReceiveSettlementOutcome,
   ChannelReadyInfo,
 } from './lsp/lsp-types';
 export { normalizeReceiveStatus, peerUri } from './lsp/lsp-types';

@@ -232,17 +232,23 @@ public class RgbSwiftHelper: NSObject {
         [
           "channelId": c.channelId,
           "peerPubkey": c.peerPubkey,
+          "status": "\(c.status)",
           "ready": c.ready,
           "isUsable": c.isUsable,
           "capacitySat": NSNumber(value: c.capacitySat),
           "localBalanceSat": NSNumber(value: c.localBalanceSat),
           "outboundBalanceMsat": NSNumber(value: c.outboundBalanceMsat),
           "inboundBalanceMsat": NSNumber(value: c.inboundBalanceMsat),
+          "nextOutboundHtlcLimitMsat": NSNumber(value: c.nextOutboundHtlcLimitMsat),
+          "nextOutboundHtlcMinimumMsat": NSNumber(value: c.nextOutboundHtlcMinimumMsat),
           "public": c.public,
           "fundingTxid": c.fundingTxid as Any,
+          "peerAlias": c.peerAlias as Any,
+          "shortChannelId": c.shortChannelId.map { NSNumber(value: $0) } as Any,
           "assetId": c.assetId as Any,
           "assetLocalAmount": c.assetLocalAmount.map { NSNumber(value: $0) } as Any,
           "assetRemoteAmount": c.assetRemoteAmount.map { NSNumber(value: $0) } as Any,
+          "virtualOpenMode": c.virtualOpenMode as Any,
         ] as NSDictionary
       }
       return ["channels": channels] as NSDictionary

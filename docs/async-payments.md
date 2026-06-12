@@ -4,16 +4,20 @@ Async payments let a recipient receive Lightning while **offline at payment time
 
 **Protocol spec:** [Async Payments — RGB Lightning Node & Utexo LSP](https://hackmd.io/@xalkan/async-payments)
 
+**Working demo:** [rgb-sdk-rn-demo `screens/apay/useApayFlow.ts`](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/screens/apay/useApayFlow.ts)
+
 ---
 
 ## Roles
 
 | Role | Component | Your app calls it? |
 |------|-----------|-------------------|
-| Recipient | Recipient RLN on device | Yes — register pool, claim HODL |
+| Recipient | Recipient RLN on device | Yes — register pool, **`lsp.connect()` while online** |
 | Host | LSP's RLN node | No — P2P + HTTP to utexo-lsp |
 | Orchestrator | utexo-lsp | Partial — LNURL + discovery HTTP only |
-| Payer | Sender RLN on device | Yes — LNURL + pay invoice |
+| Payer | Sender RLN on device | Yes — LNURL + pay + poll send status |
+
+> **Important:** APay settlement is **automatic**. When the LSP outbox pays the merchant's outbound invoice, the recipient node auto-claims (`async_payment_recipient: true`). Your app calls `lsp.connect()` while online and polls for `Succeeded`. See [Lightning Address vs HODL invoice](#lightning-address-vs-hodl-invoice) below.
 
 ---
 
@@ -21,12 +25,12 @@ Async payments let a recipient receive Lightning while **offline at payment time
 
 ```mermaid
 flowchart TD
-  S1["① Register hash pool<br/><b>Recipient app</b><br/>wallet.apayNew(hostPubkey)<br/>lsp.http.getLightningAddressByPubkey(pubkey)"]
-  S2["② Payer fetches invoice<br/><b>Sender app</b><br/>GET /.well-known/lnurlp/{username}<br/>GET callback?amount=… → HODL BOLT11"]
+  S1["① Register hash pool<br/><b>Recipient app</b><br/>lsp.connect()<br/>lsp.enableLightningAddress()"]
+  S2["② Payer fetches invoice<br/><b>Sender app</b><br/>lsp.http.resolveAddress(…)<br/>→ HODL BOLT11 from Host /lninvoice"]
   S3["③ Payer pays<br/><b>Sender app</b><br/>wallet.payLightningInvoice(pr)<br/>HTLC held at Host — not settled yet"]
-  S4["④ Request outbound invoice<br/><b>Automatic</b> — utexo-lsp outbox + Host RLN<br/>async_order.request_invoice → Recipient RLN"]
-  S5["⑤ Outbound pay + recipient claim<br/><b>Recipient app</b> when online<br/>listPaymentsRaw → InboundHodl Claimable<br/>claimHodlInvoice(hash, preimage)"]
-  S6["⑥ Claim inbound<br/><b>Automatic</b> — utexo-lsp outbox + Host RLN<br/>claimhodlinvoice with revealed preimage"]
+  S4["④ Request outbound invoice<br/><b>Automatic</b> — utexo-lsp outbox + Host RLN<br/>P2P apay/request_invoice → Recipient RLN"]
+  S5["⑤ Outbound pay + auto-claim<br/><b>Automatic</b> — Host pays Recipient<br/>Recipient RLN auto-claims (no app claim)"]
+  S6["⑥ Claim inbound<br/><b>Automatic</b> — utexo-lsp outbox + Host RLN<br/>settles payer HTLC with preimage"]
 
   S1 --> S2 --> S3 --> S4 --> S5 --> S6
   S6 -.->|pool empty| S1
@@ -34,23 +38,23 @@ flowchart TD
   style S1 fill:#1e3a5f,stroke:#60a5fa,color:#e2e8f0
   style S2 fill:#1e3a5f,stroke:#60a5fa,color:#e2e8f0
   style S3 fill:#1e3a5f,stroke:#60a5fa,color:#e2e8f0
-  style S5 fill:#1e3a5f,stroke:#60a5fa,color:#e2e8f0
   style S4 fill:#1a2e1a,stroke:#4ade80,color:#e2e8f0
+  style S5 fill:#1a2e1a,stroke:#4ade80,color:#e2e8f0
   style S6 fill:#1a2e1a,stroke:#4ade80,color:#e2e8f0
 ```
 
 | Step | What happens | Who drives it | SDK call |
 |------|-------------|---------------|----------|
-| **①** | Hash batch stored; Lightning Address minted for `peer_pubkey` | **Recipient app** | `wallet.apayNew(lspPeerPubkey)` then `lsp.http.getLightningAddressByPubkey(pubkey)` |
-| **②** | Next `hash_index` reserved; inbound HODL BOLT11 issued | **Sender app** | `lsp.http.resolveAddress(username, amtMsat, assetId?, assetAmount?)` |
-| **③** | Payer pays BOLT11; inbound HTLC held | **Sender app** | `wallet.payLightningInvoice({ lnInvoice, assetId?, assetAmount? })` |
-| **④** | LSP notified claimable; outbox asks Recipient for outbound HODL invoice | **Host + utexo-lsp** | Recipient RLN must be online to answer P2P |
-| **⑤** | Host pays outbound invoice; Recipient claims → preimage revealed | **Recipient app** | `wallet.listPaymentsRaw()` → `claimHodlInvoice(hash, preimage)` |
-| **⑥** | Host claims inbound HTLC with preimage; payment complete | **Host + utexo-lsp** | — |
+| **①** | Hash batch stored; Lightning Address minted | **Recipient app** | `lsp.connect()` → `lsp.enableLightningAddress()` |
+| **②** | Hash slot reserved; inbound HODL BOLT11 from Host | **Sender app** | `lsp.http.resolveAddress(username, amtMsat, assetId?, assetAmount?)` |
+| **③** | Payer pays BOLT11; inbound HTLC held at Host | **Sender app** | `lsp.waitForOutboundLiquidity(…)` then `wallet.payLightningInvoice(…)` |
+| **④** | Outbox asks Recipient for outbound invoice over P2P | **Host + utexo-lsp** | Recipient must be reachable — **`lsp.connect()`** |
+| **⑤** | Host pays outbound invoice; Recipient **auto-claims** | **Host + Recipient RLN** | App: optional `listPaymentsRaw()` → `INBOUND_HODL/SUCCEEDED` |
+| **⑥** | Host settles payer HTLC with preimage | **Host + utexo-lsp** | App: poll `getLightningSendRequest(hash)` → `Settled` |
 
-**Blue steps (①②③⑤)** — your app. **Green steps (④⑥)** — LSP cron/outbox; you just keep the node online for ④.
+**Blue steps (①②③)** — your app. **Green steps (④⑤⑥)** — LSP outbox; recipient app keeps **`lsp.connect()`** alive when online.
 
-When `unusedHashes` hits zero, utexo-lsp marks the order exhausted — call `apayNew` again to refill. `refillBatchSize` in the `ApayNewResponse` tells you how many hashes to include in each refill batch.
+When `unusedHashes` hits zero, call `apayNew` / `enableLightningAddress` again to refill.
 
 ---
 
@@ -67,189 +71,188 @@ sequenceDiagram
   participant L as utexo-lsp
 
   Note over RB,L: ① Register
-  RB->>RR: apayNew(lspPeerPubkey)
+  RB->>RR: lsp.connect()
+  RB->>RR: apayNew / enableLightningAddress
   RR--)H: async_order.new (P2P)
   H->>L: POST /internal/async_order/new
-  L-->>RR: order_id, pool stats
   RB->>L: GET /lightning_address/by_pubkey/{pubkey}
   L-->>RB: username, domain
 
-  Note over SA,L: ②③ Pay
+  Note over SA,L: ②③ Pay (LNURL callback — no P2P to Recipient yet)
   SA->>L: LNURL /.well-known/lnurlp/{username}
-  L->>H: request inbound HODL invoice
-  H--)RR: async_order.request_invoice
-  RR-->>H: BOLT11 (hodl)
+  L->>H: POST /lninvoice (hodl, reserved hash)
+  H-->>L: inbound HODL BOLT11
   L-->>SA: pr
   SA->>SR: payLightningInvoice(pr)
   SR->>H: HTLC (held)
 
-  Note over H,L: ④⑤⑥ Settle
+  Note over H,L: ④⑤⑥ Settle (Recipient must be online for ④)
   H->>L: POST /internal/async_order/claimable
-  L->>H: outbox: outbound invoice + pay
-  H--)RR: async_order.request_invoice
-  RR-->>H: outbound BOLT11
+  L->>H: outbox: request outbound invoice
+  H--)RR: apay/request_invoice (P2P)
+  RR-->>H: outbound BOLT11 (async_payment_recipient)
   H->>RR: pay outbound
-  RB->>RR: claimHodlInvoice (⑤)
+  Note over RR: auto-claim — no app claimHodlInvoice
   RR-->>H: preimage
-  L->>H: outbox: claimhodlinvoice (⑥)
+  L->>H: outbox: claim inbound HTLC (⑥)
+  SR->>H: payer HTLC Settled
 ```
 
 ---
 
 ## SDK usage
 
-The recipient wallet must be constructed with `enableVirtualChannelsV0: true`. This is required for the LSP's 0-conf virtual channel offer — without it, the LSP's `FundingGenerationReady` event fails with `ChannelFundingType::Virtual requires a negotiated 0-conf channel`.
+### Wallet + LSP setup
+
+**Utexo / signet (production):**
 
 ```typescript
-import { UTEXOWallet, type LspPeer } from '@utexo/rgb-sdk-rn';
-
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:              'https://lsp-signet.utexo.com',
-  lspBearerToken:          'bearer-token',
-  enableVirtualChannelsV0: true,   // required for virtual 0-conf LSP channels
+  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  lspBearerToken: 'bearer-token',
 }, signer);
 
 await wallet.init();
 await wallet.unlock(unlockParams);
 
-const LSP_PEER: LspPeer = {
-  baseUrl:    'https://lsp-signet.utexo.com',
-  peerPubkey: lspPeerPubkey,
-  peerHost:   'lsp-signet.utexo.com',
-  peerPort:   9735,
-};
-const lsp = await wallet.createLsp(LSP_PEER);
+const lsp = await wallet.createLsp();  // discovers pubkey/host from lspBaseUrl + GET /get_info
 ```
 
-### ① Register + get Lightning Address
+**Regtest local demo** (virtual 0-conf channels — not required on signet):
 
 ```typescript
-// Connect to LSP peer first
+const wallet = new UTEXOWallet({
+  ...nodeParams,
+  lspBaseUrl:              'http://127.0.0.1:8080',
+  enableVirtualChannelsV0: true,
+  virtualPeerPubkeys:      [lspPeerPubkey],  // fetch once from GET /get_info
+}, signer);
+
+const lsp = await wallet.createLsp(undefined, 9737);  // regtest LDK port ≠ default 9735
+```
+
+Explicit `LspPeer` + `createLsp(LSP_PEER)` is still valid when you cannot set `lspBaseUrl` on the wallet (e.g. Android emulator host override).
+
+### ① Recipient — register + Lightning Address
+
+Both sides need an RGB channel first: `lsp.connect()` → `lsp.waitForChannel(assetId, { … })`.
+
+```typescript
 await lsp.connect();
 
-// Option A — one-shot helper (recommended): apayNew + getLightningAddressByPubkey
+// Recommended: apayNew + getLightningAddressByPubkey in one call
 const { address } = await lsp.enableLightningAddress();
-console.log(`Lightning Address: ${address}`);  // e.g. alice@lsp-signet.utexo.com
+console.log(`Lightning Address: ${address}`);
 
-// Option B — manual: register pool separately, then fetch address
-const pool = await wallet.apayNew(lspPeerPubkey);
-console.log(`${pool.hashes.length} hashes issued, ${pool.unusedHashes} unused`);
-const addr = await lsp.http.getLightningAddressByPubkey(walletPubkey);
-console.log(`Lightning Address: ${addr.username}@${addr.domain}`);
+// Keep calling lsp.connect() while the app is foreground / expecting payments
+// so the LSP outbox can reach the node over P2P when a payer pays.
 ```
 
-`apayNew` returns an `ApayNewResponse`:
-
-| Field | Description |
-|-------|-------------|
-| `orderId` | Persistent order ID — store it to track pool exhaustion |
-| `unusedHashes` | How many hashes remain available for incoming payments |
-| `refillBatchSize` | How many hashes to send when calling `apayNew` again to refill |
-| `hashes` | `Array<{ hashIndex, paymentHash }>` — the hashes sent to the Host |
-
-When `unusedHashes` approaches zero, call `apayNew` again with a new batch to refill the pool.
-
-### ③ Sender pays (on the sender's device)
+Manual alternative:
 
 ```typescript
-// Step 1 — resolve the Lightning Address to a HODL BOLT11
-// lsp.http.resolveAddress handles Android emulator host rewriting internally
+const pool = await wallet.apayNew(lspPubkey);
+const addr = await lsp.http.getLightningAddressByPubkey(walletPubkey);
+```
+
+### ②③ Sender — LNURL pay
+
+```typescript
+await senderLsp.connect();
+await senderLsp.waitForChannel(ASSET_ID, { … });
+await senderLsp.waitForOutboundLiquidity(3_000_000, { … });
+
 const { pr } = await senderLsp.http.resolveAddress(
-  username,        // e.g. 'alice'
-  3_000_000,       // amtMsat
-  ASSET_ID,        // RGB asset ID (pass undefined for sats-only)
-  1,               // assetAmount (pass undefined for sats-only)
+  username, 3_000_000, ASSET_ID, 1,
 );
 
-// Step 2 — pay the HODL invoice; LSP holds the HTLC until recipient claims
 const payResult = await senderWallet.payLightningInvoice({
   lnInvoice:   pr,
-  assetId:     ASSET_ID,    // optional — required for RGB asset payments
-  assetAmount: 1,           // optional
+  assetId:     ASSET_ID,
+  assetAmount: 1,
 });
-
-// Or use the one-shot helper if you don't need to inspect the invoice:
-const { invoice, sendResult } = await senderLsp.payAddress({
-  address: 'alice@lsp-signet.utexo.com',
-  amtMsat: 3_000_000,
-  asset:   { assetId: ASSET_ID, assetAmount: 1 },  // omit for sats-only
-});
+// payResult.status is usually Pending — HTLC held at Host
+const paymentHash = payResult.txid;
 ```
 
-### ⑤ Recipient comes online and claims
+`lsp.payAddress({ address, amtMsat, asset })` resolves + pays in one call but **does not wait** for APay LSP outbox settlement.
+
+### ④⑤⑥ Settlement — poll until complete
+
+**Recipient** (when app resumes / comes online):
 
 ```typescript
+await lsp.connect();
 await wallet.syncWallet();
-const payments = await wallet.listPaymentsRaw();
 
-// Manual loop
-for (const p of payments) {
+const payments = await wallet.listPaymentsRaw();
+// APay inbound: INBOUND_HODL → SUCCEEDED (auto-claim, no claimHodlInvoice)
+```
+
+**Sender:**
+
+```typescript
+const status = await senderWallet.getLightningSendRequest(paymentHash);
+// Poll until status === 'Settled' (or 'Failed')
+```
+
+**Success checks (RGB):**
+
+- Sender: `getLightningSendRequest` → `Settled`
+- Recipient: inbound `INBOUND_HODL/SUCCEEDED`, or `getAssetBalance(assetId).offchainOutbound` increased
+- Use **`offchainOutbound`** (local spendable RGB), not `offchainInbound`, for receive confirmation
+
+---
+
+## Lightning Address vs HODL invoice
+
+| | **Lightning Address (APay)** | **HODL invoice you create** |
+|---|------------------------------|-------------------------------|
+| Register | `enableLightningAddress()` / `apayNew` | `createHodlInvoice({ paymentHash, … })` |
+| Payer path | LNURL → Host HODL BOLT11 | Pay BOLT11 directly |
+| Recipient claim | **Automatic** (RLN auto-claim) | **`claimHodlInvoice(hash, preimage)`** |
+| Helper | — | `lsp.claimPendingPayments()` |
+
+```typescript
+// After createHodlInvoice — claim when status is Claimable
+for (const p of await wallet.listPaymentsRaw()) {
   if (p.paymentType !== 'InboundHodl' || p.status !== 'Claimable') continue;
   if (!p.preimage) continue;
-
-  const result = await wallet.claimHodlInvoice(p.paymentHash, p.preimage);
-  if (result.changed) console.log(`Claimed: ${p.amtMsat} msat`);
+  await wallet.claimHodlInvoice(p.paymentHash, p.preimage);
 }
-
-// Or use the one-shot helper — returns ClaimResult[] for each attempted claim:
-const claimed = await lsp.claimPendingPayments();
-// [{ paymentHash: '...', claimed: true }, { paymentHash: '...', claimed: false, error: '...' }]
 ```
-
-`claimPendingPayments` filters for `Claimable` and `Claiming` statuses, attempts each claim, and never throws — failures are captured as `{ claimed: false, error }` entries.
-
-### Cancelling a HODL invoice
-
-If you want to reject a held payment (e.g. invoice expired or payment should not be accepted), cancel it before the LSP times out:
-
-```typescript
-const result = await wallet.cancelHodlInvoice(paymentHash);
-// result.changed — true if the invoice state changed
-```
-
-Cancelling fails the inbound HTLC back to the sender. Use this when an `InboundHodl` payment arrives that you decide not to claim.
 
 ---
 
 ## API reference
 
-| Method | Step | Returns | Description |
-|--------|------|---------|-------------|
-| `wallet.apayNew(hostNodeId)` | ① | `ApayNewResponse` | Register hash pool with Host RLN |
-| `lsp.http.getLightningAddressByPubkey(pubkey)` | ① | `{ username, domain }` | Resolve Lightning Address after registration |
-| `lsp.enableLightningAddress()` | ① | `LightningAddressInfo` | `apayNew` + `getLightningAddressByPubkey` in one call |
-| `lsp.http.resolveAddress(username, amtMsat, assetId?, assetAmount?)` | ② | `{ pr: string }` | Fetch HODL BOLT11 from LSP LNURL callback |
-| `lsp.payAddress({ address, amtMsat, asset? })` | ②③ | `{ invoice, sendResult }` | LNURL resolution + pay in one call |
-| `wallet.payLightningInvoice({ lnInvoice, assetId?, assetAmount? })` | ③ | `LightningSendRequest` | Pay HODL BOLT11 directly |
-| `wallet.listPaymentsRaw()` | ⑤ | `RlnPayment[]` | Find `InboundHodl` + `Claimable` + `preimage` |
-| `wallet.claimHodlInvoice(paymentHash, preimage)` | ⑤ | `{ changed: boolean }` | Reveal preimage; LSP settles inbound HTLC |
-| `wallet.cancelHodlInvoice(paymentHash)` | ⑤ | `{ changed: boolean }` | Fail inbound HTLC back to sender |
-| `lsp.claimPendingPayments()` | ⑤ | `ClaimResult[]` | Filter + claim all claimable in one call |
+| Method | Step | Description |
+|--------|------|-------------|
+| `lsp.connect()` | ①④ | Lightning P2P to Host — call before register and when coming online |
+| `lsp.waitForChannel(assetId)` | ①③ | Wait for usable RGB channel |
+| `lsp.enableLightningAddress()` | ① | `apayNew` + `getLightningAddressByPubkey` |
+| `lsp.http.resolveAddress(…)` | ② | LNURL callback → HODL BOLT11 |
+| `lsp.waitForOutboundLiquidity(msat)` | ③ | Confirm sender can route before pay |
+| `wallet.payLightningInvoice(…)` | ③ | Pay HODL invoice |
+| `wallet.getLightningSendRequest(hash)` | ⑥ | Poll sender until `Settled` |
+| `wallet.listPaymentsRaw()` | ⑤ | Monitor recipient inbound (`SUCCEEDED`) |
+| `wallet.getAssetBalance(assetId)` | ⑤ | Confirm RGB received (`offchainOutbound` ↑) |
+| `wallet.createHodlInvoice(…)` | — | Issue a HODL invoice you control (pairs with claim below) |
+| `wallet.claimHodlInvoice(…)` | — | Reveal preimage for a `createHodlInvoice` payment |
+| `lsp.claimPendingPayments()` | — | Claim all pending HODL payments after unlock |
 
-**Not called from the app:** `POST /internal/async_order/*` — Host RLN uses those internally with utexo-lsp.
+**Not called from the app:** `POST /internal/async_order/*` — Host RLN uses those with utexo-lsp.
 
 ### `RlnPayment` fields (from `listPaymentsRaw`)
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `paymentHash` | `string` | Payment identifier |
-| `paymentType` | `'Outbound' \| 'InboundAutoClaim' \| 'InboundHodl'` | `InboundHodl` = held |
-| `status` | `'Pending' \| 'Claimable' \| 'Claiming' \| 'Succeeded' \| 'Cancelled' \| 'Failed'` | |
-| `preimage` | `string?` | Present when `status === 'Claimable'` — pass to `claimHodlInvoice` |
-| `amtMsat` | `number?` | Amount in millisatoshis |
-| `assetId` | `string?` | RGB asset ID if RGB payment |
-| `assetAmount` | `number?` | RGB asset amount |
-| `payeePubkey` | `string` | Counterparty pubkey |
-| `createdAt` | `number` | Unix timestamp (seconds) |
-
-### `ClaimResult` (from `claimPendingPayments`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `paymentHash` | `string` | Payment hash that was attempted |
-| `claimed` | `boolean` | `true` if `claimHodlInvoice` succeeded |
-| `error` | `string?` | Error message if `claimed` is `false` |
+| `paymentType` | `'Outbound' \| 'InboundAutoClaim' \| 'InboundHodl'` | APay receive: `INBOUND_HODL` |
+| `status` | `'Pending' \| 'Claimable' \| 'Claiming' \| 'Succeeded' \| …'` | APay complete: `Succeeded` |
+| `preimage` | `string?` | On `Claimable` HODL invoices — pass to `claimHodlInvoice` |
+| `assetId` / `assetAmount` | optional | RGB leg |
 
 ---
 

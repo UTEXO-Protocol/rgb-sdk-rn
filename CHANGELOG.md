@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.0-beta.14
+
+__added__
+- Plain BTC Lightning invoices — `createLightningInvoice` now accepts requests without `asset` (`RlnCreateLightningInvoiceRequestModel`).
+- `listChannels` returns previously missing fields on both platforms: `status`, `nextOutboundHtlcLimitMsat`, `nextOutboundHtlcMinimumMsat`, `peerAlias`, `shortChannelId`, `virtualOpenMode` (host-side only).
+- Canonical enum unions: `RlnTransactionType`, `RlnChannelStatus`.
+
+__fixed__
+- iOS/Android enum case divergence — enum-as-string results normalized at the `RLNBinding` boundary (`rlnInvoiceStatus`, `rlnSendPayment`, `rlnKeysend`, channel `status`, `transactionType`). Fixes settlement polling stuck on `Pending` on iOS.
+- `listTransactions` — transaction types no longer collapse to `'User'`; native values map correctly onto core `TransactionType`.
+- `UtexoLsp.receiveAsset` — sends the LN invoice's remaining lifetime as `durationSeconds`; full expiry failed utexo-lsp's expiry-match validation (HTTP 400) on slow invoice creation.
+- `UtexoLSPClient.onchainSend` — response fields were always `undefined` (snake_case wire keys); now mapped explicitly.
+- iOS build error in `Rgb.mm` — `bitcoindRpcPort` nullability conflict with the codegen protocol.
+
+__changed__
+- `UtexoLSPClient` (`getInfo`, `lightningReceive`, `onchainSend`) — strict snake_case wire parsing, defensive fallback chains removed.
+
+---
+
 ## 1.0.0-beta.13
 
 __added__

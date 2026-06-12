@@ -176,17 +176,26 @@ export class UtexoLsp {
   async receiveAsset(opts: ReceiveAssetOptions): Promise<ReceiveAssetResult> {
     const expirySeconds = opts.expirySeconds ?? 3600;
 
+    const createdAtMs = Date.now();
     const { lnInvoice } = await this.wallet.createLightningInvoice({
       amountSats:    opts.amountSats,
       expirySeconds,
       asset: { assetId: opts.assetId, amount: opts.amountRgb },
     });
 
+    // The LSP validates durationSeconds against the LN invoice's *remaining*
+    // lifetime (EXPIRY_MATCH_TOLERANCE_SEC, default 5s). Invoice creation on a
+    // mobile node can take several seconds, so send the remaining lifetime —
+    // sending the full expiry fails with HTTP 400 once creation outlasts the
+    // tolerance.
+    const elapsedSeconds = Math.round((Date.now() - createdAtMs) / 1000);
+    const durationSeconds = Math.max(1, expirySeconds - elapsedSeconds);
+
     const lr = await this.http.lightningReceive({
       lnInvoice,
       rgb: {
-        assetId:         opts.assetId,
-        durationSeconds: expirySeconds,
+        assetId: opts.assetId,
+        durationSeconds,
       },
     });
 

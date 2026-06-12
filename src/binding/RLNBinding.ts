@@ -413,7 +413,10 @@ export class RLNBinding implements IRLN {
       Rgb.rlnInvoiceStatus(nodeId, invoice)
     );
     const status = (raw as any)?.value ?? raw;
-    return status as RlnInvoiceStatus;
+    // Android (Kotlin) serializes the uniffi enum as "SUCCEEDED" while iOS
+    // (Swift) interpolates the case name as "succeeded" — normalize here so
+    // every status consumer sees the UPPERCASE contract of RlnInvoiceStatus.
+    return String(status).toUpperCase() as RlnInvoiceStatus;
   }
 
   async rlnLnInvoice(
@@ -480,9 +483,16 @@ export class RLNBinding implements IRLN {
     assetId: string | null,
     assetAmount: number | null
   ): Promise<RlnSendPaymentResponse> {
-    return this.withNodeOperation((nodeId) =>
+    const raw = (await this.withNodeOperation((nodeId) =>
       Rgb.rlnSendPayment(nodeId, invoice, amtMsat, assetId, assetAmount)
-    ) as Promise<RlnSendPaymentResponse>;
+    )) as RlnSendPaymentResponse;
+    // Android (Kotlin) serializes HtlcStatus as "PENDING" while iOS (Swift)
+    // interpolates the case name as "pending" — normalize to the UPPERCASE
+    // contract of RlnPaymentStatus.
+    return {
+      ...raw,
+      status: String(raw.status).toUpperCase() as RlnSendPaymentResponse['status'],
+    };
   }
 
   async rlnKeysend(
@@ -491,9 +501,14 @@ export class RLNBinding implements IRLN {
     assetId: string | null,
     assetAmount: number | null
   ): Promise<RlnKeysendResponse> {
-    return this.withNodeOperation((nodeId) =>
+    const raw = (await this.withNodeOperation((nodeId) =>
       Rgb.rlnKeysend(nodeId, destPubkey, amtMsat, assetId, assetAmount)
-    ) as Promise<RlnKeysendResponse>;
+    )) as RlnKeysendResponse;
+    // Same Android/iOS HtlcStatus case divergence as rlnSendPayment.
+    return {
+      ...raw,
+      status: String(raw.status).toUpperCase() as RlnKeysendResponse['status'],
+    };
   }
 
   // ── On-chain wallet ──────────────────────────────────────────────────────────

@@ -115,6 +115,13 @@ export interface RlnOnchainSendRequestModel extends OnchainSendRequestModel {
   skipSync?: boolean;
 }
 
+export interface RlnCreateLightningInvoiceRequestModel
+  extends Omit<CreateLightningInvoiceRequestModel, 'asset'> {
+  /** Omit for a plain BTC invoice — RLN supports asset-less BOLT11 invoices
+   *  (core types `asset` as required, but the runtime maps absence to null). */
+  asset?: CreateLightningInvoiceRequestModel['asset'];
+}
+
 // ── Constructor params ────────────────────────────────────────────────────────
 
 export interface UTEXOWalletNodeParams {
@@ -730,7 +737,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
 
   async createLightningInvoice(
-    params: CreateLightningInvoiceRequestModel & {
+    params: RlnCreateLightningInvoiceRequestModel & {
       paymentHash?: string | null;
       minFinalCltvExpiryDelta?: number | null;
     }

@@ -128,7 +128,7 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
   bitcoindRpcUsername:(NSString * _Nullable)bitcoindRpcUsername
   bitcoindRpcPassword:(NSString * _Nullable)bitcoindRpcPassword
       bitcoindRpcHost:(NSString * _Nullable)bitcoindRpcHost
-      bitcoindRpcPort:(NSNumber * _Nullable)bitcoindRpcPort
+      bitcoindRpcPort:(NSNumber *)bitcoindRpcPort
             indexerUrl:(NSString *)indexerUrl
          proxyEndpoint:(NSString *)proxyEndpoint
      announceAddresses:(NSArray<NSString *> *)announceAddresses
@@ -939,7 +939,7 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
                           bitcoindRpcUsername:(NSString * _Nullable)bitcoindRpcUsername
                           bitcoindRpcPassword:(NSString * _Nullable)bitcoindRpcPassword
                               bitcoindRpcHost:(NSString * _Nullable)bitcoindRpcHost
-                              bitcoindRpcPort:(NSNumber * _Nullable)bitcoindRpcPort
+                              bitcoindRpcPort:(NSNumber *)bitcoindRpcPort
                                    indexerUrl:(NSString *)indexerUrl
                                 proxyEndpoint:(NSString *)proxyEndpoint
                             announceAddresses:(NSArray<NSString *> *)announceAddresses

@@ -734,6 +734,24 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
     });
 }
 
+- (void)rlnApayNewWithAddress:(double)nodeId
+                   hostNodeId:(NSString *)hostNodeId
+                     username:(NSString *)username
+                       domain:(NSString *)domain
+                      resolve:(RCTPromiseResolveBlock)resolve
+                       reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnApayNewWithAddress:@(nodeId) hostNodeId:hostNodeId username:username domain:domain];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_APAY_NEW_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
 - (void)rlnRefreshTransfers:(double)nodeId
                     skipSync:(BOOL)skipSync
                      resolve:(RCTPromiseResolveBlock)resolve

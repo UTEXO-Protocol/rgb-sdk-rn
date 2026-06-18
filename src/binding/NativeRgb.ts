@@ -156,6 +156,12 @@ export interface Spec extends TurboModule {
   ): Promise<object>;
   rlnCancelHodlInvoice(nodeId: number, paymentHash: string): Promise<void>;
   rlnApayNew(nodeId: number, hostNodeId: string): Promise<object>;
+  rlnApayNewWithAddress(
+    nodeId: number,
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<object>;
   rlnRefreshTransfers(nodeId: number, skipSync: boolean): Promise<void>;
   rlnRgbInvoice(
     nodeId: number,

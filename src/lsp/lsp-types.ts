@@ -80,17 +80,85 @@ export interface LspOnchainSendWire {
   mapping_id: string | number;
 }
 
+/** Wire shape of the APay invoice proof (snake_case, as utexo-lsp returns it). */
+export interface LspApayInvoiceProofWire {
+  version: number;
+  recipient_pubkey: string;
+  host_pubkey: string;
+  batch_id: string;
+  hash_index: number;
+  payment_hash: string;
+  batch_root: string;
+  batch_size: number;
+  merkle_proof: { sibling: string; side: string }[];
+  batch_sig: string;
+  created_at: number;
+  expires_at: number;
+}
+
+/** Wire shape of the LNURL-pay callback (snake_case `proof`). */
+export interface LspLnurlpCallbackWire {
+  pr: string;
+  routes?: unknown[];
+  status?: string;
+  reason?: string;
+  proof?: LspApayInvoiceProofWire;
+}
+
+/** Wire shape of `GET /lightning_address/by_pubkey/{pubkey}` (snake_case). */
+export interface LspLightningAddressByPubkeyWire {
+  username: string;
+  domain: string;
+  recipient_pubkey?: string;
+  address_sig?: string;
+}
+
 export interface LspLnurlpCallbackResponse {
   pr: string;
   routes: unknown[];
   status?: string;
   reason?: string;
+  /**
+   * APay hash-substitution-resistance proof (utexo-lsp >= 0.6 / PR #22).
+   * Present when the address was registered with an attestation
+   * (see {@link IUtexoLSPClient} / apayNewWithAddress). Lets the payer verify
+   * the payment hash is committed under the recipient's signed batch root
+   * before paying. Optional — older LSPs omit it.
+   */
+  proof?: ApayInvoiceProof;
+}
+
+/** One step of the APay Merkle inclusion proof. */
+export interface ApayMerkleProofElement {
+  sibling: string;
+  /** 'left' | 'right' — which side the sibling is on. */
+  side: string;
+}
+
+/** utexo-lsp APay invoice proof (LNURL callback `proof` field). */
+export interface ApayInvoiceProof {
+  version: number;
+  recipientPubkey: string;
+  hostPubkey: string;
+  batchId: string;
+  hashIndex: number;
+  paymentHash: string;
+  batchRoot: string;
+  batchSize: number;
+  merkleProof: ApayMerkleProofElement[];
+  batchSig: string;
+  createdAt: number;
+  expiresAt: number;
 }
 
 /** utexo-lsp `GET /lightning_address/by_pubkey/{pubkey}` */
 export interface LspLightningAddressByPubkeyResponse {
   username: string;
   domain: string;
+  /** Recipient node pubkey — present on utexo-lsp >= 0.6 (PR #22). */
+  recipientPubkey?: string;
+  /** Address-ownership attestation signature — present once registered via apayNewWithAddress. */
+  addressSig?: string;
 }
 
 // ── LspPeer ───────────────────────────────────────────────────────────────────

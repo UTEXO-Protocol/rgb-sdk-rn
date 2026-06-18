@@ -202,13 +202,29 @@ const { username, domain, address } = await lsp.enableLightningAddress();
 // address → 'excited-mountain-1234@lsp-signet.utexo.com'
 ```
 
-Internally:
-1. Fetches the wallet's own pubkey via `wallet.getNodeInfo()`
-2. Fetches LSP pubkey via `lsp.http.getInfo()`
-3. Calls `wallet.apayNew(lspPubkey)` — sends hashes to the LSP via P2P onion messages
-4. Calls `lsp.http.getLightningAddressByPubkey(walletPubkey)` — returns the assigned address
+How it works:
 
-The `lspBaseUrl` **and** `lspBearerToken` on the wallet node params must be set for step 3 to work (it routes through the native RLN node, not the HTTP client).
+The LSP mints a Lightning Address for every peer that connects, so the address exists before registration — the method only has to look it up. It reads the wallet pubkey (`getNodeInfo`) and the LSP pubkey (`getInfo`), then polls `getLightningAddressByPubkey` until the address appears. `lsp.connect()` must run first; until the account exists the lookup returns 404.
+
+With the `username` and `domain` resolved, it calls `wallet.apayNewWithAddress(lspPubkey, username, domain)`, which sends a single signed batch of hashes to the LSP over P2P. The node signs `username`+`domain` (`address_sig`) and attaches it to the batch. This signature makes the pool resistant to hash substitution and works for both password and external signers.
+
+Returns `{ username, domain, address, unusedHashes, nextIndexExpected, refillBatchSize }`.
+
+Both `lspBaseUrl` and `lspBearerToken` must be set on the wallet node params — registration runs through the native RLN node, not the HTTP client.
+
+> Register exactly one batch. The node's batch size already matches the LSP's pool cap, so a single batch fills it. Issuing an `apayNew` bootstrap first overflows the pool, and the LSP rejects the second batch with `invalid_hash_batch`.
+
+---
+
+### `refillHashPool()`
+
+Tops up the hash pool with a fresh signed batch. Call it after `enableLightningAddress()` once `unusedHashes` runs low.
+
+```typescript
+const { unusedHashes, nextIndexExpected, refillBatchSize } = await lsp.refillHashPool();
+```
+
+The address is already minted, so the method re-resolves it and registers another batch through `apayNewWithAddress`. Refills therefore carry the same attestation as the initial registration. Prefer this over calling `apayNew` directly.
 
 ---
 

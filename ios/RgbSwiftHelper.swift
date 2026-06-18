@@ -893,6 +893,35 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
+  @objc(_rlnApayNewWithAddress:hostNodeId:username:domain:)
+  public static func _rlnApayNewWithAddress(_ nodeId: NSNumber, hostNodeId: String, username: String, domain: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let res = try node.apayNewWithAddress(hostNodeId: hostNodeId, username: username, domain: domain)
+      let hashes = res.hashes.map { h -> [String: Any] in
+        ["hashIndex": h.hashIndex, "paymentHash": h.paymentHash]
+      }
+      return [
+        "requestId": res.requestId,
+        "hostNodeId": res.hostNodeId,
+        "protocolVersion": res.protocolVersion,
+        "orderId": res.orderId,
+        "status": res.status,
+        "acceptedThroughIndex": res.acceptedThroughIndex,
+        "nextIndexExpected": res.nextIndexExpected,
+        "unusedHashes": res.unusedHashes,
+        "refillBatchSize": res.refillBatchSize,
+        "firstHashIndex": res.firstHashIndex,
+        "lastHashIndex": res.lastHashIndex,
+        "hashes": hashes,
+      ] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
   @objc(_rlnRefreshTransfers:skipSync:)
   public static func _rlnRefreshTransfers(_ nodeId: NSNumber, skipSync: Bool) -> NSDictionary {
     do {

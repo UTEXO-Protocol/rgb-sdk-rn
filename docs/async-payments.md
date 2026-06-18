@@ -45,7 +45,7 @@ flowchart TD
 
 | Step | What happens | Who drives it | SDK call |
 |------|-------------|---------------|----------|
-| **①** | Hash batch stored; Lightning Address minted | **Recipient app** | `lsp.connect()` → `lsp.enableLightningAddress()` |
+| **①** | Address provisioned on connect; attested hash batch stored | **Recipient app** | `lsp.connect()` → `lsp.enableLightningAddress()` |
 | **②** | Hash slot reserved; inbound HODL BOLT11 from Host | **Sender app** | `lsp.http.resolveAddress(username, amtMsat, assetId?, assetAmount?)` |
 | **③** | Payer pays BOLT11; inbound HTLC held at Host | **Sender app** | `lsp.waitForOutboundLiquidity(…)` then `wallet.payLightningInvoice(…)` |
 | **④** | Outbox asks Recipient for outbound invoice over P2P | **Host + utexo-lsp** | Recipient must be reachable — **`lsp.connect()`** |
@@ -54,7 +54,7 @@ flowchart TD
 
 **Blue steps (①②③)** — your app. **Green steps (④⑤⑥)** — LSP outbox; recipient app keeps **`lsp.connect()`** alive when online.
 
-When `unusedHashes` hits zero, call `apayNew` / `enableLightningAddress` again to refill.
+When `unusedHashes` runs low, call `lsp.refillHashPool()` to register a fresh attested batch.
 
 ---
 
@@ -72,11 +72,12 @@ sequenceDiagram
 
   Note over RB,L: ① Register
   RB->>RR: lsp.connect()
-  RB->>RR: apayNew / enableLightningAddress
-  RR--)H: async_order.new (P2P)
-  H->>L: POST /internal/async_order/new
+  Note over L: cron provisions account on peer connect
   RB->>L: GET /lightning_address/by_pubkey/{pubkey}
   L-->>RB: username, domain
+  RB->>RR: enableLightningAddress → apayNewWithAddress(lspPubkey, username, domain)
+  RR--)H: async_order.new + address_sig (P2P)
+  H->>L: POST /internal/async_order/new
 
   Note over SA,L: ②③ Pay (LNURL callback — no P2P to Recipient yet)
   SA->>L: LNURL /.well-known/lnurlp/{username}
@@ -139,22 +140,24 @@ Explicit `LspPeer` + `createLsp(LSP_PEER)` is still valid when you cannot set `l
 Both sides need an RGB channel first: `lsp.connect()` → `lsp.waitForChannel(assetId, { … })`.
 
 ```typescript
-await lsp.connect();
+await lsp.connect();  // connect first — the LSP mints the address only for connected peers
 
-// Recommended: apayNew + getLightningAddressByPubkey in one call
+// Resolves the minted address, then registers one attested batch:
 const { address } = await lsp.enableLightningAddress();
 console.log(`Lightning Address: ${address}`);
 
-// Keep calling lsp.connect() while the app is foreground / expecting payments
-// so the LSP outbox can reach the node over P2P when a payer pays.
+// Keep calling lsp.connect() while the app is in the foreground and expecting
+// payments, so the LSP outbox can reach the node over P2P when a payer pays.
 ```
 
-Manual alternative:
+To do it manually, resolve the address first, then register:
 
 ```typescript
-const pool = await wallet.apayNew(lspPubkey);
-const addr = await lsp.http.getLightningAddressByPubkey(walletPubkey);
+const { username, domain } = await lsp.http.getLightningAddressByPubkey(walletPubkey);
+const pool = await wallet.apayNewWithAddress(lspPubkey, username, domain);
 ```
+
+> `wallet.apayNew(lspPubkey)` registers the same pool without the address attestation (no `address_sig`). Use `apayNewWithAddress` for the attestation, which guards against hash substitution.
 
 ### ②③ Sender — LNURL pay
 
@@ -209,7 +212,7 @@ const status = await senderWallet.getLightningSendRequest(paymentHash);
 
 | | **Lightning Address (APay)** | **HODL invoice you create** |
 |---|------------------------------|-------------------------------|
-| Register | `enableLightningAddress()` / `apayNew` | `createHodlInvoice({ paymentHash, … })` |
+| Register | `enableLightningAddress()` (→ `apayNewWithAddress`) | `createHodlInvoice({ paymentHash, … })` |
 | Payer path | LNURL → Host HODL BOLT11 | Pay BOLT11 directly |
 | Recipient claim | **Automatic** (RLN auto-claim) | **`claimHodlInvoice(hash, preimage)`** |
 | Helper | — | `lsp.claimPendingPayments()` |
@@ -231,7 +234,8 @@ for (const p of await wallet.listPaymentsRaw()) {
 |--------|------|-------------|
 | `lsp.connect()` | ①④ | Lightning P2P to Host — call before register and when coming online |
 | `lsp.waitForChannel(assetId)` | ①③ | Wait for usable RGB channel |
-| `lsp.enableLightningAddress()` | ① | `apayNew` + `getLightningAddressByPubkey` |
+| `lsp.enableLightningAddress()` | ① | `getLightningAddressByPubkey` (poll) → `apayNewWithAddress` |
+| `lsp.refillHashPool()` | ① | Top up the hash pool with a fresh attested batch |
 | `lsp.http.resolveAddress(…)` | ② | LNURL callback → HODL BOLT11 |
 | `lsp.waitForOutboundLiquidity(msat)` | ③ | Confirm sender can route before pay |
 | `wallet.payLightningInvoice(…)` | ③ | Pay HODL invoice |
@@ -262,4 +266,4 @@ for (const p of await wallet.listPaymentsRaw()) {
 |--------|------|------|
 | GET | `/.well-known/lnurlp/{username}` | ② LNURL metadata |
 | GET | `/pay/callback/{username}?amount=…&asset_id=…&asset_amount=…` | ② HODL BOLT11 |
-| GET | `/lightning_address/by_pubkey/{pubkey}` | ① discovery after register |
+| GET | `/lightning_address/by_pubkey/{pubkey}` | ① discovery before register (address provisioned on connect) |

@@ -805,6 +805,39 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     };
   }
 
+  /**
+   * Register an async-payment hash pool bound to a Lightning Address.
+   *
+   * Same as {@link apayNew} but additionally signs an address attestation
+   * (username + domain) so the LSP can prove the address is owned by this node
+   * — required for APay hash-substitution resistance.
+   */
+  async apayNewWithAddress(
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<ApayNewResponse> {
+    const raw = await this.rln.rlnApayNewWithAddress(
+      hostNodeId,
+      username,
+      domain
+    );
+    return {
+      requestId: raw.requestId,
+      hostNodeId: raw.hostNodeId,
+      protocolVersion: raw.protocolVersion,
+      orderId: raw.orderId,
+      status: raw.status,
+      acceptedThroughIndex: raw.acceptedThroughIndex,
+      nextIndexExpected: raw.nextIndexExpected,
+      unusedHashes: raw.unusedHashes,
+      refillBatchSize: raw.refillBatchSize,
+      firstHashIndex: raw.firstHashIndex,
+      lastHashIndex: raw.lastHashIndex,
+      hashes: raw.hashes,
+    };
+  }
+
   // ── LSP ──────────────────────────────────────────────────────────────────────
 
   /**

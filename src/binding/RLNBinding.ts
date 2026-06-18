@@ -475,6 +475,16 @@ export class RLNBinding implements IRLN {
     ) as Promise<RlnApayNewResponse>;
   }
 
+  async rlnApayNewWithAddress(
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<RlnApayNewResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnApayNewWithAddress(nodeId, hostNodeId, username, domain)
+    ) as Promise<RlnApayNewResponse>;
+  }
+
   async rlnDecodeLnInvoice(
     invoice: string
   ): Promise<RlnDecodeLnInvoiceResponse> {

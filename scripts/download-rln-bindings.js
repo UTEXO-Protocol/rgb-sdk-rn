@@ -7,7 +7,7 @@ const { execSync } = require('child_process');
 // or used from a local zip in src/bindings/ if present.
 // Android AAR is resolved from Maven Central by Gradle — no download needed here.
 
-const VERSION = '0.6.0-beta.1';
+const VERSION = '0.6.0-beta.2';
 const BASE_URL = `https://github.com/UTEXO-Protocol/rgb-lightning-node/releases/download/v${VERSION}`;
 
 const ROOT = path.join(__dirname, '..');
@@ -23,7 +23,7 @@ function downloadFile(url, dest) {
     const file = fs.createWriteStream(dest);
 
     const req = https
-      .get(url, { timeout: 30000 }, (response) => {
+      .get(url, { timeout: 60000 }, (response) => {
         if (response.statusCode === 301 || response.statusCode === 302) {
           file.close();
           fs.unlinkSync(dest);

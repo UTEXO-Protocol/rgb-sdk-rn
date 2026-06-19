@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0-beta.17
+
+__added__
+- Per-network default `lspBaseUrl` — `network: 'utexo'` now resolves to `https://lsp-signet.utexo.com` when `lspBaseUrl` is omitted. New helpers in `src/wallet/network-defaults.ts`: `getDefaultLspBaseUrl(network)` and `resolveLspBaseUrl(network, lspBaseUrl?)` (the latter throws when neither an explicit value nor a network default exists). `lspBaseUrl` is now optional on networks that have a default.
+
+__changed__
+- `createLsp()` now auto-wires virtual channels: it fetches the LSP node pubkey (`GET /get_info`), sets `enableVirtualChannelsV0: true`, and adds that pubkey to `virtualPeerPubkeys` on the node params. Callers no longer need to fetch the LSP pubkey or set those flags manually for LSP-backed virtual channels.
+
+__breaking__
+- Because virtual-channel params are baked into the node at `init()`, **`createLsp()` must now be called before `init()`/`reinit()`**. Calling it after the node is created throws. Update any `init() → createLsp()` ordering to `createLsp() → init()`.
+
+---
+
 ## 1.0.0-beta.14
 
 __added__

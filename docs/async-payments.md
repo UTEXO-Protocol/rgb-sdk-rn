@@ -110,14 +110,16 @@ sequenceDiagram
 ```typescript
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  network:        'utexo',          // lspBaseUrl optional on utexo (defaults to https://lsp-signet.utexo.com)
   lspBearerToken: 'bearer-token',
 }, signer);
 
+// createLsp() before init(): discovers pubkey/host from lspBaseUrl + GET /get_info
+// and auto-wires virtual channels into the node params.
+const lsp = await wallet.createLsp();
+
 await wallet.init();
 await wallet.unlock(unlockParams);
-
-const lsp = await wallet.createLsp();  // discovers pubkey/host from lspBaseUrl + GET /get_info
 ```
 
 **Regtest local demo** (virtual 0-conf channels — not required on signet):

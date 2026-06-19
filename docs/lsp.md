@@ -12,18 +12,21 @@
 ```typescript
 import { UTEXOWallet } from '@utexo/rgb-sdk-rn';
 
-// lspBaseUrl is required — wires the native RLN for APay and
-// is the source for no-arg createLsp() peer discovery
+// lspBaseUrl wires the native RLN for APay and is the source for no-arg
+// createLsp() peer discovery. Optional on networks with a default (utexo →
+// https://lsp-signet.utexo.com); required otherwise.
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  network:        'utexo',
   lspBearerToken: 'bearer-token',  // only required for APay
 }, signer);
+
+// No-arg: peer pubkey from GET /get_info, host from lspBaseUrl, port 9735.
+// MUST be called before init() — it auto-wires virtual channels into node params.
+const lsp = await wallet.createLsp();
+
 await wallet.init();
 await wallet.unlock(unlockParams);
-
-// No-arg: peer pubkey from GET /get_info, host from lspBaseUrl, port 9735
-const lsp = await wallet.createLsp();
 ```
 
 If you need to override any peer detail:
@@ -342,13 +345,15 @@ await wallet.payLightningInvoice({ lnInvoice });
 ```typescript
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  network:        'utexo',          // lspBaseUrl optional on utexo (defaults to https://lsp-signet.utexo.com)
   lspBearerToken: 'bearer-token',
 }, signer);
+
+// createLsp() before init() — auto-wires virtual channels into node params
+const lsp = await wallet.createLsp();  // or createLsp(undefined, 9737) on regtest
+
 await wallet.init();
 await wallet.unlock(unlockParams);
-
-const lsp = await wallet.createLsp();  // or createLsp(undefined, 9737) on regtest
 
 await lsp.connect();
 await lsp.waitForChannel(ASSET_ID, { onProgress: (m) => console.log(m) });

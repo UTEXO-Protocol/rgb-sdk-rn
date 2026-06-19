@@ -138,7 +138,7 @@ const wallet = new UTEXOWallet(
 | `vssUrl` | `string?` | VSS server URL for encrypted remote backup |
 | `vssAllowHttp` | `boolean?` | Allow plain HTTP VSS endpoint (default `false`) |
 | `vssAllowEmptyRestore` | `boolean?` | Allow restoring from VSS when no backup exists yet (default `false`) |
-| `lspBaseUrl` | `string?` | LSP base URL — required for `createLsp()` and APay |
+| `lspBaseUrl` | `string?` | LSP base URL for `createLsp()` and APay. Optional on networks with a default (e.g. `utexo` → `https://lsp-signet.utexo.com`); required otherwise |
 | `lspBearerToken` | `string?` | LSP bearer token — required for APay |
 
 ---
@@ -300,7 +300,7 @@ await wallet.destroy();
 
 | Method | Description |
 |--------|-------------|
-| `createLsp(peer?)` | Create an `UtexoLsp` session. No-arg: discovers peer from `lspBaseUrl` + `GET /get_info`. Pass `LspPeer` to override. |
+| `createLsp(peer?)` | Create an `UtexoLsp` session. No-arg: discovers peer from `lspBaseUrl` (or the network default) + `GET /get_info`, and auto-enables virtual channels (`enableVirtualChannelsV0: true` + adds the LSP pubkey to `virtualPeerPubkeys`). Pass `LspPeer` to override. **Must be called before `init()`/`reinit()`.** |
 | `getLspConfig()` | Return `{ baseUrl, bearerToken }` this node was initialized with |
 | `apayNewWithAddress(hostNodeId, username, domain)` | Register an attested hash pool (signs `address_sig`) — hash-substitution resistant |
 | `apayNew(hostNodeId)` | Register a hash pool without an address attestation |
@@ -813,21 +813,24 @@ const { txid: paymentHash } = await wallet.payLightningInvoice({ lnInvoice });
 ### Setup
 
 ```typescript
-// Wallet must include lspBaseUrl — required for no-arg createLsp() and APay
+// lspBaseUrl is optional on networks with a default (utexo → https://lsp-signet.utexo.com);
+// set it explicitly for other networks or to override.
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  network:        'utexo',
   lspBearerToken: 'bearer-token', // only required for APay
+  // lspBaseUrl: 'https://lsp-signet.utexo.com', // optional on utexo
 }, signer);
+
+// createLsp() MUST be called before init(): it discovers the LSP pubkey
+// (GET /get_info) and auto-wires virtual channels (enableVirtualChannelsV0 +
+// virtualPeerPubkeys) into the node params, which are baked in at init().
+const lsp = await wallet.createLsp();
 
 await wallet.init();
 await wallet.unlock(unlockParams);
 
-// No-arg form — discovers peer pubkey from GET /get_info,
-// host from lspBaseUrl, port defaults to 9735
-const lsp = await wallet.createLsp();
-
-// Or pass explicit peer to override any field
+// Or pass an explicit peer to override any field (also before init())
 const lsp = await wallet.createLsp({
   baseUrl:    'https://lsp-signet.utexo.com',
   peerPubkey: '02abc...',

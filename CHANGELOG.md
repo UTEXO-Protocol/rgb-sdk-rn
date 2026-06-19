@@ -3,13 +3,19 @@
 ## 1.0.0-beta.17
 
 __added__
-- Per-network default `lspBaseUrl` — `network: 'utexo'` now resolves to `https://lsp-signet.utexo.com` when `lspBaseUrl` is omitted. New helpers in `src/wallet/network-defaults.ts`: `getDefaultLspBaseUrl(network)` and `resolveLspBaseUrl(network, lspBaseUrl?)` (the latter throws when neither an explicit value nor a network default exists). `lspBaseUrl` is now optional on networks that have a default.
+- **`apayNewWithAddress(hostNodeId, username, domain)`** on `UTEXOWallet` — registers an async-payment hash pool together with a Lightning Address attestation (`address_sig`). Required for APay hash-substitution resistance; works with password and external signers. Native bridge: `rlnApayNewWithAddress` on iOS and Android.
+- **`UtexoLsp.refillHashPool()`** — tops up the APay hash pool with a fresh attested batch when `unusedHashes` runs low.
+- **`ApayInvoiceProof`** / **`ApayMerkleProofElement`** types — Merkle proof returned on LNURL-pay callbacks so payers can verify the payment hash before paying.
+- Per-network default `lspBaseUrl` — `network: 'utexo'` resolves to `https://lsp-signet.utexo.com` when `lspBaseUrl` is omitted. Helpers in `src/wallet/network-defaults.ts`: `getDefaultLspBaseUrl(network)` and `resolveLspBaseUrl(network, lspBaseUrl?)` (throws when neither an explicit value nor a network default exists).
 
 __changed__
-- `createLsp()` now auto-wires virtual channels: it fetches the LSP node pubkey (`GET /get_info`), sets `enableVirtualChannelsV0: true`, and adds that pubkey to `virtualPeerPubkeys` on the node params. Callers no longer need to fetch the LSP pubkey or set those flags manually for LSP-backed virtual channels.
+- **`UtexoLsp.enableLightningAddress()`** — now polls the LSP for a provisioned username/domain (`getLightningAddressByPubkey`), then registers a single attested batch via `apayNewWithAddress` (no bootstrap `apayNew` first — avoids `invalid_hash_batch` overflow). Returns `unusedHashes`, `nextIndexExpected`, and `refillBatchSize` from the pool response.
+- **`createLsp()`** — auto-wires virtual channels: fetches the LSP pubkey (`GET /get_info`), sets `enableVirtualChannelsV0: true`, and adds that pubkey to `virtualPeerPubkeys`. Callers no longer need to fetch the LSP pubkey manually for LSP-backed virtual channels.
+- **`UtexoLSPClient`** — explicit snake_case wire mapping for `getLightningAddressByPubkey` (`recipient_pubkey`, `address_sig`) and LNURL-pay callbacks (`proof` → `ApayInvoiceProof`). Fixes fields that were `undefined` against utexo-lsp >= 0.6.
+- Bumped RLN native bindings to **v0.6.0-beta.2** (from `0.6.0-beta.1`).
 
 __breaking__
-- Because virtual-channel params are baked into the node at `init()`, **`createLsp()` must now be called before `init()`/`reinit()`**. Calling it after the node is created throws. Update any `init() → createLsp()` ordering to `createLsp() → init()`.
+- **`createLsp()` must be called before `init()`/`reinit()`** — virtual-channel params are baked into the node at init time. Calling `createLsp()` after the node exists throws. Update any `init() → createLsp()` ordering to `createLsp() → init()`.
 
 ---
 

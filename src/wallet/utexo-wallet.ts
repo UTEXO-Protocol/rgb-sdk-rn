@@ -61,7 +61,7 @@ import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
 import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../binding/IRLN';
 import { toNativeNetwork } from '../binding/Interfaces';
-import { resolveUnlockParams } from './network-defaults';
+import { getDefaultLspBaseUrl, resolveLspBaseUrl, resolveUnlockParams } from './network-defaults';
 import type {
   RlnNodeInfo,
   RlnNetworkInfo,
@@ -390,6 +390,8 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   private readonly params: UTEXOWalletNodeParams;
   private readonly signer: IRLNSigner;
   private disposed = false;
+  /** True once rlnCreateNode has run (init/reinit). Virtual-channel params are baked then. */
+  private nodeCreated = false;
 
   constructor(params: UTEXOWalletNodeParams, signer: IRLNSigner) {
     this.params = params;
@@ -402,6 +404,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   /** First-time init: createNode + signer.initNode (writes keys to disk). */
   async init(): Promise<void> {
     await this.rln.rlnCreateNode(this.buildNodeParams());
+    this.nodeCreated = true;
     await this.signer.initNode(this.rln);
   }
 
@@ -418,6 +421,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   async reinit(params?: IRLNUnlockParams): Promise<void> {
     this.rln = createRLNManager();
     await this.rln.rlnCreateNode(this.buildNodeParams());
+    this.nodeCreated = true;
     if (params) await this.signer.unlockNode(this.rln, resolveUnlockParams(this.params.network, params));
   }
 
@@ -805,6 +809,39 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     };
   }
 
+  /**
+   * Register an async-payment hash pool bound to a Lightning Address.
+   *
+   * Same as {@link apayNew} but additionally signs an address attestation
+   * (username + domain) so the LSP can prove the address is owned by this node
+   * — required for APay hash-substitution resistance.
+   */
+  async apayNewWithAddress(
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<ApayNewResponse> {
+    const raw = await this.rln.rlnApayNewWithAddress(
+      hostNodeId,
+      username,
+      domain
+    );
+    return {
+      requestId: raw.requestId,
+      hostNodeId: raw.hostNodeId,
+      protocolVersion: raw.protocolVersion,
+      orderId: raw.orderId,
+      status: raw.status,
+      acceptedThroughIndex: raw.acceptedThroughIndex,
+      nextIndexExpected: raw.nextIndexExpected,
+      unusedHashes: raw.unusedHashes,
+      refillBatchSize: raw.refillBatchSize,
+      firstHashIndex: raw.firstHashIndex,
+      lastHashIndex: raw.lastHashIndex,
+      hashes: raw.hashes,
+    };
+  }
+
   // ── LSP ──────────────────────────────────────────────────────────────────────
 
   /**
@@ -820,12 +857,12 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   async createLsp(peer?: LspPeer, peerPort = 9735): Promise<UtexoLsp> {
     if (peer) return new UtexoLsp(this, peer);
 
-    const baseUrl = this.params.lspBaseUrl;
-    if (!baseUrl) throw new Error('createLsp: lspBaseUrl not set — pass a LspPeer explicitly or set lspBaseUrl in wallet params');
+    const baseUrl = resolveLspBaseUrl(this.params.network, this.params.lspBaseUrl);
 
     const http     = new UtexoLSPClient({ baseUrl, bearerToken: this.params.lspBearerToken ?? undefined });
     const info     = await http.getInfo();
     const peerHost = new URL(baseUrl).hostname;
+    this.enableVirtualChannelsForPeer(info.pubkey);
 
     return new UtexoLsp(this, {
       baseUrl,
@@ -834,6 +871,28 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       peerPort,
       bearerToken: this.params.lspBearerToken ?? undefined,
     });
+  }
+
+  /**
+   * Turns on virtual channels v0 for the given LSP peer by mutating the node-create params.
+   *
+   * These params (enableVirtualChannelsV0, virtualPeerPubkeys) are consumed by rlnCreateNode
+   * and cannot be changed after the node exists, so this must run before init()/reinit().
+   * Throws if the node was already created.
+   */
+  private enableVirtualChannelsForPeer(peerPubkey: string): void {
+    if (this.nodeCreated) {
+      throw new Error(
+        'createLsp() must be called before init()/reinit(): virtual-channel params ' +
+          '(enableVirtualChannelsV0, virtualPeerPubkeys) are baked into the node at init time ' +
+          'and cannot be changed afterwards.',
+      );
+    }
+    this.params.enableVirtualChannelsV0 = true;
+    const existing = this.params.virtualPeerPubkeys ?? [];
+    this.params.virtualPeerPubkeys = existing.includes(peerPubkey)
+      ? existing
+      : [...existing, peerPubkey];
   }
 
   /**
@@ -1065,7 +1124,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       vssUrl: this.params.vssUrl ?? null,
       vssAllowHttp: this.params.vssAllowHttp ?? false,
       vssAllowEmptyRestore: this.params.vssAllowEmptyRestore ?? false,
-      lspBaseUrl: this.params.lspBaseUrl ?? null,
+      lspBaseUrl: this.params.lspBaseUrl ?? getDefaultLspBaseUrl(this.params.network) ?? null,
       lspBearerToken: this.params.lspBearerToken ?? null,
     };
   }

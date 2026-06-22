@@ -1239,6 +1239,48 @@ class RgbModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun rlnApayNewWithAddress(
+    nodeId: Double,
+    hostNodeId: String,
+    username: String,
+    domain: String,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        android.util.Log.d("RNRgb", "rlnApayNewWithAddress: nodeId=$nodeId hostNodeId=$hostNodeId username=$username domain=$domain")
+        val res = node.apayNewWithAddress(hostNodeId, username, domain)
+        val map = Arguments.createMap()
+        map.putString("requestId", res.requestId)
+        map.putString("hostNodeId", res.hostNodeId)
+        map.putDouble("protocolVersion", res.protocolVersion.toDouble())
+        map.putString("orderId", res.orderId)
+        map.putString("status", res.status)
+        map.putDouble("acceptedThroughIndex", res.acceptedThroughIndex.toDouble())
+        map.putDouble("nextIndexExpected", res.nextIndexExpected.toDouble())
+        map.putDouble("unusedHashes", res.unusedHashes.toDouble())
+        map.putDouble("refillBatchSize", res.refillBatchSize.toDouble())
+        map.putDouble("firstHashIndex", res.firstHashIndex.toDouble())
+        map.putDouble("lastHashIndex", res.lastHashIndex.toDouble())
+        val hashesArr = Arguments.createArray()
+        res.hashes.forEach { h: AsyncOrderNewHashWire ->
+          val hMap = Arguments.createMap()
+          hMap.putDouble("hashIndex", h.hashIndex.toDouble())
+          hMap.putString("paymentHash", h.paymentHash)
+          hashesArr.pushMap(hMap)
+        }
+        map.putArray("hashes", hashesArr)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
   override fun rlnRefreshTransfers(nodeId: Double, skipSync: Boolean, promise: Promise) {
     coroutineScope.launch(Dispatchers.IO) {
       try {

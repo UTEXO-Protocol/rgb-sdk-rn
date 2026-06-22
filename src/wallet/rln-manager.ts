@@ -218,6 +218,14 @@ export class RLNManager implements IRLN {
     return this.rlnBinding.rlnApayNew(hostNodeId);
   }
 
+  rlnApayNewWithAddress(
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<RlnApayNewResponse> {
+    return this.rlnBinding.rlnApayNewWithAddress(hostNodeId, username, domain);
+  }
+
   rlnDecodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse> {
     return this.rlnBinding.rlnDecodeLnInvoice(invoice);
   }

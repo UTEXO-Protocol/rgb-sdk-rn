@@ -138,7 +138,7 @@ const wallet = new UTEXOWallet(
 | `vssUrl` | `string?` | VSS server URL for encrypted remote backup |
 | `vssAllowHttp` | `boolean?` | Allow plain HTTP VSS endpoint (default `false`) |
 | `vssAllowEmptyRestore` | `boolean?` | Allow restoring from VSS when no backup exists yet (default `false`) |
-| `lspBaseUrl` | `string?` | LSP base URL — required for `createLsp()` and APay |
+| `lspBaseUrl` | `string?` | LSP base URL for `createLsp()` and APay. Optional on networks with a default (e.g. `utexo` → `https://lsp-signet.utexo.com`); required otherwise |
 | `lspBearerToken` | `string?` | LSP bearer token — required for APay |
 
 ---
@@ -300,9 +300,10 @@ await wallet.destroy();
 
 | Method | Description |
 |--------|-------------|
-| `createLsp(peer?)` | Create an `UtexoLsp` session. No-arg: discovers peer from `lspBaseUrl` + `GET /get_info`. Pass `LspPeer` to override. |
+| `createLsp(peer?)` | Create an `UtexoLsp` session. No-arg: discovers peer from `lspBaseUrl` (or the network default) + `GET /get_info`, and auto-enables virtual channels (`enableVirtualChannelsV0: true` + adds the LSP pubkey to `virtualPeerPubkeys`). Pass `LspPeer` to override. **Must be called before `init()`/`reinit()`.** |
 | `getLspConfig()` | Return `{ baseUrl, bearerToken }` this node was initialized with |
-| `apayNew(hostNodeId)` | Register a hash pool with the host LSP node |
+| `apayNewWithAddress(hostNodeId, username, domain)` | Register an attested hash pool (signs `address_sig`) — hash-substitution resistant |
+| `apayNew(hostNodeId)` | Register a hash pool without an address attestation |
 | `createHodlInvoice(params)` | Create a HODL invoice tied to a specific payment hash |
 | `claimHodlInvoice(paymentHash, preimage)` | Reveal preimage to claim an inbound HODL payment |
 | `cancelHodlInvoice(paymentHash)` | Cancel a HODL invoice |
@@ -812,21 +813,24 @@ const { txid: paymentHash } = await wallet.payLightningInvoice({ lnInvoice });
 ### Setup
 
 ```typescript
-// Wallet must include lspBaseUrl — required for no-arg createLsp() and APay
+// lspBaseUrl is optional on networks with a default (utexo → https://lsp-signet.utexo.com);
+// set it explicitly for other networks or to override.
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  network:        'utexo',
   lspBearerToken: 'bearer-token', // only required for APay
+  // lspBaseUrl: 'https://lsp-signet.utexo.com', // optional on utexo
 }, signer);
+
+// createLsp() MUST be called before init(): it discovers the LSP pubkey
+// (GET /get_info) and auto-wires virtual channels (enableVirtualChannelsV0 +
+// virtualPeerPubkeys) into the node params, which are baked in at init().
+const lsp = await wallet.createLsp();
 
 await wallet.init();
 await wallet.unlock(unlockParams);
 
-// No-arg form — discovers peer pubkey from GET /get_info,
-// host from lspBaseUrl, port defaults to 9735
-const lsp = await wallet.createLsp();
-
-// Or pass explicit peer to override any field
+// Or pass an explicit peer to override any field (also before init())
 const lsp = await wallet.createLsp({
   baseUrl:    'https://lsp-signet.utexo.com',
   peerPubkey: '02abc...',
@@ -921,13 +925,26 @@ Recipient                    LSP (Host RLN)              Sender
 
 Full reference → **[docs/async-payments.md](./docs/async-payments.md)**
 
+##### `apayNewWithAddress(hostNodeId, username, domain)`
+
+Registers a hash pool together with an attestation tying it to the wallet's Lightning Address. Alongside the hashes, the node signs `username`+`domain` (`address_sig`); this signature prevents hash substitution against the address and works for both password and external signers. Resolve the username/domain from the LSP first, and keep a live P2P connection to the host during the call.
+
+```typescript
+const { username, domain } = await lsp.http.getLightningAddressByPubkey(walletPubkey);
+const pool = await wallet.apayNewWithAddress(lspPeerPubkey, username, domain);
+```
+
+Most apps reach this through the `lsp.enableLightningAddress()` / `lsp.refillHashPool()` wrappers, which handle the address lookup. Returns the same `ApayNewResponse` as `apayNew` (below).
+
 ##### `apayNew(hostNodeId)`
 
-Register a payment hash pool with the LSP host node. The host node (LSP) stores the hashes and uses them to create HODL invoices when senders pay the recipient's Lightning Address. Must be called with a live P2P connection to the host.
+Registers the same hash pool without the address attestation. The host stores the hashes and uses them to build HODL invoices when a sender pays the recipient's Lightning Address. As with `apayNewWithAddress`, it requires a live P2P connection to the host.
 
 ```typescript
 const pool = await wallet.apayNew(lspPeerPubkey);
 ```
+
+> Both calls register a hash pool. Use `apayNewWithAddress` when the batch should carry the attestation that guards against hash substitution; `apayNew` registers without it.
 
 **Returns:** `ApayNewResponse`
 
@@ -951,7 +968,7 @@ interface ApayNewResponse {
 }
 ```
 
-The `hashes` array contains the payment hashes sent to the LSP. The LSP uses them to create HODL invoices for each incoming payment to the recipient's Lightning Address. Once `unusedHashes` drops below a threshold the pool should be refilled by calling `apayNew` again.
+`hashes` holds the payment hashes the LSP now has on file; it turns each one into a HODL invoice when a sender pays the recipient's Lightning Address. When `unusedHashes` runs low, top the pool back up with `lsp.refillHashPool()`.
 
 ---
 

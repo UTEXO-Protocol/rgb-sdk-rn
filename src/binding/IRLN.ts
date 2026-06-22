@@ -162,6 +162,12 @@ export interface IRLN {
 
   rlnApayNew(hostNodeId: string): Promise<RlnApayNewResponse>;
 
+  rlnApayNewWithAddress(
+    hostNodeId: string,
+    username: string,
+    domain: string
+  ): Promise<RlnApayNewResponse>;
+
   rlnDecodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse>;
   rlnDecodeRgbInvoice(invoice: string): Promise<RlnDecodeRgbInvoiceResponse>;
 

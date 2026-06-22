@@ -9,6 +9,7 @@ import {
   type LspOnchainSendResponse,
   type LspLnParams,
   type ReceiveSettlementOutcome,
+  type ApayNewResponse,
   normalizeReceiveStatus,
   peerUri,
 } from './lsp-types';
@@ -78,6 +79,12 @@ export interface LightningAddressInfo {
   domain: string;
   /** Convenience: username@domain */
   address: string;
+  /** Hashes still available in the pool after registration — drive refills off this. */
+  unusedHashes?: number;
+  /** Hash index the next batch will start from. */
+  nextIndexExpected?: number;
+  /** LSP-suggested size for the next refill batch. */
+  refillBatchSize?: number;
 }
 
 // ── claimPendingPayments ──────────────────────────────────────────────────────
@@ -334,9 +341,22 @@ export class UtexoLsp {
   // ── 8. Async / offline receive (APay) ─────────────────────────────────────────
 
   /**
-   * Register async payment hash pool with this LSP then fetch the auto-generated
-   * Lightning Address for this wallet's pubkey.
+   * Register the async-payment hash pool with this LSP and return the
+   * auto-generated Lightning Address for this wallet's pubkey.
    * Call once after first unlock to enable offline receive.
+   *
+   * The LSP provisions the address account (and mints the username) for every
+   * connected peer via its own cron, so the username already exists by the time
+   * we register — no bootstrap call is needed. We therefore:
+   *   1. Resolve username/domain via getLightningAddressByPubkey (poll briefly
+   *      in case the LSP cron hasn't provisioned the account yet).
+   *   2. Register ONE attested batch via apayNewWithAddress — the node signs the
+   *      username+domain attestation (APay hash-substitution resistance; works
+   *      for password and external signers).
+   *
+   * Important: the node's batch size equals the LSP's hash-pool cap, so a single
+   * batch fills the pool. Issuing a second batch (e.g. a bootstrap apayNew first)
+   * overflows it and the LSP rejects it with `invalid_hash_batch`.
    */
   async enableLightningAddress(): Promise<LightningAddressInfo> {
     const nodeInfo = await this.wallet.getNodeInfo();
@@ -344,14 +364,76 @@ export class UtexoLsp {
     if (!pubkey) throw new Error('enableLightningAddress: wallet not unlocked');
 
     const lspInfo = await this.http.getInfo();
-    await this.wallet.apayNew(lspInfo.pubkey);
 
-    const addr = await this.http.getLightningAddressByPubkey(pubkey);
+    // 1. Resolve the LSP-provisioned address (retry while the cron catches up).
+    const addr = await this.resolveLightningAddress(pubkey);
+
+    // 2. Register a single attested batch.
+    const pool = await this.wallet.apayNewWithAddress(
+      lspInfo.pubkey,
+      addr.username,
+      addr.domain
+    );
+
     return {
       username: addr.username,
       domain:   addr.domain,
       address:  `${addr.username}@${addr.domain}`,
+      unusedHashes:      pool.unusedHashes,
+      nextIndexExpected: pool.nextIndexExpected,
+      refillBatchSize:   pool.refillBatchSize,
     };
+  }
+
+  /**
+   * Resolve this wallet's LSP-assigned Lightning Address, retrying while the LSP
+   * cron provisions the account (getLightningAddressByPubkey 404s until then).
+   */
+  private async resolveLightningAddress(
+    pubkey: string,
+    attempts = 8,
+    delayMs = 2000
+  ): Promise<{ username: string; domain: string }> {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const addr = await this.http.getLightningAddressByPubkey(pubkey);
+        if (addr?.username && addr?.domain) return addr;
+      } catch (e) {
+        lastErr = e;
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+    throw new Error(
+      `enableLightningAddress: LSP did not provision an address for ${pubkey} ` +
+        `(ensure the wallet is connected to the LSP). Last error: ${String(lastErr)}`
+    );
+  }
+
+  /**
+   * Top up the async-payment hash pool with a fresh signed batch.
+   *
+   * Call after {@link enableLightningAddress} when the pool runs low
+   * (see {@link ApayNewResponse.unusedHashes}). Each call registers a NEW
+   * batch — the node advances its hash index, builds a new Merkle root and
+   * signs it. Unlike the initial bootstrap, refills go straight through
+   * `apayNewWithAddress` so every batch also carries the address attestation
+   * (the username already exists, so no extra bootstrap is needed).
+   */
+  async refillHashPool(): Promise<ApayNewResponse> {
+    const nodeInfo = await this.wallet.getNodeInfo();
+    const pubkey   = String(nodeInfo?.pubkey ?? '');
+    if (!pubkey) throw new Error('refillHashPool: wallet not unlocked');
+
+    const lspInfo = await this.http.getInfo();
+    // Address was already minted by enableLightningAddress — resolve it.
+    const addr = await this.http.getLightningAddressByPubkey(pubkey);
+
+    return this.wallet.apayNewWithAddress(
+      lspInfo.pubkey,
+      addr.username,
+      addr.domain
+    );
   }
 
   // ── 9. Claim pending HODL payments ────────────────────────────────────────────

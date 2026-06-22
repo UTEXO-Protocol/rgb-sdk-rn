@@ -46,6 +46,8 @@ export type {
   HodlInvoiceResult,
   ApayHashEntry,
   ApayNewResponse,
+  ApayInvoiceProof,
+  ApayMerkleProofElement,
   // New LSP types
   LspPeer,
   ReceiveStatus,

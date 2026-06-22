@@ -12,18 +12,21 @@
 ```typescript
 import { UTEXOWallet } from '@utexo/rgb-sdk-rn';
 
-// lspBaseUrl is required — wires the native RLN for APay and
-// is the source for no-arg createLsp() peer discovery
+// lspBaseUrl wires the native RLN for APay and is the source for no-arg
+// createLsp() peer discovery. Optional on networks with a default (utexo →
+// https://lsp-signet.utexo.com); required otherwise.
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  network:        'utexo',
   lspBearerToken: 'bearer-token',  // only required for APay
 }, signer);
+
+// No-arg: peer pubkey from GET /get_info, host from lspBaseUrl, port 9735.
+// MUST be called before init() — it auto-wires virtual channels into node params.
+const lsp = await wallet.createLsp();
+
 await wallet.init();
 await wallet.unlock(unlockParams);
-
-// No-arg: peer pubkey from GET /get_info, host from lspBaseUrl, port 9735
-const lsp = await wallet.createLsp();
 ```
 
 If you need to override any peer detail:
@@ -202,13 +205,29 @@ const { username, domain, address } = await lsp.enableLightningAddress();
 // address → 'excited-mountain-1234@lsp-signet.utexo.com'
 ```
 
-Internally:
-1. Fetches the wallet's own pubkey via `wallet.getNodeInfo()`
-2. Fetches LSP pubkey via `lsp.http.getInfo()`
-3. Calls `wallet.apayNew(lspPubkey)` — sends hashes to the LSP via P2P onion messages
-4. Calls `lsp.http.getLightningAddressByPubkey(walletPubkey)` — returns the assigned address
+How it works:
 
-The `lspBaseUrl` **and** `lspBearerToken` on the wallet node params must be set for step 3 to work (it routes through the native RLN node, not the HTTP client).
+The LSP mints a Lightning Address for every peer that connects, so the address exists before registration — the method only has to look it up. It reads the wallet pubkey (`getNodeInfo`) and the LSP pubkey (`getInfo`), then polls `getLightningAddressByPubkey` until the address appears. `lsp.connect()` must run first; until the account exists the lookup returns 404.
+
+With the `username` and `domain` resolved, it calls `wallet.apayNewWithAddress(lspPubkey, username, domain)`, which sends a single signed batch of hashes to the LSP over P2P. The node signs `username`+`domain` (`address_sig`) and attaches it to the batch. This signature makes the pool resistant to hash substitution and works for both password and external signers.
+
+Returns `{ username, domain, address, unusedHashes, nextIndexExpected, refillBatchSize }`.
+
+Both `lspBaseUrl` and `lspBearerToken` must be set on the wallet node params — registration runs through the native RLN node, not the HTTP client.
+
+> Register exactly one batch. The node's batch size already matches the LSP's pool cap, so a single batch fills it. Issuing an `apayNew` bootstrap first overflows the pool, and the LSP rejects the second batch with `invalid_hash_batch`.
+
+---
+
+### `refillHashPool()`
+
+Tops up the hash pool with a fresh signed batch. Call it after `enableLightningAddress()` once `unusedHashes` runs low.
+
+```typescript
+const { unusedHashes, nextIndexExpected, refillBatchSize } = await lsp.refillHashPool();
+```
+
+The address is already minted, so the method re-resolves it and registers another batch through `apayNewWithAddress`. Refills therefore carry the same attestation as the initial registration. Prefer this over calling `apayNew` directly.
 
 ---
 
@@ -326,13 +345,15 @@ await wallet.payLightningInvoice({ lnInvoice });
 ```typescript
 const wallet = new UTEXOWallet({
   ...nodeParams,
-  lspBaseUrl:     'https://lsp-signet.utexo.com',
+  network:        'utexo',          // lspBaseUrl optional on utexo (defaults to https://lsp-signet.utexo.com)
   lspBearerToken: 'bearer-token',
 }, signer);
+
+// createLsp() before init() — auto-wires virtual channels into node params
+const lsp = await wallet.createLsp();  // or createLsp(undefined, 9737) on regtest
+
 await wallet.init();
 await wallet.unlock(unlockParams);
-
-const lsp = await wallet.createLsp();  // or createLsp(undefined, 9737) on regtest
 
 await lsp.connect();
 await lsp.waitForChannel(ASSET_ID, { onProgress: (m) => console.log(m) });

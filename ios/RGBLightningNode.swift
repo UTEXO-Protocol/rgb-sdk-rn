@@ -875,6 +875,8 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func apayNew(hostNodeId: String) throws -> AsyncOrderNewResponse
 
+    func apayNewWithAddress(hostNodeId: String, username: String, domain: String) throws -> AsyncOrderNewResponse
+
     func assetBalance(assetId: ContractId) throws -> AssetBalanceInfo
 
     func assetMetadata(assetId: ContractId) throws -> AssetMetadataInfo
@@ -1067,6 +1069,15 @@ open class SdkNode:
         return try FfiConverterTypeAsyncOrderNewResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_apay_new(self.uniffiClonePointer(),
                                                                  FfiConverterString.lower(hostNodeId), $0)
+        })
+    }
+
+    open func apayNewWithAddress(hostNodeId: String, username: String, domain: String) throws -> AsyncOrderNewResponse {
+        return try FfiConverterTypeAsyncOrderNewResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_apay_new_with_address(self.uniffiClonePointer(),
+                                                                              FfiConverterString.lower(hostNodeId),
+                                                                              FfiConverterString.lower(username),
+                                                                              FfiConverterString.lower(domain), $0)
         })
     }
 
@@ -10426,6 +10437,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_apay_new() != 7684 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_apay_new_with_address() != 24879 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_asset_balance() != 20956 {

@@ -11,8 +11,40 @@ import type {
   LspLightningReceiveResponse,
   LspLightningReceiveWire,
   LspLightningAddressByPubkeyResponse,
+  LspLightningAddressByPubkeyWire,
   LspLnurlpCallbackResponse,
+  LspLnurlpCallbackWire,
+  LspApayInvoiceProofWire,
+  ApayInvoiceProof,
 } from './lsp-types';
+
+/**
+ * Map the snake_case wire proof (utexo-lsp) to the camelCase SDK shape.
+ * request<T>() does a plain JSON.parse with no key transform, so this must
+ * be explicit (same pattern as the rest of this client).
+ */
+function mapApayProof(
+  raw: LspApayInvoiceProofWire | undefined
+): ApayInvoiceProof | undefined {
+  if (!raw) return undefined;
+  return {
+    version: raw.version,
+    recipientPubkey: raw.recipient_pubkey,
+    hostPubkey: raw.host_pubkey,
+    batchId: raw.batch_id,
+    hashIndex: raw.hash_index,
+    paymentHash: raw.payment_hash,
+    batchRoot: raw.batch_root,
+    batchSize: raw.batch_size,
+    merkleProof: (raw.merkle_proof ?? []).map((e) => ({
+      sibling: e.sibling,
+      side: e.side,
+    })),
+    batchSig: raw.batch_sig,
+    createdAt: raw.created_at,
+    expiresAt: raw.expires_at,
+  };
+}
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -148,7 +180,14 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     let url = `${this.rewriteCallbackUrl(meta.callback)}${sep}amount=${amtMsat}`;
     if (assetId) url += `&asset_id=${encodeURIComponent(assetId)}`;
     if (assetAmount !== undefined) url += `&asset_amount=${assetAmount}`;
-    return this.request<LspLnurlpCallbackResponse>(url);
+    const raw = await this.request<LspLnurlpCallbackWire>(url);
+    return {
+      pr: raw.pr,
+      routes: raw.routes ?? [],
+      status: raw.status,
+      reason: raw.reason,
+      proof: mapApayProof(raw.proof),
+    };
   }
 
   /**
@@ -165,7 +204,14 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     let path = `/pay/callback/${encodeURIComponent(username)}?amount=${amtMsat}`;
     if (assetId) path += `&asset_id=${encodeURIComponent(assetId)}`;
     if (assetAmount !== undefined) path += `&asset_amount=${assetAmount}`;
-    return this.request<LspLnurlpCallbackResponse>(path);
+    const raw = await this.request<LspLnurlpCallbackWire>(path);
+    return {
+      pr: raw.pr,
+      routes: raw.routes ?? [],
+      status: raw.status,
+      reason: raw.reason,
+      proof: mapApayProof(raw.proof),
+    };
   }
 
   async getLightningAddressByPubkey(
@@ -175,9 +221,15 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     if (!pubkey) {
       throw new Error('getLightningAddressByPubkey: peerPubkey is required');
     }
-    return this.request<LspLightningAddressByPubkeyResponse>(
+    const raw = await this.request<LspLightningAddressByPubkeyWire>(
       `/lightning_address/by_pubkey/${encodeURIComponent(pubkey)}`
     );
+    return {
+      username: raw.username,
+      domain: raw.domain,
+      recipientPubkey: raw.recipient_pubkey,
+      addressSig: raw.address_sig,
+    };
   }
 
   /**

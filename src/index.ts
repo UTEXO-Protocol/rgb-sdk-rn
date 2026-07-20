@@ -8,7 +8,10 @@ export { RLNManager, createRLNManager } from './wallet/rln-manager';
 // UTEXO wallet (implements IWalletManager + IUTEXOProtocol, backed by RLN)
 export { UTEXOWallet } from './wallet/utexo-wallet';
 export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
-export { getNetworkDefaults, resolveUnlockParams } from './wallet/network-defaults';
+export {
+  getNetworkDefaults,
+  resolveUnlockParams,
+} from './wallet/network-defaults';
 export type { NetworkEndpoints } from './wallet/network-defaults';
 export {
   PasswordRLNSigner,

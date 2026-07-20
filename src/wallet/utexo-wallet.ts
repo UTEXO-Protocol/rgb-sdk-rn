@@ -48,6 +48,7 @@ import type {
   PayLightningInvoiceRequestModel,
   OnchainReceiveRequestModel,
   OnchainReceiveResponse,
+  GetFeeEstimationResponse,
   OnchainSendRequestModel,
   OnchainSendResponse,
   TransferStatus as CoreTransferStatus,
@@ -60,7 +61,11 @@ import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
 import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../binding/IRLN';
 import { toNativeNetwork } from '../binding/Interfaces';
-import { getDefaultLspBaseUrl, resolveLspBaseUrl, resolveUnlockParams } from './network-defaults';
+import {
+  getDefaultLspBaseUrl,
+  resolveLspBaseUrl,
+  resolveUnlockParams,
+} from './network-defaults';
 import type {
   RlnNodeInfo,
   RlnNetworkInfo,
@@ -114,8 +119,10 @@ export interface RlnOnchainSendRequestModel extends OnchainSendRequestModel {
   skipSync?: boolean;
 }
 
-export interface RlnCreateLightningInvoiceRequestModel
-  extends Omit<CreateLightningInvoiceRequestModel, 'asset'> {
+export interface RlnCreateLightningInvoiceRequestModel extends Omit<
+  CreateLightningInvoiceRequestModel,
+  'asset'
+> {
   /** Omit for a plain BTC invoice — RLN supports asset-less BOLT11 invoices
    *  (core types `asset` as required, but the runtime maps absence to null). */
   asset?: CreateLightningInvoiceRequestModel['asset'];
@@ -175,7 +182,7 @@ function mapAssetBalance(b: RlnAssetBalance): AssetBalance {
     future: b.future,
     spendable: b.spendable,
     offchainOutbound: b.offchainOutbound ?? raw.offchain_outbound,
-    offchainInbound:  b.offchainInbound  ?? raw.offchain_inbound,
+    offchainInbound: b.offchainInbound ?? raw.offchain_inbound,
   };
 }
 
@@ -409,7 +416,10 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   /** Unlock the node (every start). Accepts the same params as IRLNUnlockParams. */
   async unlock(params: IRLNUnlockParams): Promise<void> {
-    await this.signer.unlockNode(this.rln, resolveUnlockParams(this.params.network, params));
+    await this.signer.unlockNode(
+      this.rln,
+      resolveUnlockParams(this.params.network, params)
+    );
   }
 
   /**
@@ -421,7 +431,11 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     this.rln = createRLNManager();
     await this.rln.rlnCreateNode(this.buildNodeParams());
     this.nodeCreated = true;
-    if (params) await this.signer.unlockNode(this.rln, resolveUnlockParams(this.params.network, params));
+    if (params)
+      await this.signer.unlockNode(
+        this.rln,
+        resolveUnlockParams(this.params.network, params)
+      );
   }
 
   /** Stop the node. Bridge marks the entry as SHUTDOWN (restartable via reinit). */
@@ -699,9 +713,9 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   // ── IWalletManager — Fee Estimation ──────────────────────────────────────
 
-  async estimateFeeRate(blocks: number): Promise<number> {
+  async estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
     const resp = await this.rln.rlnEstimateFee(blocks);
-    return resp.feeRate;
+    return { feeRate: resp.feeRate };
   }
 
   estimateFee(_psbtBase64: string): Promise<EstimateFeeResult> {
@@ -761,7 +775,9 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return { lnInvoice: resp.invoice };
   }
 
-  async createHodlInvoice(params: CreateHodlInvoiceParams): Promise<HodlInvoice> {
+  async createHodlInvoice(
+    params: CreateHodlInvoiceParams
+  ): Promise<HodlInvoice> {
     const resp = await this.rln.rlnLnInvoice(
       params.amtMsat ?? null,
       params.expirySec,
@@ -856,16 +872,22 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   async createLsp(peer?: LspPeer, peerPort = 9735): Promise<UtexoLsp> {
     if (peer) return new UtexoLsp(this, peer);
 
-    const baseUrl = resolveLspBaseUrl(this.params.network, this.params.lspBaseUrl);
+    const baseUrl = resolveLspBaseUrl(
+      this.params.network,
+      this.params.lspBaseUrl
+    );
 
-    const http     = new UtexoLSPClient({ baseUrl, bearerToken: this.params.lspBearerToken ?? undefined });
-    const info     = await http.getInfo();
+    const http = new UtexoLSPClient({
+      baseUrl,
+      bearerToken: this.params.lspBearerToken ?? undefined,
+    });
+    const info = await http.getInfo();
     const peerHost = new URL(baseUrl).hostname;
     this.enableVirtualChannelsForPeer(info.pubkey);
 
     return new UtexoLsp(this, {
       baseUrl,
-      peerPubkey:  info.pubkey,
+      peerPubkey: info.pubkey,
       peerHost,
       peerPort,
       bearerToken: this.params.lspBearerToken ?? undefined,
@@ -884,7 +906,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       throw new Error(
         'createLsp() must be called before init()/reinit(): virtual-channel params ' +
           '(enableVirtualChannelsV0, virtualPeerPubkeys) are baked into the node at init time ' +
-          'and cannot be changed afterwards.',
+          'and cannot be changed afterwards.'
       );
     }
     this.params.enableVirtualChannelsV0 = true;
@@ -900,7 +922,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
    */
   getLspConfig(): { baseUrl: string | null; bearerToken: string | null } {
     return {
-      baseUrl:     this.params.lspBaseUrl     ?? null,
+      baseUrl: this.params.lspBaseUrl ?? null,
       bearerToken: this.params.lspBearerToken ?? null,
     };
   }
@@ -976,8 +998,8 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     params: RlnOnchainReceiveRequestModel
   ): Promise<OnchainReceiveResponse> {
     const resp = await this.rln.rlnRgbInvoice(
-      params.assetId,
-      params.amount,
+      params.assetId ?? null,
+      params.amount ?? null,
       params.durationSeconds ?? null,
       params.minConfirmations ?? 0,
       params.witness ?? true
@@ -1119,7 +1141,10 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       vssUrl: this.params.vssUrl ?? null,
       vssAllowHttp: this.params.vssAllowHttp ?? false,
       vssAllowEmptyRestore: this.params.vssAllowEmptyRestore ?? false,
-      lspBaseUrl: this.params.lspBaseUrl ?? getDefaultLspBaseUrl(this.params.network) ?? null,
+      lspBaseUrl:
+        this.params.lspBaseUrl ??
+        getDefaultLspBaseUrl(this.params.network) ??
+        null,
       lspBearerToken: this.params.lspBearerToken ?? null,
     };
   }

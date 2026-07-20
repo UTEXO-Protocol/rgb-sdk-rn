@@ -515,7 +515,9 @@ export class RLNBinding implements IRLN {
     // contract of RlnPaymentStatus.
     return {
       ...raw,
-      status: String(raw.status).toUpperCase() as RlnSendPaymentResponse['status'],
+      status: String(
+        raw.status
+      ).toUpperCase() as RlnSendPaymentResponse['status'],
     };
   }
 

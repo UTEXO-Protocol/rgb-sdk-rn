@@ -97,9 +97,9 @@ export interface ClaimResult {
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_CHANNEL_TIMEOUT_MS    = 120_000;
-const DEFAULT_SETTLEMENT_TIMEOUT_MS =  60_000;
-const DEFAULT_POLL_INTERVAL_MS      =   2_000;
+const DEFAULT_CHANNEL_TIMEOUT_MS = 120_000;
+const DEFAULT_SETTLEMENT_TIMEOUT_MS = 60_000;
+const DEFAULT_POLL_INTERVAL_MS = 2_000;
 
 // ── UtexoLsp ──────────────────────────────────────────────────────────────────
 
@@ -109,12 +109,12 @@ export class UtexoLsp {
 
   constructor(
     private readonly wallet: UTEXOWallet,
-    readonly peer: LspPeer,
+    readonly peer: LspPeer
   ) {
     this.http = new UtexoLSPClient({
-      baseUrl:     peer.baseUrl,
+      baseUrl: peer.baseUrl,
       bearerToken: peer.bearerToken,
-      timeoutMs:   peer.timeoutMs,
+      timeoutMs: peer.timeoutMs,
     });
   }
 
@@ -128,7 +128,12 @@ export class UtexoLsp {
     try {
       await this.wallet.connectPeer(peerUri(this.peer));
     } catch (err: any) {
-      if (!String(err?.message ?? '').toLowerCase().includes('already')) throw err;
+      if (
+        !String(err?.message ?? '')
+          .toLowerCase()
+          .includes('already')
+      )
+        throw err;
     }
   }
 
@@ -142,11 +147,11 @@ export class UtexoLsp {
    */
   async waitForChannel(
     assetId: string,
-    opts: WaitOptions = {},
+    opts: WaitOptions = {}
   ): Promise<ChannelReadyInfo> {
-    const timeoutMs      = opts.timeoutMs      ?? DEFAULT_CHANNEL_TIMEOUT_MS;
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_CHANNEL_TIMEOUT_MS;
     const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    const deadline       = Date.now() + timeoutMs;
+    const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
       this.checkAbort(opts.signal);
@@ -155,10 +160,10 @@ export class UtexoLsp {
 
       await this.wallet.syncWallet();
       const channels = (await this.wallet.listChannels()) as RlnChannel[];
-      const match    = channels.find((c) => this.isUsableRgbChannel(c, assetId));
+      const match = channels.find((c) => this.isUsableRgbChannel(c, assetId));
 
       opts.onProgress?.(
-        `channels: ${channels.length} — RGB usable: ${match ? 'yes' : 'no'}`,
+        `channels: ${channels.length} — RGB usable: ${match ? 'yes' : 'no'}`
       );
 
       if (match) return this.toChannelReadyInfo(match);
@@ -185,7 +190,7 @@ export class UtexoLsp {
 
     const createdAtMs = Date.now();
     const { lnInvoice } = await this.wallet.createLightningInvoice({
-      amountSats:    opts.amountSats,
+      amountSats: opts.amountSats,
       expirySeconds,
       asset: { assetId: opts.assetId, amount: opts.amountRgb },
     });
@@ -221,17 +226,17 @@ export class UtexoLsp {
    */
   async awaitReceiveSettlement(
     lnInvoice: string,
-    opts: WaitOptions = {},
+    opts: WaitOptions = {}
   ): Promise<ReceiveSettlementOutcome> {
-    const timeoutMs      = opts.timeoutMs      ?? DEFAULT_SETTLEMENT_TIMEOUT_MS;
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_SETTLEMENT_TIMEOUT_MS;
     const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    const deadline       = Date.now() + timeoutMs;
+    const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
       this.checkAbort(opts.signal);
 
       await this.wallet.syncWallet();
-      const raw    = await this.wallet.getLightningReceiveRequest(lnInvoice);
+      const raw = await this.wallet.getLightningReceiveRequest(lnInvoice);
       const status = normalizeReceiveStatus(raw as string | null | undefined);
 
       opts.onProgress?.(status);
@@ -256,22 +261,25 @@ export class UtexoLsp {
    */
   async waitForOutboundLiquidity(
     minMsat: number,
-    opts: WaitOptions = {},
+    opts: WaitOptions = {}
   ): Promise<void> {
-    const timeoutMs      = opts.timeoutMs      ?? DEFAULT_CHANNEL_TIMEOUT_MS;
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_CHANNEL_TIMEOUT_MS;
     const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    const deadline       = Date.now() + timeoutMs;
+    const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
       this.checkAbort(opts.signal);
 
       await this.wallet.syncWallet();
       const channels = (await this.wallet.listChannels()) as RlnChannel[];
-      const lspChan  = channels.find((c) =>
-        this.raw(c, 'peerPubkey', 'peer_pubkey') === this.peer.peerPubkey &&
-        Boolean(this.raw(c, 'isUsable', 'is_usable')),
+      const lspChan = channels.find(
+        (c) =>
+          this.raw(c, 'peerPubkey', 'peer_pubkey') === this.peer.peerPubkey &&
+          Boolean(this.raw(c, 'isUsable', 'is_usable'))
       );
-      const outbound = Number(this.raw(lspChan, 'outboundBalanceMsat', 'outbound_balance_msat') ?? 0);
+      const outbound = Number(
+        this.raw(lspChan, 'outboundBalanceMsat', 'outbound_balance_msat') ?? 0
+      );
 
       opts.onProgress?.(`outbound: ${outbound} msat (need ${minMsat})`);
 
@@ -291,8 +299,13 @@ export class UtexoLsp {
    *   4. LSP executes sendrgb to the recipient once LN settles.
    */
   async sendAsset(opts: SendAssetOptions): Promise<SendAssetResult> {
-    const issued     = await this.http.onchainSend({ rgbInvoice: opts.rgbInvoice, ln: opts.ln });
-    const sendResult = await this.wallet.payLightningInvoice({ lnInvoice: issued.lnInvoice });
+    const issued = await this.http.onchainSend({
+      rgbInvoice: opts.rgbInvoice,
+      ln: opts.ln,
+    });
+    const sendResult = await this.wallet.payLightningInvoice({
+      lnInvoice: issued.lnInvoice,
+    });
     return { ...issued, sendResult };
   }
 
@@ -304,10 +317,11 @@ export class UtexoLsp {
    * Falls back to standard LNURL discovery for addresses on external hosts.
    */
   async payAddress(
-    opts: PayAddressOptions,
+    opts: PayAddressOptions
   ): Promise<{ invoice: string; sendResult: LightningSendRequest }> {
     const [username, domain] = opts.address.split('@');
-    if (!username || !domain) throw new Error(`Invalid Lightning Address: "${opts.address}"`);
+    if (!username || !domain)
+      throw new Error(`Invalid Lightning Address: "${opts.address}"`);
 
     let invoice: string | undefined;
 
@@ -316,25 +330,30 @@ export class UtexoLsp {
         username,
         opts.amtMsat,
         opts.asset?.assetId,
-        opts.asset?.assetAmount,
+        opts.asset?.assetAmount
       );
       invoice = cb.pr;
     } catch {
-      const meta = await fetch(
-        `https://${domain}/.well-known/lnurlp/${encodeURIComponent(username)}`,
-      ).then((r) => r.json()) as { callback: string };
-      if (!meta?.callback) throw new Error('Missing callback in LNURL response');
+      const meta = (await fetch(
+        `https://${domain}/.well-known/lnurlp/${encodeURIComponent(username)}`
+      ).then((r) => r.json())) as { callback: string };
+      if (!meta?.callback)
+        throw new Error('Missing callback in LNURL response');
 
       let url = `${meta.callback}${meta.callback.includes('?') ? '&' : '?'}amount=${opts.amtMsat}`;
-      if (opts.asset?.assetId)                  url += `&asset_id=${encodeURIComponent(opts.asset.assetId)}`;
-      if (opts.asset?.assetAmount !== undefined) url += `&asset_amount=${opts.asset.assetAmount}`;
+      if (opts.asset?.assetId)
+        url += `&asset_id=${encodeURIComponent(opts.asset.assetId)}`;
+      if (opts.asset?.assetAmount !== undefined)
+        url += `&asset_amount=${opts.asset.assetAmount}`;
 
-      const cb = await fetch(url).then((r) => r.json()) as { pr: string };
-      invoice  = cb.pr;
+      const cb = (await fetch(url).then((r) => r.json())) as { pr: string };
+      invoice = cb.pr;
     }
 
     if (!invoice) throw new Error('No invoice returned for Lightning Address');
-    const sendResult = await this.wallet.payLightningInvoice({ lnInvoice: invoice });
+    const sendResult = await this.wallet.payLightningInvoice({
+      lnInvoice: invoice,
+    });
     return { invoice, sendResult };
   }
 
@@ -360,7 +379,7 @@ export class UtexoLsp {
    */
   async enableLightningAddress(): Promise<LightningAddressInfo> {
     const nodeInfo = await this.wallet.getNodeInfo();
-    const pubkey   = String(nodeInfo?.pubkey ?? '');
+    const pubkey = String(nodeInfo?.pubkey ?? '');
     if (!pubkey) throw new Error('enableLightningAddress: wallet not unlocked');
 
     const lspInfo = await this.http.getInfo();
@@ -377,11 +396,11 @@ export class UtexoLsp {
 
     return {
       username: addr.username,
-      domain:   addr.domain,
-      address:  `${addr.username}@${addr.domain}`,
-      unusedHashes:      pool.unusedHashes,
+      domain: addr.domain,
+      address: `${addr.username}@${addr.domain}`,
+      unusedHashes: pool.unusedHashes,
       nextIndexExpected: pool.nextIndexExpected,
-      refillBatchSize:   pool.refillBatchSize,
+      refillBatchSize: pool.refillBatchSize,
     };
   }
 
@@ -422,7 +441,7 @@ export class UtexoLsp {
    */
   async refillHashPool(): Promise<ApayNewResponse> {
     const nodeInfo = await this.wallet.getNodeInfo();
-    const pubkey   = String(nodeInfo?.pubkey ?? '');
+    const pubkey = String(nodeInfo?.pubkey ?? '');
     if (!pubkey) throw new Error('refillHashPool: wallet not unlocked');
 
     const lspInfo = await this.http.getInfo();
@@ -443,7 +462,7 @@ export class UtexoLsp {
    * Use for invoices created with createHodlInvoice — e.g. after unlock() when back online.
    */
   async claimPendingPayments(): Promise<ClaimResult[]> {
-    const payments  = await this.wallet.listPaymentsRaw();
+    const payments = await this.wallet.listPaymentsRaw();
     const claimable = payments.filter((p) => {
       const s = String((p as any).status ?? '').toUpperCase();
       return s === 'CLAIMABLE' || s === 'CLAIMING';
@@ -451,13 +470,19 @@ export class UtexoLsp {
 
     const results: ClaimResult[] = [];
     for (const p of claimable) {
-      const hash     = String(this.raw(p, 'paymentHash',     'payment_hash')     ?? '');
-      const preimage = String(this.raw(p, 'paymentPreimage', 'payment_preimage') ?? '');
+      const hash = String(this.raw(p, 'paymentHash', 'payment_hash') ?? '');
+      const preimage = String(
+        this.raw(p, 'paymentPreimage', 'payment_preimage') ?? ''
+      );
       try {
         await this.wallet.claimHodlInvoice(hash, preimage);
         results.push({ paymentHash: hash, claimed: true });
       } catch (err: any) {
-        results.push({ paymentHash: hash, claimed: false, error: err?.message });
+        results.push({
+          paymentHash: hash,
+          claimed: false,
+          error: err?.message,
+        });
       }
     }
     return results;
@@ -474,11 +499,15 @@ export class UtexoLsp {
 
   private toChannelReadyInfo(c: RlnChannel): ChannelReadyInfo {
     return {
-      channelId:           String(this.raw(c, 'channelId',           'channel_id')           ?? ''),
-      peerPubkey:          this.peer.peerPubkey,
-      capacitySat:         Number(this.raw(c, 'capacitySat',         'capacity_sat')         ?? 0),
-      outboundBalanceMsat: Number(this.raw(c, 'outboundBalanceMsat', 'outbound_balance_msat') ?? 0),
-      inboundBalanceMsat:  Number(this.raw(c, 'inboundBalanceMsat',  'inbound_balance_msat')  ?? 0),
+      channelId: String(this.raw(c, 'channelId', 'channel_id') ?? ''),
+      peerPubkey: this.peer.peerPubkey,
+      capacitySat: Number(this.raw(c, 'capacitySat', 'capacity_sat') ?? 0),
+      outboundBalanceMsat: Number(
+        this.raw(c, 'outboundBalanceMsat', 'outbound_balance_msat') ?? 0
+      ),
+      inboundBalanceMsat: Number(
+        this.raw(c, 'inboundBalanceMsat', 'inbound_balance_msat') ?? 0
+      ),
     };
   }
 
@@ -495,8 +524,11 @@ export class UtexoLsp {
       const t = setTimeout(resolve, ms);
       signal?.addEventListener(
         'abort',
-        () => { clearTimeout(t); reject(new Error('UtexoLsp: aborted')); },
-        { once: true },
+        () => {
+          clearTimeout(t);
+          reject(new Error('UtexoLsp: aborted'));
+        },
+        { once: true }
       );
     });
   }

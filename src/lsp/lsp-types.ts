@@ -191,10 +191,12 @@ export type ReceiveStatus = 'Pending' | 'Succeeded' | 'Failed' | 'Expired';
 /** Result of awaitReceiveSettlement — distinct from wallet ReceiveStatus. */
 export type ReceiveSettlementOutcome = 'settled' | 'timed_out';
 
-export function normalizeReceiveStatus(raw: string | null | undefined): ReceiveStatus {
+export function normalizeReceiveStatus(
+  raw: string | null | undefined
+): ReceiveStatus {
   const s = (raw ?? '').toUpperCase();
   if (s === 'SUCCEEDED' || s === 'SETTLED') return 'Succeeded';
-  if (s === 'FAILED')  return 'Failed';
+  if (s === 'FAILED') return 'Failed';
   if (s === 'EXPIRED') return 'Expired';
   return 'Pending';
 }
@@ -250,4 +252,3 @@ export interface ApayNewResponse {
   lastHashIndex: number;
   hashes: ApayHashEntry[];
 }
-

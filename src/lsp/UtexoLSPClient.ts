@@ -65,14 +65,17 @@ export class LspError extends Error {
   }
 }
 
-function snakeCaseLnParams(ln: LspOnchainSendRequest['ln']): Record<string, unknown> {
+function snakeCaseLnParams(
+  ln: LspOnchainSendRequest['ln']
+): Record<string, unknown> {
   if (!ln) return {};
   const out: Record<string, unknown> = {};
   if (ln.amtMsat !== undefined) out.amt_msat = ln.amtMsat;
   if (ln.expirySec !== undefined) out.expiry_sec = ln.expirySec;
   if (ln.assetId !== undefined) out.asset_id = ln.assetId;
   if (ln.assetAmount !== undefined) out.asset_amount = ln.assetAmount;
-  if (ln.descriptionHash !== undefined) out.description_hash = ln.descriptionHash;
+  if (ln.descriptionHash !== undefined)
+    out.description_hash = ln.descriptionHash;
   if (ln.paymentHash !== undefined) out.payment_hash = ln.paymentHash;
   if (ln.minFinalCltvExpiryDelta !== undefined) {
     out.min_final_cltv_expiry_delta = ln.minFinalCltvExpiryDelta;
@@ -80,14 +83,17 @@ function snakeCaseLnParams(ln: LspOnchainSendRequest['ln']): Record<string, unkn
   return out;
 }
 
-function snakeCaseRgbParams(rgb: LspLightningReceiveRequest['rgb']): Record<string, unknown> {
+function snakeCaseRgbParams(
+  rgb: LspLightningReceiveRequest['rgb']
+): Record<string, unknown> {
   const out: Record<string, unknown> = {
     asset_id: rgb.assetId,
     min_confirmations: rgb.minConfirmations ?? 1,
     witness: !!rgb.witness,
   };
   if (rgb.assignment !== undefined) out.assignment = rgb.assignment;
-  if (rgb.durationSeconds !== undefined) out.duration_seconds = rgb.durationSeconds;
+  if (rgb.durationSeconds !== undefined)
+    out.duration_seconds = rgb.durationSeconds;
   return out;
 }
 
@@ -95,7 +101,9 @@ export class UtexoLSPClient implements IUtexoLSPClient {
   constructor(private readonly config: LspClientConfig) {}
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const url = path.startsWith('http') ? path : `${this.config.baseUrl}${path}`;
+    const url = path.startsWith('http')
+      ? path
+      : `${this.config.baseUrl}${path}`;
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (this.config.bearerToken) {
       headers['Authorization'] = `Bearer ${this.config.bearerToken}`;
@@ -104,12 +112,17 @@ export class UtexoLSPClient implements IUtexoLSPClient {
       headers['Content-Type'] = 'application/json';
     }
 
-    const signal = this.timeoutSignal(this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const signal = this.timeoutSignal(
+      this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    );
     let res: Response;
     try {
       res = await fetch(url, {
         ...init,
-        headers: { ...headers, ...(init?.headers as Record<string, string> ?? {}) },
+        headers: {
+          ...headers,
+          ...((init?.headers as Record<string, string>) ?? {}),
+        },
         signal,
       });
     } catch (err) {
@@ -123,14 +136,19 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     try {
       return JSON.parse(text) as T;
     } catch (err) {
-      throw new LspError(path, res.status, `invalid JSON: ${text.slice(0, 200)}`, err);
+      throw new LspError(
+        path,
+        res.status,
+        `invalid JSON: ${text.slice(0, 200)}`,
+        err
+      );
     }
   }
 
   private rewriteCallbackUrl(callbackUrl: string): string {
     try {
       const base = new URL(this.config.baseUrl);
-      const cb   = new URL(callbackUrl);
+      const cb = new URL(callbackUrl);
       return base.origin + cb.pathname + cb.search + cb.hash;
     } catch {
       return callbackUrl;
@@ -138,7 +156,10 @@ export class UtexoLSPClient implements IUtexoLSPClient {
   }
 
   private timeoutSignal(ms: number): AbortSignal | undefined {
-    if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
+    if (
+      typeof AbortSignal !== 'undefined' &&
+      typeof (AbortSignal as any).timeout === 'function'
+    ) {
       return (AbortSignal as any).timeout(ms);
     }
     if (typeof AbortController !== 'undefined') {
@@ -152,9 +173,9 @@ export class UtexoLSPClient implements IUtexoLSPClient {
   async getInfo(): Promise<LspGetInfoResponse> {
     const raw = await this.request<LspGetInfoWire>('/get_info');
     return {
-      pubkey:            raw.pubkey,
-      alias:             raw.alias,
-      numChannels:       raw.num_channels,
+      pubkey: raw.pubkey,
+      alias: raw.alias,
+      numChannels: raw.num_channels,
       numUsableChannels: raw.num_usable_channels,
     };
   }
@@ -174,7 +195,11 @@ export class UtexoLSPClient implements IUtexoLSPClient {
       `/.well-known/lnurlp/${encodeURIComponent(username)}`
     );
     if (!meta?.callback) {
-      throw new LspError('/.well-known/lnurlp', 200, 'missing callback in LNURL response');
+      throw new LspError(
+        '/.well-known/lnurlp',
+        200,
+        'missing callback in LNURL response'
+      );
     }
     const sep = meta.callback.includes('?') ? '&' : '?';
     let url = `${this.rewriteCallbackUrl(meta.callback)}${sep}amount=${amtMsat}`;
@@ -255,9 +280,9 @@ export class UtexoLSPClient implements IUtexoLSPClient {
     // utexo-lsp returns snake_case keys — map explicitly
     // (request<T>() does a plain JSON.parse with no transform).
     return {
-      lnInvoice:  raw.ln_invoice,
+      lnInvoice: raw.ln_invoice,
       rgbInvoice: raw.rgb_invoice,
-      mappingId:  String(raw.mapping_id),
+      mappingId: String(raw.mapping_id),
     };
   }
 
@@ -276,14 +301,17 @@ export class UtexoLSPClient implements IUtexoLSPClient {
       ln_invoice: params.lnInvoice,
       rgb_invoice: snakeCaseRgbParams(params.rgb),
     };
-    const raw = await this.request<LspLightningReceiveWire>('/lightning_receive', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
+    const raw = await this.request<LspLightningReceiveWire>(
+      '/lightning_receive',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }
+    );
     return {
-      lnInvoice:  raw.ln_invoice,
+      lnInvoice: raw.ln_invoice,
       rgbInvoice: raw.rgb_invoice,
-      mappingId:  String(raw.mapping_id),
+      mappingId: String(raw.mapping_id),
     };
   }
 }

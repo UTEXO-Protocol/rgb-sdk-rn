@@ -50,7 +50,6 @@ import type {
   OnchainReceiveResponse,
   OnchainSendRequestModel,
   OnchainSendResponse,
-  OnchainSendStatus,
   TransferStatus as CoreTransferStatus,
   BitcoinNetwork,
 } from '@utexo/rgb-sdk-core';
@@ -1015,10 +1014,6 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       decoded.transportEndpoints,
       params.witnessData ?? null
     );
-  }
-
-  getOnchainSendStatus(_send_id: string): Promise<OnchainSendStatus | null> {
-    throw new Error('UTEXOWallet.getOnchainSendStatus: not implemented');
   }
 
   async listOnchainTransfers(asset_id?: string): Promise<Transfer[]> {

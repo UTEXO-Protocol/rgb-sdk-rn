@@ -118,15 +118,10 @@ export {
   getDestinationAsset,
   DEFAULT_TRANSPORT_ENDPOINTS,
   DEFAULT_INDEXER_URLS,
-  // Bridge API
-  getBridgeAPI,
-  encodeTransferStatus,
-  TransferStatuses,
   // Interfaces / base classes
   UTEXOProtocol,
   LightningProtocol,
   OnchainProtocol,
-  UTEXOWalletCore,
   BaseWalletManager,
 } from '@utexo/rgb-sdk-core';
 
@@ -173,7 +168,6 @@ export type {
   VssBackupInfo,
   WalletBackupResponse,
   TransferStatus,
-  OnchainSendStatus,
   PublicKeys,
   CreateLightningInvoiceRequestModel,
   LightningReceiveRequest,
@@ -186,9 +180,4 @@ export type {
   OnchainReceiveResponse,
   ListLightningPaymentsResponse,
   GetFeeEstimationResponse,
-  // Bridge types
-  NetworkAddress,
-  BridgeInSignatureRequest,
-  BridgeInSignatureResponse,
-  TransferByMainnetInvoiceResponse,
 } from '@utexo/rgb-sdk-core';

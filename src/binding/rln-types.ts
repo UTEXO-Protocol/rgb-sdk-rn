@@ -8,7 +8,6 @@ export type {
   OnchainReceiveResponse,
   OnchainSendRequestModel,
   OnchainSendResponse,
-  OnchainSendStatus,
   SendAssetEndRequestModel,
   TransferStatus,
   Transfer,

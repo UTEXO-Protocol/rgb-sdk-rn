@@ -176,6 +176,7 @@ export type {
   TransferStatus,
   PublicKeys,
   CreateLightningInvoiceRequestModel,
+  GetLightningSendFeeEstimateRequestModel,
   LightningReceiveRequest,
   LightningSendRequest,
   PayLightningInvoiceRequestModel,

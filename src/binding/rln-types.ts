@@ -1,19 +1,7 @@
-export type {
-  CreateLightningInvoiceRequestModel,
-  LightningReceiveRequest,
-  GetLightningSendFeeEstimateRequestModel,
-  PayLightningInvoiceRequestModel,
-  LightningSendRequest,
-  OnchainReceiveRequestModel,
-  OnchainReceiveResponse,
-  OnchainSendRequestModel,
-  OnchainSendResponse,
-  SendAssetEndRequestModel,
-  TransferStatus,
-  Transfer,
-  ListLightningPaymentsResponse,
-} from '@utexo/rgb-sdk-core';
-
+// UniFFI wire types — the binding contract.
+//
+// Only `Rln*` shapes live here. Shared model types come from
+// @utexo/rgb-sdk-core; import them from there, not through this module.
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
 export interface RlnBtcSubBalance {

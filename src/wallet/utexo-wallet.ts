@@ -1,6 +1,8 @@
 import type {
   IWalletManager,
   IUTEXOProtocol,
+  IUTEXOWallet,
+  UTEXOWalletCreateParams,
   Network,
   BtcBalance,
   Balance,
@@ -44,7 +46,6 @@ import type {
   LightningSendRequest,
   ListLightningPaymentsResponse,
   CreateLightningInvoiceRequestModel,
-  GetLightningSendFeeEstimateRequestModel,
   PayLightningInvoiceRequestModel,
   OnchainReceiveRequestModel,
   OnchainReceiveResponse,
@@ -66,10 +67,6 @@ import {
   resolveUnlockParams,
 } from './network-defaults';
 import type {
-  RlnNetworkInfo,
-  RlnPeer,
-  RlnOpenChannelResponse,
-  RlnKeysendResponse,
   RlnCheckIndexerUrlResponse,
   RlnBtcBalance,
   RlnAssetBalance,
@@ -94,6 +91,11 @@ import type {
   LightningPayment,
   LightningInvoice,
   DecodedLnInvoice,
+  OpenChannelParams,
+  OpenChannelResult,
+  LightningNetworkInfo,
+  LightningPeer,
+  SendPaymentResult,
 } from '@utexo/rgb-sdk-core';
 import type {
   RlnPaymentStatus,
@@ -111,43 +113,27 @@ import {
   toLightningPayment,
   toLightningInvoice,
   toDecodedLnInvoice,
+  toLightningNetworkInfo,
+  toLightningPeer,
+  toSendPaymentResult,
 } from '../binding/mappers';
-
-// ── Extended send request models ─────────────────────────────────────────────
-// These extend the core interfaces with RLN-specific fields without modifying core.
-
-export interface RlnOnchainReceiveRequestModel extends OnchainReceiveRequestModel {
-  witness?: boolean;
-}
-
-export interface RlnSendAssetRequestModel extends SendAssetBeginRequestModel {
-  skipSync?: boolean;
-}
-
-export interface RlnOnchainSendRequestModel extends OnchainSendRequestModel {
-  witnessData?: { amountSat: number; blinding?: number };
-  donation?: boolean;
-  feeRate?: number;
-  minConfirmations?: number;
-  skipSync?: boolean;
-}
-
-export interface RlnCreateLightningInvoiceRequestModel extends Omit<
-  CreateLightningInvoiceRequestModel,
-  'asset'
-> {
-  /** Omit for a plain BTC invoice — RLN supports asset-less BOLT11 invoices
-   *  (core types `asset` as required, but the runtime maps absence to null). */
-  asset?: CreateLightningInvoiceRequestModel['asset'];
-}
 
 // ── Constructor params ────────────────────────────────────────────────────────
 
-export interface UTEXOWalletNodeParams {
+/**
+ * RN wallet params — the shared contract plus RN-only extras.
+ *
+ * `mnemonic` and `password` are deliberately Omit-ted from the shared params:
+ * on RN those credentials live in the signer (a required second constructor
+ * argument), not in the plain config object. Omitting them here states that
+ * split in the type rather than leaving two places that could disagree.
+ */
+export interface UTEXOWalletNodeParams
+  extends Omit<UTEXOWalletCreateParams, 'mnemonic' | 'password'> {
   storageDirPath: string;
   daemonListeningPort: number;
   ldkPeerListeningPort: number;
-  network: string;
+  network: BitcoinNetwork;
   maxMediaUploadSizeMb?: number;
   enableVirtualChannelsV0?: boolean;
   virtualPeerPubkeys?: string[] | null;
@@ -387,7 +373,9 @@ function mapInvoiceData(
 
 // ── UTEXOWallet ────────────────────────────────────────────────────────────
 
-export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
+export class UTEXOWallet
+  implements IWalletManager, IUTEXOProtocol, IUTEXOWallet
+{
   private rln: RLNManager;
   private readonly params: UTEXOWalletNodeParams;
   private readonly signer: IRLNSigner;
@@ -588,7 +576,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   async send(
-    params: RlnSendAssetRequestModel,
+    params: SendAssetBeginRequestModel,
     _mnemonic?: string
   ): Promise<SendResult> {
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
@@ -699,11 +687,11 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     throw new Error('UTEXOWallet.disableVssAutoBackup: not implemented');
   }
 
-  vssBackup(_config: VssBackupConfig): Promise<number> {
+  vssBackup(_config?: VssBackupConfig): Promise<number> {
     throw new Error('UTEXOWallet.vssBackup: not implemented');
   }
 
-  vssBackupInfo(_config: VssBackupConfig): Promise<VssBackupInfo> {
+  vssBackupInfo(_config?: VssBackupConfig): Promise<VssBackupInfo> {
     throw new Error('UTEXOWallet.vssBackupInfo: not implemented');
   }
 
@@ -752,7 +740,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
 
   async createLightningInvoice(
-    params: RlnCreateLightningInvoiceRequestModel & {
+    params: CreateLightningInvoiceRequestModel & {
       paymentHash?: string | null;
       minFinalCltvExpiryDelta?: number | null;
     }
@@ -955,23 +943,8 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return tryNormalizePaymentStatus(payment.status);
   }
 
-  getLightningSendFeeEstimate(
-    _params: GetLightningSendFeeEstimateRequestModel
-  ): Promise<number> {
-    throw new Error('UTEXOWallet.getLightningSendFeeEstimate: not implemented');
-  }
 
-  payLightningInvoiceBegin(
-    _params: PayLightningInvoiceRequestModel
-  ): Promise<string> {
-    throw new Error('UTEXOWallet.payLightningInvoiceBegin: not implemented');
-  }
 
-  payLightningInvoiceEnd(
-    _params: SendAssetEndRequestModel
-  ): Promise<LightningSendRequest> {
-    throw new Error('UTEXOWallet.payLightningInvoiceEnd: not implemented');
-  }
 
   async payLightningInvoice(
     params: PayLightningInvoiceRequestModel & { assetAmount?: number }
@@ -999,7 +972,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   // ── IUTEXOProtocol — Onchain ──────────────────────────────────────────────
 
   async onchainReceive(
-    params: RlnOnchainReceiveRequestModel
+    params: OnchainReceiveRequestModel
   ): Promise<OnchainReceiveResponse> {
     const resp = await this.rln.rlnRgbInvoice(
       params.assetId ?? null,
@@ -1008,7 +981,14 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
       params.minConfirmations ?? 0,
       params.witness ?? true
     );
-    return { invoice: resp.invoice };
+    // Full receive data — the node already returns it; the older shape
+    // discarded everything but the invoice.
+    return {
+      invoice: resp.invoice,
+      recipientId: resp.recipientId,
+      expirationTimestamp: resp.expirationTimestamp ?? null,
+      batchTransferIdx: resp.batchTransferIdx,
+    };
   }
 
   onchainSendBegin(_params: OnchainSendRequestModel): Promise<string> {
@@ -1022,7 +1002,7 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   }
 
   async onchainSend(
-    params: RlnOnchainSendRequestModel
+    params: OnchainSendRequestModel
   ): Promise<OnchainSendResponse> {
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
@@ -1053,16 +1033,16 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   }
 
 
-  getNetworkInfo(): Promise<RlnNetworkInfo> {
-    return this.rln.rlnNetworkInfo();
+  async getNetworkInfo(): Promise<LightningNetworkInfo> {
+    return toLightningNetworkInfo(await this.rln.rlnNetworkInfo());
   }
 
   connectPeer(peerPubkeyAndAddr: string): Promise<void> {
     return this.rln.rlnConnectPeer(peerPubkeyAndAddr);
   }
 
-  listPeers(): Promise<RlnPeer[]> {
-    return this.rln.rlnListPeers();
+  async listPeers(): Promise<LightningPeer[]> {
+    return (await this.rln.rlnListPeers()).map(toLightningPeer);
   }
 
   disconnectPeer(peerPubkey: string): Promise<void> {
@@ -1074,10 +1054,24 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
   }
 
 
-  openChannel(
-    request: Parameters<RLNManager['rlnOpenChannel']>[0]
-  ): Promise<RlnOpenChannelResponse> {
-    return this.rln.rlnOpenChannel(request);
+  async openChannel(params: OpenChannelParams): Promise<OpenChannelResult> {
+    const resp = await this.rln.rlnOpenChannel({
+      peerPubkeyAndOptAddr: params.peerPubkey,
+      capacitySat: Number(params.capacitySat),
+      pushMsat: Number(params.pushMsat ?? 0),
+      public: params.isPublic,
+      withAnchors: params.withAnchors ?? true,
+      feeBaseMsat: params.feeBaseMsat ?? null,
+      feeProportionalMillionths: params.feeProportionalMillionths ?? null,
+      temporaryChannelId: params.temporaryChannelId ?? null,
+      assetId: params.assetId ?? null,
+      assetAmount:
+        params.assetLocalAmount != null ? Number(params.assetLocalAmount) : null,
+      pushAssetAmount:
+        params.pushAssetAmount != null ? Number(params.pushAssetAmount) : null,
+      virtualOpenMode: params.virtualOpenMode ?? null,
+    });
+    return { temporaryChannelId: resp.temporaryChannelId };
   }
 
   closeChannel(
@@ -1092,17 +1086,19 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.rln.rlnGetChannelId(temporaryChannelId);
   }
 
-  keysend(
+  async keysend(
     destPubkey: string,
     amtMsat: number,
     assetId?: string,
     assetAmount?: number
-  ): Promise<RlnKeysendResponse> {
-    return this.rln.rlnKeysend(
-      destPubkey,
-      amtMsat,
-      assetId ?? null,
-      assetAmount ?? null
+  ): Promise<SendPaymentResult> {
+    return toSendPaymentResult(
+      await this.rln.rlnKeysend(
+        destPubkey,
+        amtMsat,
+        assetId ?? null,
+        assetAmount ?? null
+      )
     );
   }
 
@@ -1132,7 +1128,14 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
    * locked (before unlock) to recover from an unclean shutdown that left a
    * stale fence blocking re-initialization.
    */
-  vssClearFence(password: string): Promise<void> {
+  vssClearFence(password?: string): Promise<void> {
+    // Optional in the shared contract (web's node-internal fence takes none);
+    // the native module requires one, so fail loudly rather than pass undefined.
+    if (password == null) {
+      throw new Error(
+        'UTEXOWallet.vssClearFence: password is required on React Native'
+      );
+    }
     return this.rln.rlnVssClearFence(password);
   }
 

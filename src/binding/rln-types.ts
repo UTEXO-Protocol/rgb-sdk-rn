@@ -73,12 +73,12 @@ export interface RlnPeer {
 // ── Channels ──────────────────────────────────────────────────────────────────
 
 /** Canonical SCREAMING_SNAKE — normalized at the RLNBinding boundary. */
-export type RlnChannelStatus = 'OPENING' | 'OPENED' | 'CLOSING';
+export type RlnChannelStatusWire = 'OPENING' | 'OPENED' | 'CLOSING';
 
 export interface RlnChannel {
   channelId: string;
   peerPubkey: string;
-  status?: RlnChannelStatus;
+  status?: RlnChannelStatusWire;
   ready: boolean;
   capacitySat: number;
   isUsable?: boolean;
@@ -104,7 +104,7 @@ export interface RlnOpenChannelResponse {
 // ── Payments ──────────────────────────────────────────────────────────────────
 
 export type RlnPaymentType = 'Outbound' | 'InboundAutoClaim' | 'InboundHodl';
-export type RlnPaymentStatus =
+export type RlnPaymentStatusWire =
   | 'Pending'
   | 'Claimable'
   | 'Claiming'
@@ -115,7 +115,7 @@ export type RlnPaymentStatus =
 export interface RlnPayment {
   paymentHash: string;
   paymentType?: RlnPaymentType;
-  status?: RlnPaymentStatus;
+  status?: RlnPaymentStatusWire;
   createdAt: number;
   updatedAt: number;
   payeePubkey: string;
@@ -129,16 +129,16 @@ export interface RlnSendPaymentResponse {
   paymentId: string;
   paymentHash?: string;
   paymentSecret?: string;
-  status: RlnPaymentStatus;
+  status: RlnPaymentStatusWire;
 }
 
 export interface RlnKeysendResponse {
   paymentHash: string;
   paymentPreimage: string;
-  status: RlnPaymentStatus;
+  status: RlnPaymentStatusWire;
 }
 
-export type RlnInvoiceStatus =
+export type RlnInvoiceStatusWire =
   | 'PENDING'
   | 'CLAIMABLE'
   | 'CLAIMING'

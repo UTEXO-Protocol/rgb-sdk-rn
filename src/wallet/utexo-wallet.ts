@@ -51,7 +51,6 @@ import type {
   GetFeeEstimationResponse,
   OnchainSendRequestModel,
   OnchainSendResponse,
-  TransferStatus as CoreTransferStatus,
   BitcoinNetwork,
 } from '@utexo/rgb-sdk-core';
 import type { EstimateFeeResult } from '@utexo/rgb-sdk-core';
@@ -67,14 +66,10 @@ import {
   resolveUnlockParams,
 } from './network-defaults';
 import type {
-  RlnNodeInfo,
   RlnNetworkInfo,
   RlnPeer,
-  RlnChannel,
   RlnOpenChannelResponse,
   RlnKeysendResponse,
-  RlnInvoiceStatus,
-  RlnDecodeLnInvoiceResponse,
   RlnCheckIndexerUrlResponse,
   RlnBtcBalance,
   RlnAssetBalance,
@@ -88,17 +83,35 @@ import type {
   RlnTransaction,
   RlnTransfer,
   RlnUnspent,
-  RlnPayment,
 } from '../binding/rln-types';
 import type {
   CreateHodlInvoiceParams,
-  HodlInvoice,
   HodlInvoiceResult,
   ApayNewResponse,
   LspPeer,
-} from '../lsp/lsp-types';
-import { UtexoLsp } from '../lsp/UtexoLsp';
-import { UtexoLSPClient } from '../lsp/UtexoLSPClient';
+  LightningChannel,
+  LightningNodeInfo,
+  LightningPayment,
+  LightningInvoice,
+  DecodedLnInvoice,
+} from '@utexo/rgb-sdk-core';
+import type {
+  RlnPaymentStatus,
+  RlnInvoiceStatus,
+} from '@utexo/rgb-sdk-core';
+import {
+  normalizeInvoiceStatus,
+  tryNormalizePaymentStatus,
+} from '@utexo/rgb-sdk-core';
+import { UtexoLsp } from '@utexo/rgb-sdk-core';
+import { UtexoLSPClient } from '@utexo/rgb-sdk-core';
+import {
+  toLightningChannel,
+  toLightningNodeInfo,
+  toLightningPayment,
+  toLightningInvoice,
+  toDecodedLnInvoice,
+} from '../binding/mappers';
 
 // ── Extended send request models ─────────────────────────────────────────────
 // These extend the core interfaces with RLN-specific fields without modifying core.
@@ -371,23 +384,6 @@ function mapInvoiceData(
   };
 }
 
-function mapInvoiceStatus(s: RlnInvoiceStatus): CoreTransferStatus | null {
-  switch (s) {
-    case 'PENDING':
-      return 'WaitingCounterparty';
-    case 'CLAIMABLE':
-    case 'CLAIMING':
-      return 'WaitingConfirmations';
-    case 'SUCCEEDED':
-      return 'Settled';
-    case 'CANCELLED':
-    case 'FAILED':
-    case 'EXPIRED':
-      return 'Failed';
-    default:
-      return null;
-  }
-}
 
 // ── UTEXOWallet ────────────────────────────────────────────────────────────
 
@@ -777,16 +773,22 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   async createHodlInvoice(
     params: CreateHodlInvoiceParams
-  ): Promise<HodlInvoice> {
+  ): Promise<LightningInvoice> {
     const resp = await this.rln.rlnLnInvoice(
-      params.amtMsat ?? null,
+      params.amtMsat != null ? Number(params.amtMsat) : null,
       params.expirySec,
       params.assetId ?? null,
-      params.assetAmount ?? null,
+      params.assetAmount != null ? Number(params.assetAmount) : null,
       params.paymentHash,
       params.minFinalCltvExpiryDelta ?? null
     );
-    return { bolt11: resp.invoice, paymentHash: params.paymentHash };
+    return toLightningInvoice(resp, {
+      paymentHash: params.paymentHash,
+      expirySeconds: params.expirySec,
+      amtMsat: params.amtMsat,
+      assetId: params.assetId,
+      assetAmount: params.assetAmount,
+    });
   }
 
   async claimHodlInvoice(
@@ -802,9 +804,11 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return { changed: true };
   }
 
-  async listPaymentsRaw(): Promise<RlnPayment[]> {
-    return this.rln.rlnListPayments();
+  /** Payments in the canonical domain shape (part of the shared contract). */
+  async listPayments(): Promise<LightningPayment[]> {
+    return (await this.rln.rlnListPayments()).map(toLightningPayment);
   }
+
 
   async apayNew(hostNodeId: string): Promise<ApayNewResponse> {
     const raw = await this.rln.rlnApayNew(hostNodeId);
@@ -927,28 +931,28 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     };
   }
 
-  async getLightningReceiveRequest(
-    id: string
-  ): Promise<CoreTransferStatus | null> {
-    const status = await this.rln.rlnInvoiceStatus(id);
-    return mapInvoiceStatus(status);
+
+
+  /**
+   * Canonical inbound LN status, in the node's own vocabulary.
+   *
+   * Lightning and RGB on-chain statuses are deliberately separate: an invoice
+   * is never reported as `WaitingCounterparty`/`Settled` (RGB consignment
+   * states with no Lightning meaning). Apps that want one unified column fold
+   * these in their own UI layer.
+   */
+  async getLightningReceiveStatus(id: string): Promise<RlnInvoiceStatus> {
+    return normalizeInvoiceStatus(await this.rln.rlnInvoiceStatus(id));
   }
 
-  async getLightningSendRequest(
-    id: string
-  ): Promise<CoreTransferStatus | null> {
+  /**
+   * Canonical outbound LN status. `null` when the payment hash is unknown to
+   * the node.
+   */
+  async getLightningSendStatus(id: string): Promise<RlnPaymentStatus | null> {
     const payment = await this.rln.rlnGetPayment(id);
     if (!payment?.status) return null;
-    // Native layer serializes enum with .name / .uppercased() → always UPPERCASE
-    const map: Record<string, CoreTransferStatus> = {
-      PENDING: 'WaitingCounterparty',
-      CLAIMABLE: 'WaitingConfirmations',
-      CLAIMING: 'WaitingConfirmations',
-      SUCCEEDED: 'Settled',
-      CANCELLED: 'Failed',
-      FAILED: 'Failed',
-    };
-    return map[String(payment.status).toUpperCase()] ?? null;
+    return tryNormalizePaymentStatus(payment.status);
   }
 
   getLightningSendFeeEstimate(
@@ -1044,9 +1048,10 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
 
   // ── RLN-specific extras ───────────────────────────────────────────────────
 
-  getNodeInfo(): Promise<RlnNodeInfo> {
-    return this.rln.rlnNodeInfo();
+  async getNodeInfo(): Promise<LightningNodeInfo> {
+    return toLightningNodeInfo(await this.rln.rlnNodeInfo());
   }
+
 
   getNetworkInfo(): Promise<RlnNetworkInfo> {
     return this.rln.rlnNetworkInfo();
@@ -1064,9 +1069,10 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     return this.rln.rlnDisconnectPeer(peerPubkey);
   }
 
-  listChannels(): Promise<RlnChannel[]> {
-    return this.rln.rlnListChannels();
+  async listChannels(): Promise<LightningChannel[]> {
+    return (await this.rln.rlnListChannels()).map(toLightningChannel);
   }
+
 
   openChannel(
     request: Parameters<RLNManager['rlnOpenChannel']>[0]
@@ -1100,13 +1106,16 @@ export class UTEXOWallet implements IWalletManager, IUTEXOProtocol {
     );
   }
 
-  decodeLnInvoice(invoice: string): Promise<RlnDecodeLnInvoiceResponse> {
-    return this.rln.rlnDecodeLnInvoice(invoice);
+  async decodeLnInvoice(invoice: string): Promise<DecodedLnInvoice> {
+    return toDecodedLnInvoice(await this.rln.rlnDecodeLnInvoice(invoice));
   }
 
-  invoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
-    return this.rln.rlnInvoiceStatus(invoice);
+
+  /** Canonical invoice status (PascalCase) — normalized from the wire enum. */
+  async invoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
+    return normalizeInvoiceStatus(await this.rln.rlnInvoiceStatus(invoice));
   }
+
 
   checkIndexerUrl(url: string): Promise<RlnCheckIndexerUrlResponse> {
     return this.rln.rlnCheckIndexerUrl(url);

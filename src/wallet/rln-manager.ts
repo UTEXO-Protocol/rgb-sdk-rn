@@ -14,7 +14,7 @@ import type {
   RlnPayment,
   RlnSendPaymentResponse,
   RlnKeysendResponse,
-  RlnInvoiceStatus,
+  RlnInvoiceStatusWire,
   RlnLnInvoiceResponse,
   RlnDecodeLnInvoiceResponse,
   RlnDecodeRgbInvoiceResponse,
@@ -181,7 +181,7 @@ export class RLNManager implements IRLN {
     return this.rlnBinding.rlnGetPayment(paymentHash);
   }
 
-  rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
+  rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatusWire> {
     return this.rlnBinding.rlnInvoiceStatus(invoice);
   }
 

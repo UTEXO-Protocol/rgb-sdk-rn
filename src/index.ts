@@ -30,10 +30,22 @@ export type {
   IRLNExternalSignerBootstrap,
 } from './binding/IRLN';
 
-// LSP client + types (temporary in rgb-sdk-rn; moves to @utexo/rgb-sdk-core next release)
-export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
-export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
+// ── LSP (utexo-lsp) ──────────────────────────────────────────────────────────
+// Now lives in @utexo/rgb-sdk-core (was duplicated here and in rgb-sdk-web).
+// Re-exported so this package's public API is unchanged.
+export {
+  UtexoLSPClient,
+  LspError,
+  UtexoLsp,
+  LspChannelTimeoutError,
+  LspLiquidityTimeoutError,
+  LspSettlementError,
+  normalizeReceiveStatus,
+  peerUri,
+} from '@utexo/rgb-sdk-core';
 export type {
+  IUtexoLSPClient,
+  ILspWallet,
   LspClientConfig,
   LspGetInfoResponse,
   LspLnParams,
@@ -45,23 +57,15 @@ export type {
   LspLnurlpCallbackResponse,
   LspLightningAddressByPubkeyResponse,
   CreateHodlInvoiceParams,
-  HodlInvoice,
   HodlInvoiceResult,
   ApayHashEntry,
   ApayNewResponse,
   ApayInvoiceProof,
   ApayMerkleProofElement,
-  // New LSP types
   LspPeer,
   ReceiveStatus,
   ReceiveSettlementOutcome,
   ChannelReadyInfo,
-} from './lsp/lsp-types';
-export { normalizeReceiveStatus, peerUri } from './lsp/lsp-types';
-
-// UtexoLsp — composed LSP flows (connect, channel wait, receive, send, pay address, APay)
-export { UtexoLsp } from './lsp/UtexoLsp';
-export type {
   WaitOptions,
   ReceiveAssetOptions,
   ReceiveAssetResult,
@@ -70,8 +74,7 @@ export type {
   PayAddressOptions,
   LightningAddressInfo,
   ClaimResult,
-} from './lsp/UtexoLsp';
-export { LspChannelTimeoutError, LspSettlementError } from './lsp/LspErrors';
+} from '@utexo/rgb-sdk-core';
 
 // Crypto — PSBT signing stubs (bdk-rn removed; throws — use NativeExternalRLNSigner for PSBT)
 export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';

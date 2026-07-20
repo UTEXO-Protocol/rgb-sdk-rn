@@ -7,7 +7,7 @@ import type {
   RlnPayment,
   RlnSendPaymentResponse,
   RlnKeysendResponse,
-  RlnInvoiceStatus,
+  RlnInvoiceStatusWire,
   RlnLnInvoiceResponse,
   RlnDecodeLnInvoiceResponse,
   RlnDecodeRgbInvoiceResponse,
@@ -142,7 +142,7 @@ export interface IRLN {
 
   rlnListPayments(): Promise<RlnPayment[]>;
   rlnGetPayment(paymentHash: string): Promise<RlnPayment>;
-  rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatus>;
+  rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatusWire>;
 
   rlnLnInvoice(
     amtMsat: number | null,

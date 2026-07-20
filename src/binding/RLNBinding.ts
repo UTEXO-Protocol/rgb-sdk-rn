@@ -15,7 +15,7 @@ import type {
   RlnPayment,
   RlnSendPaymentResponse,
   RlnKeysendResponse,
-  RlnInvoiceStatus,
+  RlnInvoiceStatusWire,
   RlnLnInvoiceResponse,
   RlnDecodeLnInvoiceResponse,
   RlnDecodeRgbInvoiceResponse,
@@ -422,15 +422,15 @@ export class RLNBinding implements IRLN {
     ) as Promise<RlnPayment>;
   }
 
-  async rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
+  async rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatusWire> {
     const raw = await this.withNodeOperation((nodeId) =>
       Rgb.rlnInvoiceStatus(nodeId, invoice)
     );
     const status = (raw as any)?.value ?? raw;
     // Android (Kotlin) serializes the uniffi enum as "SUCCEEDED" while iOS
     // (Swift) interpolates the case name as "succeeded" — normalize here so
-    // every status consumer sees the UPPERCASE contract of RlnInvoiceStatus.
-    return String(status).toUpperCase() as RlnInvoiceStatus;
+    // every status consumer sees the UPPERCASE contract of RlnInvoiceStatusWire.
+    return String(status).toUpperCase() as RlnInvoiceStatusWire;
   }
 
   async rlnLnInvoice(
@@ -512,7 +512,7 @@ export class RLNBinding implements IRLN {
     )) as RlnSendPaymentResponse;
     // Android (Kotlin) serializes HtlcStatus as "PENDING" while iOS (Swift)
     // interpolates the case name as "pending" — normalize to the UPPERCASE
-    // contract of RlnPaymentStatus.
+    // contract of RlnPaymentStatusWire.
     return {
       ...raw,
       status: String(

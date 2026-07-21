@@ -27,6 +27,7 @@ import type {
   RlnListAssetsResponse,
   RlnRgbInvoiceResponse,
   RlnSendRgbResponse,
+  RlnInflateResponse,
   RlnTransaction,
   RlnTransfer,
   RlnUnspent,
@@ -345,6 +346,20 @@ export class RLNManager implements IRLN {
       amounts,
       inflationAmounts,
       rejectListUrl
+    );
+  }
+
+  rlnInflate(
+    assetId: string,
+    inflationAmounts: number[],
+    feeRate: number,
+    minConfirmations: number
+  ): Promise<RlnInflateResponse> {
+    return this.rlnBinding.rlnInflate(
+      assetId,
+      inflationAmounts,
+      feeRate,
+      minConfirmations
     );
   }
 

@@ -1287,6 +1287,40 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
+  /// Atomic IFA inflation — the node signs internally, so there is no
+  /// begin/end PSBT pair (contrast rgb-sdk-web, which has an rgb-lib wallet).
+  ///
+  /// `feeRate` arrives as an NSNumber for bridge symmetry with `_rlnSendRgb`,
+  /// but `InflateRequest.feeRate` is a `UInt64` — fractional rates truncate,
+  /// exactly as they do in `_rlnSendRgb`.
+  @objc(_rlnInflate:assetId:inflationAmounts:feeRate:minConfirmations:)
+  public static func _rlnInflate(
+    _ nodeId: NSNumber,
+    _ assetId: String,
+    _ inflationAmounts: NSArray,
+    _ feeRate: NSNumber,
+    _ minConfirmations: NSNumber
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      var inflationList: [UInt64] = []
+      for amount in inflationAmounts {
+        if let n = amount as? NSNumber { inflationList.append(n.uint64Value) }
+      }
+      let res = try node.inflate(request: InflateRequest(
+        assetId: assetId,
+        inflationAmounts: inflationList,
+        feeRate: feeRate.uint64Value,
+        minConfirmations: minConfirmations.uint8Value
+      ))
+      return ["txid": res.txid] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
   @objc(_rlnIssueAssetIfa:ticker:name:precision:amounts:inflationAmounts:rejectListUrl:)
   public static func _rlnIssueAssetIfa(
     _ nodeId: NSNumber,

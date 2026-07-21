@@ -1,7 +1,7 @@
 import type {
-  IWalletManager,
-  IUTEXOProtocol,
   IUTEXOWallet,
+  WalletCapabilities,
+  CreateLnInvoiceRequest,
   UTEXOWalletCreateParams,
   Network,
   BtcBalance,
@@ -28,24 +28,13 @@ import type {
   InvoiceData,
   IssueAssetNiaRequestModel,
   IssueAssetIfaRequestModel,
-  SendAssetBeginRequestModel,
-  SendAssetEndRequestModel,
-  SendResult,
-  OperationResult,
   InflateAssetIfaRequestModel,
-  InflateEndRequestModel,
   SendBtcBeginRequestModel,
-  SendBtcEndRequestModel,
   FailTransfersRequest,
   WalletBackupResponse,
-  VssBackupConfig,
-  VssBackupInfo,
-  CreateUtxosBeginRequestModel,
-  CreateUtxosEndRequestModel,
   LightningReceiveRequest,
   LightningSendRequest,
   ListLightningPaymentsResponse,
-  CreateLightningInvoiceRequestModel,
   PayLightningInvoiceRequestModel,
   OnchainReceiveRequestModel,
   OnchainReceiveResponse,
@@ -54,7 +43,6 @@ import type {
   OnchainSendResponse,
   BitcoinNetwork,
 } from '@utexo/rgb-sdk-core';
-import type { EstimateFeeResult } from '@utexo/rgb-sdk-core';
 import { AssetSchema } from '@utexo/rgb-sdk-core';
 
 import { RLNManager, createRLNManager } from './rln-manager';
@@ -97,10 +85,7 @@ import type {
   LightningPeer,
   SendPaymentResult,
 } from '@utexo/rgb-sdk-core';
-import type {
-  RlnPaymentStatus,
-  RlnInvoiceStatus,
-} from '@utexo/rgb-sdk-core';
+import type { RlnPaymentStatus, RlnInvoiceStatus } from '@utexo/rgb-sdk-core';
 import {
   normalizeInvoiceStatus,
   tryNormalizePaymentStatus,
@@ -128,8 +113,10 @@ import {
  * argument), not in the plain config object. Omitting them here states that
  * split in the type rather than leaving two places that could disagree.
  */
-export interface UTEXOWalletNodeParams
-  extends Omit<UTEXOWalletCreateParams, 'mnemonic' | 'password'> {
+export interface UTEXOWalletNodeParams extends Omit<
+  UTEXOWalletCreateParams,
+  'mnemonic' | 'password'
+> {
   storageDirPath: string;
   daemonListeningPort: number;
   ldkPeerListeningPort: number;
@@ -389,12 +376,34 @@ function mapInvoiceData(
   };
 }
 
-
 // ── UTEXOWallet ────────────────────────────────────────────────────────────
 
-export class UTEXOWallet
-  implements IWalletManager, IUTEXOProtocol, IUTEXOWallet
-{
+export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
+  /**
+   * All three optional groups are **absent** on this platform, so the carrier
+   * properties are simply not present — there is nothing to call, and the
+   * compiler says so at the call site. This replaces the previous approach of
+   * declaring the methods and throwing.
+   *
+   * The absences are architectural, not unfinished work: web bundles an rgb-lib
+   * wallet in wasm *plus* the RLN node, while this SDK has only the node. No
+   * second engine means no PSBT to hand out (`psbt`), no externally-signed
+   * begin/end flows (`beginEnd`), and one state store that the node replicates
+   * itself rather than two needing manual backup (`vss`). See §2.7a.
+   */
+  readonly psbt = undefined;
+  readonly beginEnd = undefined;
+  readonly vss = undefined;
+
+  /** Derived from carrier presence, so it cannot drift from reality. */
+  get capabilities(): WalletCapabilities {
+    return {
+      psbtSigning: this.psbt !== undefined,
+      beginEndFlows: this.beginEnd !== undefined,
+      vssBackup: this.vss !== undefined,
+    };
+  }
+
   private rln: RLNManager;
   private readonly params: UTEXOWalletNodeParams;
   private readonly signer: IRLNSigner;
@@ -467,18 +476,10 @@ export class UTEXOWallet
     return this.init();
   }
 
-  goOnline(
-    _indexerUrl: string,
-    _skipConsistencyCheck?: boolean
-  ): Promise<void> {
-    throw new Error(
-      'UTEXOWallet.goOnline: not implemented — use unlock(params) instead'
-    );
-  }
-
-  getXpub(): { xpubVan: string; xpubCol: string } {
-    throw new Error('UTEXOWallet.getXpub: not implemented');
-  }
+  // `goOnline` and `getXpub` are gone, not stubbed: the first was rgb-lib
+  // lifecycle superseded by `unlock(params)`, the second an rgb-lib wallet
+  // concept with no meaning on an RLN node (`getNodeInfo()` covers the real
+  // need). See MIGRATION-PLAN-v3.md §2.3.
 
   getNetwork(): Network {
     return this.params.network as Network;
@@ -502,28 +503,25 @@ export class UTEXOWallet
     return (await this.rln.rlnAddress()).address;
   }
 
-  /** Derives a fresh on-chain address, matching getAddress()'s vanilla (BTC) wallet. */
+  /**
+   * Derives a fresh on-chain address, matching getAddress()'s vanilla (BTC)
+   * wallet. Platform extra — address rotation left the shared contract because
+   * the *coloured* variant threw on both platforms (§2.3).
+   */
   async rotateVanillaAddress(): Promise<string> {
     return (await this.rln.rlnRotateAddress()).address;
   }
 
-  rotateColoredAddress(): Promise<string> {
-    throw new Error('UTEXOWallet.rotateColoredAddress: not implemented');
-  }
-
-  // ── IWalletManager — UTXO Management ─────────────────────────────────────
+  // ── UTXO Management ───────────────────────────────────────────────────────
 
   async listUnspents(): Promise<Unspent[]> {
     return (await this.rln.rlnListUnspents(false)).map(mapUtxo);
   }
 
-  createUtxosBegin(_params: CreateUtxosBeginRequestModel): Promise<string> {
-    throw new Error('UTEXOWallet.createUtxosBegin: not implemented');
-  }
-
-  createUtxosEnd(_params: CreateUtxosEndRequestModel): Promise<number> {
-    throw new Error('UTEXOWallet.createUtxosEnd: not implemented');
-  }
+  // `createUtxosBegin`/`createUtxosEnd` belong to the `beginEnd` carrier, which
+  // this wallet does not expose — the node creates UTXOs atomically and signs
+  // internally, so there is no PSBT to hand out (§2.7a). `createUtxos()` below
+  // is the whole operation.
 
   async createUtxos(params: {
     upTo?: boolean;
@@ -572,62 +570,39 @@ export class UTEXOWallet
     );
   }
 
-  inflateBegin(_params: InflateAssetIfaRequestModel): Promise<string> {
-    throw new Error('UTEXOWallet.inflateBegin: not implemented');
-  }
-
-  inflateEnd(_params: InflateEndRequestModel): Promise<OperationResult> {
-    throw new Error('UTEXOWallet.inflateEnd: not implemented');
-  }
-
-  inflate(
-    _params: InflateAssetIfaRequestModel,
-    _mnemonic?: string
-  ): Promise<OperationResult> {
-    throw new Error('UTEXOWallet.inflate: not implemented');
-  }
-
-  // ── IWalletManager — Sending Assets ──────────────────────────────────────
-
-  sendBegin(_params: SendAssetBeginRequestModel): Promise<string> {
-    throw new Error('UTEXOWallet.sendBegin: not implemented');
-  }
-
-  sendEnd(_params: SendAssetEndRequestModel): Promise<SendResult> {
-    throw new Error('UTEXOWallet.sendEnd: not implemented');
-  }
-
-  async send(
-    params: SendAssetBeginRequestModel,
-    _mnemonic?: string
-  ): Promise<SendResult> {
-    const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
-    const assetId = params.assetId ?? decoded.assetId;
-    if (!assetId) throw new Error('UTEXOWallet.send: assetId required');
-    if (params.amount === undefined)
-      throw new Error('UTEXOWallet.send: amount required');
-    return this.rln.rlnSendRgb(
-      params.donation ?? false,
+  /**
+   * Atomic IFA inflation.
+   *
+   * The node signs internally, so there is no begin/end pair here and no
+   * `mnemonic` parameter — contrast rgb-sdk-web, which has an rgb-lib wallet
+   * and therefore both. `inflateBegin`/`inflateEnd` live on the `beginEnd`
+   * carrier, which this wallet does not expose: a genuine platform difference,
+   * not a gap.
+   *
+   * Returns only a `txid`: the uniffi `InflateResponse` carries no
+   * `batchTransferIdx` (inflation is not a batch transfer), so none is
+   * invented here.
+   */
+  async inflate(
+    params: InflateAssetIfaRequestModel
+  ): Promise<{ txid: string }> {
+    const res = await this.rln.rlnInflate(
+      params.assetId,
+      params.inflationAmounts,
       params.feeRate ?? 1.5,
-      params.minConfirmations ?? 1,
-      params.skipSync ?? false,
-      assetId,
-      decoded.recipientId,
-      params.amount,
-      decoded.transportEndpoints,
-      params.witnessData ?? null
+      params.minConfirmations ?? 1
     );
+    return { txid: res.txid };
   }
 
-  // ── IWalletManager — Sending BTC ──────────────────────────────────────────
+  // The `send`/`sendBegin`/`sendEnd` trio is gone. `sendBegin`/`sendEnd` were
+  // stubs, and web had already dropped the names in favour of `onchainSend*` —
+  // dead surface on both platforms (§6.0, §2.3). `onchainSend()` below is the
+  // one spelling.
 
-  sendBtcBegin(_params: SendBtcBeginRequestModel): Promise<string> {
-    throw new Error('UTEXOWallet.sendBtcBegin: not implemented');
-  }
-
-  sendBtcEnd(_params: SendBtcEndRequestModel): Promise<string> {
-    throw new Error('UTEXOWallet.sendBtcEnd: not implemented');
-  }
+  // ── Sending BTC ───────────────────────────────────────────────────────────
+  //
+  // `sendBtcBegin`/`sendBtcEnd` belong to the `beginEnd` carrier, absent here.
 
   async sendBtc(params: SendBtcBeginRequestModel): Promise<string> {
     const resp = await this.rln.rlnSendBtc(
@@ -714,36 +689,28 @@ export class UTEXOWallet
     return this.rln.rlnSync();
   }
 
-  // ── IWalletManager — VSS Backup (not implemented) ────────────────────────
+  // ── VSS ───────────────────────────────────────────────────────────────────
+  //
+  // The imperative VSS methods belong to the `vss` carrier, which this wallet
+  // does not expose. That is not a gap: the node replicates its single state
+  // store automatically, so there is nothing to drive from JS. web needs the
+  // carrier because it has *two* stores — the rgb-lib wallet and the node —
+  // and must back the wallet up manually (§2.7, §2.7a).
+  //
+  // `vssClearFence` below stays on the shared contract: taking over another
+  // device's single-writer fence is a deliberate act, never automatic.
 
-  configureVssBackup(_config: VssBackupConfig): Promise<void> {
-    throw new Error('UTEXOWallet.configureVssBackup: not implemented');
-  }
-
-  disableVssAutoBackup(): Promise<void> {
-    throw new Error('UTEXOWallet.disableVssAutoBackup: not implemented');
-  }
-
-  vssBackup(_config?: VssBackupConfig): Promise<number> {
-    throw new Error('UTEXOWallet.vssBackup: not implemented');
-  }
-
-  vssBackupInfo(_config?: VssBackupConfig): Promise<VssBackupInfo> {
-    throw new Error('UTEXOWallet.vssBackupInfo: not implemented');
-  }
-
-  // ── IWalletManager — Fee Estimation ──────────────────────────────────────
+  // ── Fee Estimation ────────────────────────────────────────────────────────
 
   async estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
     const resp = await this.rln.rlnEstimateFee(blocks);
     return { feeRate: resp.feeRate };
   }
 
-  estimateFee(_psbtBase64: string): Promise<EstimateFeeResult> {
-    throw new Error('UTEXOWallet.estimateFee: not implemented');
-  }
+  // `estimateFee(psbt)` is on the `psbt` carrier — it estimates for a *PSBT*,
+  // which this platform never produces.
 
-  // ── IWalletManager — Backup ───────────────────────────────────────────────
+  // ── Backup ────────────────────────────────────────────────────────────────
 
   async createBackup(params: {
     backupPath: string;
@@ -756,11 +723,12 @@ export class UTEXOWallet
     };
   }
 
-  // ── IWalletManager — Cryptographic Operations (not implemented) ───────────
-
-  signPsbt(_psbt: string, _mnemonic?: string): Promise<string> {
-    throw new Error('UTEXOWallet.signPsbt: not implemented');
-  }
+  // ── Cryptographic Operations ──────────────────────────────────────────────
+  //
+  // `signPsbt` is on the `psbt` carrier, absent here. bdk-rn was removed and
+  // the node signs internally; `NativeExternalRLNSigner` does not restore it,
+  // since it signs channel/LDK operations inside the node rather than
+  // arbitrary PSBTs handed in from JS (§2.8).
 
   /** Signs with the node's own key — the counterpart to verifyMessage(). */
   async signMessage(message: string): Promise<string> {
@@ -768,27 +736,34 @@ export class UTEXOWallet
   }
 
   /**
-   * Verifies against this node's own key. The binding has no xpub-scoped variant,
-   * so `accountXpub` is rejected rather than silently ignored.
+   * Verifies against this node's own key.
+   *
+   * §2.5 fix — the `accountXpub?` parameter is gone. It was optional in the old
+   * contract but rejected here at runtime and honoured on web, so the signature
+   * was untrue in both directions. Verification is always against the node key,
+   * and the shared contract now says so.
    */
-  async verifyMessage(
-    message: string,
-    signature: string,
-    accountXpub?: string
-  ): Promise<boolean> {
-    if (accountXpub !== undefined) {
-      throw new Error(
-        'UTEXOWallet.verifyMessage: accountXpub is not supported — verification is always against the node key'
-      );
-    }
+  async verifyMessage(message: string, signature: string): Promise<boolean> {
     return (await this.rln.rlnVerifyMessage(message, signature)).valid;
   }
 
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
 
+  /**
+   * §2.5 — takes the narrowed {@link CreateLnInvoiceRequest}, plus two rn-only
+   * extras.
+   *
+   * `paymentHash` was dropped: it made this method a second way to create a
+   * HODL invoice, and web declared it while silently discarding it (its wasm
+   * live-invoice API takes four arguments). `createHodlInvoice` is now the only
+   * spelling on both platforms.
+   *
+   * `minFinalCltvExpiryDelta` and `descriptionHash` remain **rn platform
+   * extras** — the web node cannot accept them. Both names already exist in
+   * core's LSP types, so they are reused rather than reinvented.
+   */
   async createLightningInvoice(
-    params: CreateLightningInvoiceRequestModel & {
-      paymentHash?: string | null;
+    params: CreateLnInvoiceRequest & {
       minFinalCltvExpiryDelta?: number | null;
       /** BOLT11 `h` tag — required by LNURL-pay to commit to the metadata. */
       descriptionHash?: string | null;
@@ -802,7 +777,7 @@ export class UTEXOWallet
       params.expirySeconds ?? 3600,
       assetId,
       assetAmount,
-      params.paymentHash ?? null,
+      null,
       params.minFinalCltvExpiryDelta ?? null,
       params.descriptionHash ?? null
     );
@@ -850,7 +825,6 @@ export class UTEXOWallet
   async listPayments(): Promise<LightningPayment[]> {
     return (await this.rln.rlnListPayments()).map(toLightningPayment);
   }
-
 
   async apayNew(hostNodeId: string): Promise<ApayNewResponse> {
     const raw = await this.rln.rlnApayNew(hostNodeId);
@@ -973,8 +947,6 @@ export class UTEXOWallet
     };
   }
 
-
-
   /**
    * Canonical inbound LN status, in the node's own vocabulary.
    *
@@ -997,11 +969,12 @@ export class UTEXOWallet
     return tryNormalizePaymentStatus(payment.status);
   }
 
-
-
-
+  // §6.0 — the `& { assetAmount?: number }` intersection that used to sit here
+  // was redundant: core's `PayLightningInvoiceRequestModel` already declares
+  // `assetAmount`. Re-declaring core fields locally made the two platforms look
+  // divergent when they were not.
   async payLightningInvoice(
-    params: PayLightningInvoiceRequestModel & { assetAmount?: number }
+    params: PayLightningInvoiceRequestModel
   ): Promise<LightningSendRequest> {
     const amtMsat = params.amount != null ? params.amount * 1000 : null;
     const resp = await this.rln.rlnSendPayment(
@@ -1045,15 +1018,8 @@ export class UTEXOWallet
     };
   }
 
-  onchainSendBegin(_params: OnchainSendRequestModel): Promise<string> {
-    throw new Error('UTEXOWallet.onchainSendBegin: not implemented');
-  }
-
-  onchainSendEnd(
-    _params: SendAssetEndRequestModel
-  ): Promise<OnchainSendResponse> {
-    throw new Error('UTEXOWallet.onchainSendEnd: not implemented');
-  }
+  // `onchainSendBegin`/`onchainSendEnd` are on the `beginEnd` carrier, absent
+  // here — the node sends atomically and signs internally (§2.7a).
 
   async onchainSend(
     params: OnchainSendRequestModel
@@ -1086,7 +1052,6 @@ export class UTEXOWallet
     return toLightningNodeInfo(await this.rln.rlnNodeInfo());
   }
 
-
   async getNetworkInfo(): Promise<LightningNetworkInfo> {
     return toLightningNetworkInfo(await this.rln.rlnNetworkInfo());
   }
@@ -1107,7 +1072,6 @@ export class UTEXOWallet
     return (await this.rln.rlnListChannels()).map(toLightningChannel);
   }
 
-
   async openChannel(params: OpenChannelParams): Promise<OpenChannelResult> {
     const resp = await this.rln.rlnOpenChannel({
       peerPubkeyAndOptAddr: params.peerPubkey,
@@ -1120,7 +1084,9 @@ export class UTEXOWallet
       temporaryChannelId: params.temporaryChannelId ?? null,
       assetId: params.assetId ?? null,
       assetAmount:
-        params.assetLocalAmount != null ? Number(params.assetLocalAmount) : null,
+        params.assetLocalAmount != null
+          ? Number(params.assetLocalAmount)
+          : null,
       pushAssetAmount:
         params.pushAssetAmount != null ? Number(params.pushAssetAmount) : null,
       virtualOpenMode: params.virtualOpenMode ?? null,
@@ -1160,12 +1126,10 @@ export class UTEXOWallet
     return toDecodedLnInvoice(await this.rln.rlnDecodeLnInvoice(invoice));
   }
 
-
   /** Canonical invoice status (PascalCase) — normalized from the wire enum. */
   async invoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
     return normalizeInvoiceStatus(await this.rln.rlnInvoiceStatus(invoice));
   }
-
 
   checkIndexerUrl(url: string): Promise<RlnCheckIndexerUrlResponse> {
     return this.rln.rlnCheckIndexerUrl(url);

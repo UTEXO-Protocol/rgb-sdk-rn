@@ -372,6 +372,17 @@ export interface RlnSendRgbResponse {
   batchTransferIdx: number;
 }
 
+// ── Inflate (IFA) ─────────────────────────────────────────────────────────────
+
+/**
+ * Mirrors the UniFFI `InflateResponse`, which carries **only** a txid — unlike
+ * `RlnSendRgbResponse` there is no `batchTransferIdx`, because the node
+ * performs inflation atomically rather than through a batch transfer.
+ */
+export interface RlnInflateResponse {
+  txid: string;
+}
+
 // ── Fail transfers ────────────────────────────────────────────────────────────
 
 export interface RlnFailTransfersResponse {

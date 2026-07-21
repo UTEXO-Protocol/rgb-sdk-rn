@@ -254,6 +254,22 @@ export interface Spec extends TurboModule {
     mediaFileDigest: string | null,
     attachmentsFileDigests: string[]
   ): Promise<any>;
+  /**
+   * Atomic IFA inflation — the node signs internally, so there is no
+   * begin/end PSBT pair here (contrast rgb-sdk-web, which has an rgb-lib
+   * wallet and therefore both).
+   *
+   * `feeRate` is a double for bridge symmetry with `rlnSendRgb`, but the
+   * underlying `InflateRequest.feeRate` is a `UInt64` — fractional rates are
+   * truncated natively, exactly as in `rlnSendRgb`.
+   */
+  rlnInflate(
+    nodeId: number,
+    assetId: string,
+    inflationAmounts: number[],
+    feeRate: number,
+    minConfirmations: number
+  ): Promise<object>;
 
   // ── VSS ─────────────────────────────────────────────────────────────────────
   rlnVssClearFence(nodeId: number, password: string): Promise<void>;

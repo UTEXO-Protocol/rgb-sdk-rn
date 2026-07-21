@@ -20,6 +20,7 @@ import type {
   RlnListAssetsResponse,
   RlnRgbInvoiceResponse,
   RlnSendRgbResponse,
+  RlnInflateResponse,
   RlnTransaction,
   RlnTransfer,
   RlnUnspent,
@@ -245,6 +246,13 @@ export interface IRLN {
     mediaFileDigest: string | null,
     attachmentsFileDigests: string[]
   ): Promise<any>;
+  /** Atomic IFA inflation — see {@link RlnInflateResponse}. */
+  rlnInflate(
+    assetId: string,
+    inflationAmounts: number[],
+    feeRate: number,
+    minConfirmations: number
+  ): Promise<RlnInflateResponse>;
 
   rlnListAssets(filterAssetSchemas: string[]): Promise<RlnListAssetsResponse>;
   rlnAssetBalance(assetId: string): Promise<RlnAssetBalance>;

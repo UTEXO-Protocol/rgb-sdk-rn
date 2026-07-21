@@ -55,7 +55,9 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "version:patch": "npm version patch && git push && git push --tags && npm publish --access public",
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
-    "version:major": "npm version major && git push && git push --tags && npm publish --access public"
+    "version:major": "npm version major && git push && git push --tags && npm publish --access public",
+    "check:contract": "bob build && node --experimental-loader ./scripts/rn-stub-loader.mjs scripts/check-contract.mjs",
+    "test": "npm run typecheck && npm run check:contract"
   },
   "repository": {
     "type": "git",

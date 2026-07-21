@@ -1,11 +1,11 @@
 // Wallet utilities
 export { createWallet } from './wallet/wallet-manager';
-export type { WalletInitParams } from '@utexo/rgb-sdk-core';
+
 
 // RLN node manager
 export { RLNManager, createRLNManager } from './wallet/rln-manager';
 
-// UTEXO wallet (implements IWalletManager + IUTEXOProtocol, backed by RLN)
+// UTEXO wallet — implements the shared IUTEXOWallet contract, backed by RLN.
 export { UTEXOWallet } from './wallet/utexo-wallet';
 export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
 export {
@@ -21,7 +21,6 @@ export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln-signers';
 
 // Binding and signer (for advanced / testing use)
 export { RLNBinding } from './binding/RLNBinding';
-export { RNSigner } from './signer/RNSigner';
 export type * from './binding/rln-types';
 export type {
   IRLN,
@@ -76,9 +75,6 @@ export type {
   ClaimResult,
 } from '@utexo/rgb-sdk-core';
 
-// Crypto — PSBT signing stubs (bdk-rn removed; throws — use NativeExternalRLNSigner for PSBT)
-export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';
-
 // Re-export everything consumers need from core
 export {
   // Key derivation
@@ -119,16 +115,8 @@ export {
   toUnitsNumber,
   fromUnitsNumber,
   // UTEXO network config
-  utexoNetworkMap,
-  utexoNetworkIdMap,
-  getDestinationAsset,
   DEFAULT_TRANSPORT_ENDPOINTS,
   DEFAULT_INDEXER_URLS,
-  // Interfaces / base classes
-  UTEXOProtocol,
-  LightningProtocol,
-  OnchainProtocol,
-  BaseWalletManager,
 } from '@utexo/rgb-sdk-core';
 
 export type {
@@ -139,13 +127,24 @@ export type {
   Descriptors,
   GeneratedKeys,
   AccountXpubs,
-  // Wallet interfaces
-  IWalletManager,
-  IRgbLibBinding,
-  ISigner,
-  IUTEXOProtocol,
-  ILightningProtocol,
-  IOnchainProtocol,
+  // Wallet contract — shared surface, lifecycle, and the optional carrier
+  // types. The carriers are all absent on this platform (see UTEXOWallet), but
+  // the types are exported so app code can be written against the shared
+  // contract and stay portable to rgb-sdk-web.
+  IUTEXOWallet,
+  IUTEXOWalletCore,
+  IWalletLifecycle,
+  WalletCapabilities,
+  IPsbtSigning,
+  IBeginEndFlows,
+  IVssBackup,
+  CreateLnInvoiceRequest,
+  ILightningNode,
+  ILightningPayments,
+  ILightningAddress,
+  IOnchainTransfers,
+  IRgbAssets,
+  IBitcoinWallet,
   // All model types
   BtcBalance,
   Unspent,

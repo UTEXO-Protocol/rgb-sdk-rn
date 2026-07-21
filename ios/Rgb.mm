@@ -1149,6 +1149,25 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
     });
 }
 
+- (void)rlnInflate:(double)nodeId
+           assetId:(NSString *)assetId
+  inflationAmounts:(NSArray<NSNumber *> *)inflationAmounts
+           feeRate:(double)feeRate
+  minConfirmations:(double)minConfirmations
+           resolve:(RCTPromiseResolveBlock)resolve
+            reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnInflate:@(nodeId) assetId:assetId inflationAmounts:inflationAmounts feeRate:@(feeRate) minConfirmations:@(minConfirmations)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_INFLATE_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
 - (void)rlnIssueAssetUda:(double)nodeId
                   ticker:(NSString *)ticker
                     name:(NSString *)name

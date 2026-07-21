@@ -28,6 +28,7 @@ import type {
   RlnListAssetsResponse,
   RlnRgbInvoiceResponse,
   RlnSendRgbResponse,
+  RlnInflateResponse,
   RlnTransaction,
   RlnTransfer,
   RlnUnspent,
@@ -643,6 +644,23 @@ export class RLNBinding implements IRLN {
         rejectListUrl
       )
     );
+  }
+
+  async rlnInflate(
+    assetId: string,
+    inflationAmounts: number[],
+    feeRate: number,
+    minConfirmations: number
+  ): Promise<RlnInflateResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnInflate(
+        nodeId,
+        assetId,
+        inflationAmounts,
+        feeRate,
+        minConfirmations
+      )
+    ) as Promise<RlnInflateResponse>;
   }
 
   async rlnIssueAssetUda(

@@ -45,6 +45,7 @@ import org.utexo.rgblightningnode.SdkUnlockRequest
 import org.utexo.rgblightningnode.PaymentType
 import org.utexo.rgblightningnode.SdkIssueAssetCfaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetIfaRequest
+import org.utexo.rgblightningnode.InflateRequest
 import org.utexo.rgblightningnode.SdkIssueAssetNiaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetUdaRequest
 import org.utexo.rgblightningnode.SdkVssClearFenceRequest
@@ -1687,6 +1688,40 @@ class RgbModule(reactContext: ReactApplicationContext) :
           rejectListUrl = rejectListUrl
         ))
         withContext(Dispatchers.Main) { promise.resolve(rlnAssetIfaToMap(asset)) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnInflate(
+    nodeId: Double,
+    assetId: String,
+    inflationAmounts: ReadableArray,
+    feeRate: Double,
+    minConfirmations: Double,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val inflationList = mutableListOf<ULong>()
+        for (i in 0 until inflationAmounts.size()) inflationList.add(inflationAmounts.getDouble(i).toULong())
+        // Atomic: the node signs internally, so there is no begin/end PSBT pair.
+        // feeRate arrives as a Double for bridge symmetry with rlnSendRgb but the
+        // uniffi request takes a UInt64 — same truncation as rlnSendRgb.
+        val res = node.inflate(InflateRequest(
+          assetId = assetId,
+          inflationAmounts = inflationList,
+          feeRate = feeRate.toULong(),
+          minConfirmations = minConfirmations.toLong().toUByte()
+        ))
+        val map = Arguments.createMap()
+        map.putString("txid", res.txid)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)

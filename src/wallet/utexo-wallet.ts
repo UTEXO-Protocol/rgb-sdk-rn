@@ -142,6 +142,8 @@ export interface UTEXOWalletNodeParams
   vssAllowEmptyRestore?: boolean;
   lspBaseUrl?: string | null;
   lspBearerToken?: string | null;
+  /** Reuse on-chain addresses instead of deriving a fresh one per call. Defaults to false. */
+  reuseAddresses?: boolean;
 }
 
 // ── Type-mapping helpers (module-private) ─────────────────────────────────────
@@ -200,20 +202,20 @@ function mapUtxo(u: RlnUnspent): Unspent {
         settled: a.settled,
       })
     ),
-    pendingBlinded: 0,
+    pendingBlinded: u.pendingBlinded ?? 0,
   };
 }
 
 function mapTransaction(t: RlnTransaction): Transaction {
   // RLNBinding canonicalizes the native enum to SCREAMING_SNAKE; map it onto
-  // the core TransactionType vocabulary (SEND_BTC/INCOMING have no core
-  // counterpart and fold into 'User').
+  // the core TransactionType vocabulary. Every RLN TransactionType variant has
+  // a counterpart, so 'User' is only the fallback for an unrecognized value.
   const typeMap: Record<string, TransactionType> = {
     RGB_SEND: 'RgbSend',
     DRAIN: 'Drain',
     CREATE_UTXOS: 'CreateUtxos',
-    SEND_BTC: 'User',
-    INCOMING: 'User',
+    SEND_BTC: 'SendBtc',
+    INCOMING: 'Incoming',
   };
   return {
     txid: t.txid,
@@ -225,30 +227,47 @@ function mapTransaction(t: RlnTransaction): Transaction {
   };
 }
 
+/**
+ * The native layer types transfer status/kind as bare strings, so these guard the
+ * boundary. Declared as exhaustive `Record`s rather than arrays: if core gains a
+ * variant, these stop compiling instead of silently folding it into the fallback.
+ */
+const VALID_TRANSFER_STATUSES: Record<TransferStatus, true> = {
+  WaitingCounterparty: true,
+  WaitingSafeHeight: true,
+  WaitingConfirmations: true,
+  Settled: true,
+  Failed: true,
+  Initiated: true,
+};
+
+const VALID_TRANSFER_KINDS: Record<TransferKind, true> = {
+  Issuance: true,
+  ReceiveBlind: true,
+  ReceiveWitness: true,
+  Send: true,
+  Inflation: true,
+  Burn: true,
+};
+
+function isKnown(
+  table: Record<string, true>,
+  value: string | undefined
+): boolean {
+  return value != null && Object.prototype.hasOwnProperty.call(table, value);
+}
+
 function mapTransfer(t: RlnTransfer): Transfer {
-  const validStatuses: TransferStatus[] = [
-    'WaitingCounterparty',
-    'WaitingConfirmations',
-    'Settled',
-    'Failed',
-  ];
-  const validKinds: TransferKind[] = [
-    'Issuance',
-    'ReceiveBlind',
-    'ReceiveWitness',
-    'Send',
-    'Inflation',
-  ];
   return {
     idx: t.idx,
     batchTransferIdx: 0,
     createdAt: t.createdAt ?? 0,
     updatedAt: t.updatedAt ?? 0,
-    status: (validStatuses.includes(t.status as TransferStatus)
+    status: (isKnown(VALID_TRANSFER_STATUSES, t.status)
       ? t.status
       : 'WaitingCounterparty') as TransferStatus,
     assignments: (t.assignments ?? []).map(parseAssignment),
-    kind: (validKinds.includes(t.kind as TransferKind)
+    kind: (isKnown(VALID_TRANSFER_KINDS, t.kind)
       ? t.kind
       : 'Send') as TransferKind,
     txid: t.txid,
@@ -395,14 +414,15 @@ export class UTEXOWallet
   async init(): Promise<void> {
     await this.rln.rlnCreateNode(this.buildNodeParams());
     this.nodeCreated = true;
-    await this.signer.initNode(this.rln);
+    await this.signer.initNode(this.rln, this.params.storageDirPath);
   }
 
   /** Unlock the node (every start). Accepts the same params as IRLNUnlockParams. */
   async unlock(params: IRLNUnlockParams): Promise<void> {
     await this.signer.unlockNode(
       this.rln,
-      resolveUnlockParams(this.params.network, params)
+      resolveUnlockParams(this.params.network, params),
+      this.params.storageDirPath
     );
   }
 
@@ -418,7 +438,8 @@ export class UTEXOWallet
     if (params)
       await this.signer.unlockNode(
         this.rln,
-        resolveUnlockParams(this.params.network, params)
+        resolveUnlockParams(this.params.network, params),
+        this.params.storageDirPath
       );
   }
 
@@ -481,8 +502,9 @@ export class UTEXOWallet
     return (await this.rln.rlnAddress()).address;
   }
 
-  rotateVanillaAddress(): Promise<string> {
-    throw new Error('UTEXOWallet.rotateVanillaAddress: not implemented');
+  /** Derives a fresh on-chain address, matching getAddress()'s vanilla (BTC) wallet. */
+  async rotateVanillaAddress(): Promise<string> {
+    return (await this.rln.rlnRotateAddress()).address;
   }
 
   rotateColoredAddress(): Promise<string> {
@@ -656,8 +678,23 @@ export class UTEXOWallet
     return (await this.rln.rlnListTransactions(false)).map(mapTransaction);
   }
 
+  /** Transactions filtered to a single txid — avoids listing the whole wallet history. */
+  async listTransactionsByTxid(
+    txid: string,
+    skipSync: boolean = false
+  ): Promise<Transaction[]> {
+    return (await this.rln.rlnListTransactionsByTxid(txid, skipSync)).map(
+      mapTransaction
+    );
+  }
+
   async listTransfers(asset_id?: string): Promise<Transfer[]> {
     return (await this.rln.rlnListTransfers(asset_id ?? '')).map(mapTransfer);
+  }
+
+  /** Transfers filtered to a single txid, across all assets. */
+  async listTransfersByTxid(txid: string): Promise<Transfer[]> {
+    return (await this.rln.rlnListTransfersByTxid(txid)).map(mapTransfer);
   }
 
   async failTransfers(params: FailTransfersRequest): Promise<boolean> {
@@ -725,16 +762,26 @@ export class UTEXOWallet
     throw new Error('UTEXOWallet.signPsbt: not implemented');
   }
 
-  signMessage(_message: string): Promise<string> {
-    throw new Error('UTEXOWallet.signMessage: not implemented');
+  /** Signs with the node's own key — the counterpart to verifyMessage(). */
+  async signMessage(message: string): Promise<string> {
+    return (await this.rln.rlnSignMessage(message)).signedMessage;
   }
 
-  verifyMessage(
-    _message: string,
-    _signature: string,
-    _accountXpub?: string
+  /**
+   * Verifies against this node's own key. The binding has no xpub-scoped variant,
+   * so `accountXpub` is rejected rather than silently ignored.
+   */
+  async verifyMessage(
+    message: string,
+    signature: string,
+    accountXpub?: string
   ): Promise<boolean> {
-    throw new Error('UTEXOWallet.verifyMessage: not implemented');
+    if (accountXpub !== undefined) {
+      throw new Error(
+        'UTEXOWallet.verifyMessage: accountXpub is not supported — verification is always against the node key'
+      );
+    }
+    return (await this.rln.rlnVerifyMessage(message, signature)).valid;
   }
 
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
@@ -743,6 +790,8 @@ export class UTEXOWallet
     params: CreateLightningInvoiceRequestModel & {
       paymentHash?: string | null;
       minFinalCltvExpiryDelta?: number | null;
+      /** BOLT11 `h` tag — required by LNURL-pay to commit to the metadata. */
+      descriptionHash?: string | null;
     }
   ): Promise<LightningReceiveRequest> {
     const amtMsat = params.amountSats != null ? params.amountSats * 1000 : null;
@@ -754,13 +803,17 @@ export class UTEXOWallet
       assetId,
       assetAmount,
       params.paymentHash ?? null,
-      params.minFinalCltvExpiryDelta ?? null
+      params.minFinalCltvExpiryDelta ?? null,
+      params.descriptionHash ?? null
     );
     return { lnInvoice: resp.invoice };
   }
 
   async createHodlInvoice(
-    params: CreateHodlInvoiceParams
+    params: CreateHodlInvoiceParams & {
+      /** BOLT11 `h` tag — required by LNURL-pay to commit to the metadata. */
+      descriptionHash?: string | null;
+    }
   ): Promise<LightningInvoice> {
     const resp = await this.rln.rlnLnInvoice(
       params.amtMsat != null ? Number(params.amtMsat) : null,
@@ -768,7 +821,8 @@ export class UTEXOWallet
       params.assetId ?? null,
       params.assetAmount != null ? Number(params.assetAmount) : null,
       params.paymentHash,
-      params.minFinalCltvExpiryDelta ?? null
+      params.minFinalCltvExpiryDelta ?? null,
+      params.descriptionHash ?? null
     );
     return toLightningInvoice(resp, {
       paymentHash: params.paymentHash,
@@ -1158,6 +1212,7 @@ export class UTEXOWallet
         getDefaultLspBaseUrl(this.params.network) ??
         null,
       lspBearerToken: this.params.lspBearerToken ?? null,
+      reuseAddresses: this.params.reuseAddresses ?? false,
     };
   }
 }

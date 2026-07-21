@@ -14,17 +14,23 @@ export interface Spec extends TurboModule {
     vssAllowHttp: boolean,
     vssAllowEmptyRestore: boolean,
     lspBaseUrl: string | null,
-    lspBearerToken: string | null
+    lspBearerToken: string | null,
+    reuseAddresses: boolean
   ): Promise<number>;
   rlnInitNode(
     nodeId: number,
     password: string,
     mnemonic?: string | null
   ): Promise<string>;
+  /**
+   * `storageDirPath` non-null selects the disk-backed VLS store, so the signer's
+   * channel state survives a process restart. Null keeps the legacy ephemeral signer.
+   */
   rlnCreateNativeExternalSigner(
     seedHex: string,
     network: string,
-    permissivePolicy: boolean
+    permissivePolicy: boolean,
+    storageDirPath: string | null
   ): Promise<number>;
   rlnInitNodeWithNativeExternalSigner(
     nodeId: number,
@@ -100,6 +106,7 @@ export interface Spec extends TurboModule {
   ): Promise<void>;
   rlnListPayments(nodeId: number): Promise<object[]>;
   rlnAddress(nodeId: number): Promise<object>;
+  rlnRotateAddress(nodeId: number): Promise<object>;
   rlnAssetBalance(nodeId: number, assetId: string): Promise<object>;
   rlnBackup(
     nodeId: number,
@@ -138,7 +145,13 @@ export interface Spec extends TurboModule {
   ): Promise<object>;
   rlnListAssets(nodeId: number, filterAssetSchemas: string[]): Promise<object>;
   rlnListTransactions(nodeId: number, skipSync: boolean): Promise<object[]>;
+  rlnListTransactionsByTxid(
+    nodeId: number,
+    txid: string,
+    skipSync: boolean
+  ): Promise<object[]>;
   rlnListTransfers(nodeId: number, assetId: string): Promise<object[]>;
+  rlnListTransfersByTxid(nodeId: number, txid: string): Promise<object[]>;
   rlnListUnspents(nodeId: number, skipSync: boolean): Promise<object[]>;
   rlnLnInvoice(
     nodeId: number,
@@ -147,7 +160,8 @@ export interface Spec extends TurboModule {
     assetId: string | null,
     assetAmount: number | null,
     paymentHash: string | null,
-    minFinalCltvExpiryDelta: number | null
+    minFinalCltvExpiryDelta: number | null,
+    descriptionHash: string | null
   ): Promise<object>;
   rlnClaimHodlInvoice(
     nodeId: number,
@@ -169,7 +183,8 @@ export interface Spec extends TurboModule {
     assignmentAmount: number | null,
     durationSeconds: number | null,
     minConfirmations: number,
-    witness: boolean
+    witness: boolean,
+    assignmentKind: string | null
   ): Promise<object>;
   rlnSendBtc(
     nodeId: number,
@@ -200,6 +215,12 @@ export interface Spec extends TurboModule {
   ): Promise<object>;
   rlnShutdown(nodeId: number): Promise<void>;
   rlnSync(nodeId: number): Promise<void>;
+  rlnSignMessage(nodeId: number, message: string): Promise<object>;
+  rlnVerifyMessage(
+    nodeId: number,
+    message: string,
+    signature: string
+  ): Promise<object>;
   rlnIssueAssetNia(
     nodeId: number,
     ticker: string,

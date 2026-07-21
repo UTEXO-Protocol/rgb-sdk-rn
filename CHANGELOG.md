@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+__added__
+- **`verifyMessage(message, signature)`** on `UTEXOWallet` — previously threw "not implemented", now backed by the native `verifyMessage`. Verification is always against the node's own key; passing `accountXpub` throws rather than silently ignoring it.
+- **`rotateVanillaAddress()`** on `UTEXOWallet` — previously threw "not implemented", now backed by the native `rotateAddress`. (`rotateColoredAddress()` still throws — the binding has no colored equivalent.)
+- **`listTransactionsByTxid(txid, skipSync?)`** and **`listTransfersByTxid(txid)`** on `UTEXOWallet` — filter to a single txid instead of listing full history.
+- **`reuseAddresses`** on `UTEXOWalletNodeParams` — reuse on-chain addresses instead of deriving a fresh one per call. Defaults to `false` (unchanged behaviour).
+- **`pendingBlinded`** on `RlnUnspent` — blinded assignments awaiting a matching incoming transfer.
+
+__changed__
+- Bumped RLN native bindings to **v0.9.0-beta.3** (from `0.6.0-beta.2`).
+- **`NativeExternalRLNSigner` now uses a disk-backed VLS store** (`NativeExternalSigner.newWithStorage`) rooted at the node's `storageDirPath`. The previous ephemeral signer lost all VLS channel state on process restart: it could re-derive channel keys from the seed but could not validate commitment state it never tracked, so payments over channels restored from LDK persistence failed validation and force-closed the channel. Existing deployments start with an empty store, so behaviour is no worse than before and correct from the next restart on. No caller changes required — `UTEXOWallet` injects the path.
+- **`IRLNSigner.initNode`/`unlockNode` take an optional trailing `storageDirPath`.** Existing implementations that ignore it keep compiling; custom signers that persist state should thread it through.
+
+__note__
+- `scripts/download-rln-bindings.js` skips the download when `ios/RGBLightningNode.xcframework` already exists, so upgrading in an existing checkout requires `rm -rf ios/RGBLightningNode.xcframework` before `postinstall` — otherwise iOS keeps running the old framework against the new Android binding.
+
+---
+
 ## 1.0.0-beta.17
 
 __added__

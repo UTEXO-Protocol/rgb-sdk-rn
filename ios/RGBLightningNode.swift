@@ -816,6 +816,30 @@ open class NativeExternalSigner:
         try! rustCall { uniffi_rgb_lightning_node_fn_free_nativeexternalsigner(pointer, $0) }
     }
 
+    /**
+     * Like [`Self::new`], but with a disk-backed VLS store under `storage_dir_path`, so a
+     * process restart restores the signer's channel state (channels, commitment counters, dbid
+     * high-water mark) instead of starting over.
+     *
+     * The ephemeral [`Self::new`] signer loses all VLS channel state on restart: it can
+     * re-derive channel keys from the seed, but a stateful validating signer cannot validate
+     * commitment state it never tracked, so payments over channels restored from LDK
+     * persistence fail (`Failed to validate our commitment` → channel force-close). Hosts that
+     * keep channels across process restarts (the "device restarts and unlocks again" flow)
+     * must use this constructor with a stable directory. Same disk layout as the remote
+     * signer daemon (`redb` KVV store).
+     */
+    public static func newWithStorage(seedHex: String, network: String, permissivePolicy: Bool?, storageDirPath: String) throws -> NativeExternalSigner {
+        return try FfiConverterTypeNativeExternalSigner.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_constructor_nativeexternalsigner_new_with_storage(
+                FfiConverterString.lower(seedHex),
+                FfiConverterString.lower(network),
+                FfiConverterOptionBool.lower(permissivePolicy),
+                FfiConverterString.lower(storageDirPath), $0
+            )
+        })
+    }
+
     open func bootstrap() throws -> SdkExternalSignerBootstrap {
         return try FfiConverterTypeSdkExternalSignerBootstrap.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_nativeexternalsigner_bootstrap(self.uniffiClonePointer(), $0)
@@ -945,7 +969,11 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func listTransactions(skipSync: Bool) throws -> [Transaction]
 
+    func listTransactionsByTxid(txid: String, skipSync: Bool) throws -> [Transaction]
+
     func listTransfers(assetId: ContractId) throws -> [Transfer]
+
+    func listTransfersByTxid(txid: String) throws -> [Transfer]
 
     func listUnspents(skipSync: Bool) throws -> [Unspent]
 
@@ -967,6 +995,8 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func rgbinvoice(request: SdkRgbInvoiceRequest) throws -> SdkRgbInvoiceResponse
 
+    func rotateAddress() throws -> AddressInfo
+
     func sendRgb(request: SendRgbRequest) throws -> SendRgbResponse
 
     func sendbtc(request: SdkSendBtcRequest) throws -> SdkSendBtcResponse
@@ -984,6 +1014,8 @@ public protocol SdkNodeProtocol: AnyObject {
     func taker(request: SdkTakerRequest) throws
 
     func unlock(request: SdkUnlockRequest) throws
+
+    func verifyMessage(message: String, signature: String) throws -> VerifyMessageResponse
 
     func vssBackup() throws -> Int64
 
@@ -1318,10 +1350,25 @@ open class SdkNode:
         })
     }
 
+    open func listTransactionsByTxid(txid: String, skipSync: Bool) throws -> [Transaction] {
+        return try FfiConverterSequenceTypeTransaction.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_list_transactions_by_txid(self.uniffiClonePointer(),
+                                                                                  FfiConverterString.lower(txid),
+                                                                                  FfiConverterBool.lower(skipSync), $0)
+        })
+    }
+
     open func listTransfers(assetId: ContractId) throws -> [Transfer] {
         return try FfiConverterSequenceTypeTransfer.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_list_transfers(self.uniffiClonePointer(),
                                                                        FfiConverterTypeContractId.lower(assetId), $0)
+        })
+    }
+
+    open func listTransfersByTxid(txid: String) throws -> [Transfer] {
+        return try FfiConverterSequenceTypeTransfer.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_list_transfers_by_txid(self.uniffiClonePointer(),
+                                                                               FfiConverterString.lower(txid), $0)
         })
     }
 
@@ -1393,6 +1440,12 @@ open class SdkNode:
         })
     }
 
+    open func rotateAddress() throws -> AddressInfo {
+        return try FfiConverterTypeAddressInfo.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_rotate_address(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func sendRgb(request: SendRgbRequest) throws -> SendRgbResponse {
         return try FfiConverterTypeSendRgbResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_send_rgb(self.uniffiClonePointer(),
@@ -1452,6 +1505,14 @@ open class SdkNode:
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock(self.uniffiClonePointer(),
                                                                FfiConverterTypeSdkUnlockRequest.lower(request), $0)
         }
+    }
+
+    open func verifyMessage(message: String, signature: String) throws -> VerifyMessageResponse {
+        return try FfiConverterTypeVerifyMessageResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_verify_message(self.uniffiClonePointer(),
+                                                                       FfiConverterString.lower(message),
+                                                                       FfiConverterString.lower(signature), $0)
+        })
     }
 
     open func vssBackup() throws -> Int64 {
@@ -5200,10 +5261,11 @@ public struct SdkInitRequest {
     public var vssUrl: String?
     public var vssAllowHttp: Bool
     public var vssAllowEmptyRestore: Bool
+    public var reuseAddresses: Bool
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(storageDirPath: String, daemonListeningPort: UInt16, ldkPeerListeningPort: UInt16, network: String, maxMediaUploadSizeMb: UInt16, enableVirtualChannelsV0: Bool?, virtualPeerPubkeys: [PublicKey]?, lspBaseUrl: String?, lspBearerToken: String?, vssUrl: String? = nil, vssAllowHttp: Bool = false, vssAllowEmptyRestore: Bool = false) {
+    public init(storageDirPath: String, daemonListeningPort: UInt16, ldkPeerListeningPort: UInt16, network: String, maxMediaUploadSizeMb: UInt16, enableVirtualChannelsV0: Bool?, virtualPeerPubkeys: [PublicKey]?, lspBaseUrl: String?, lspBearerToken: String?, vssUrl: String? = nil, vssAllowHttp: Bool = false, vssAllowEmptyRestore: Bool = false, reuseAddresses: Bool = false) {
         self.storageDirPath = storageDirPath
         self.daemonListeningPort = daemonListeningPort
         self.ldkPeerListeningPort = ldkPeerListeningPort
@@ -5216,6 +5278,7 @@ public struct SdkInitRequest {
         self.vssUrl = vssUrl
         self.vssAllowHttp = vssAllowHttp
         self.vssAllowEmptyRestore = vssAllowEmptyRestore
+        self.reuseAddresses = reuseAddresses
     }
 }
 
@@ -5257,6 +5320,9 @@ extension SdkInitRequest: Equatable, Hashable {
         if lhs.vssAllowEmptyRestore != rhs.vssAllowEmptyRestore {
             return false
         }
+        if lhs.reuseAddresses != rhs.reuseAddresses {
+            return false
+        }
         return true
     }
 
@@ -5273,6 +5339,7 @@ extension SdkInitRequest: Equatable, Hashable {
         hasher.combine(vssUrl)
         hasher.combine(vssAllowHttp)
         hasher.combine(vssAllowEmptyRestore)
+        hasher.combine(reuseAddresses)
     }
 }
 
@@ -5294,7 +5361,8 @@ public struct FfiConverterTypeSdkInitRequest: FfiConverterRustBuffer {
                 lspBearerToken: FfiConverterOptionString.read(from: &buf),
                 vssUrl: FfiConverterOptionString.read(from: &buf),
                 vssAllowHttp: FfiConverterBool.read(from: &buf),
-                vssAllowEmptyRestore: FfiConverterBool.read(from: &buf)
+                vssAllowEmptyRestore: FfiConverterBool.read(from: &buf),
+                reuseAddresses: FfiConverterBool.read(from: &buf)
             )
     }
 
@@ -5311,6 +5379,7 @@ public struct FfiConverterTypeSdkInitRequest: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.vssUrl, into: &buf)
         FfiConverterBool.write(value.vssAllowHttp, into: &buf)
         FfiConverterBool.write(value.vssAllowEmptyRestore, into: &buf)
+        FfiConverterBool.write(value.reuseAddresses, into: &buf)
     }
 }
 
@@ -8061,12 +8130,14 @@ public func FfiConverterTypeTransferTransportEndpoint_lower(_ value: TransferTra
 public struct Unspent {
     public var utxo: Utxo
     public var rgbAllocations: [RgbAllocation]
+    public var pendingBlinded: UInt32
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(utxo: Utxo, rgbAllocations: [RgbAllocation]) {
+    public init(utxo: Utxo, rgbAllocations: [RgbAllocation], pendingBlinded: UInt32) {
         self.utxo = utxo
         self.rgbAllocations = rgbAllocations
+        self.pendingBlinded = pendingBlinded
     }
 }
 
@@ -8078,12 +8149,16 @@ extension Unspent: Equatable, Hashable {
         if lhs.rgbAllocations != rhs.rgbAllocations {
             return false
         }
+        if lhs.pendingBlinded != rhs.pendingBlinded {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(utxo)
         hasher.combine(rgbAllocations)
+        hasher.combine(pendingBlinded)
     }
 }
 
@@ -8095,13 +8170,15 @@ public struct FfiConverterTypeUnspent: FfiConverterRustBuffer {
         return
             try Unspent(
                 utxo: FfiConverterTypeUtxo.read(from: &buf),
-                rgbAllocations: FfiConverterSequenceTypeRgbAllocation.read(from: &buf)
+                rgbAllocations: FfiConverterSequenceTypeRgbAllocation.read(from: &buf),
+                pendingBlinded: FfiConverterUInt32.read(from: &buf)
             )
     }
 
     public static func write(_ value: Unspent, into buf: inout [UInt8]) {
         FfiConverterTypeUtxo.write(value.utxo, into: &buf)
         FfiConverterSequenceTypeRgbAllocation.write(value.rgbAllocations, into: &buf)
+        FfiConverterUInt32.write(value.pendingBlinded, into: &buf)
     }
 }
 
@@ -8186,6 +8263,59 @@ public func FfiConverterTypeUtxo_lift(_ buf: RustBuffer) throws -> Utxo {
 #endif
 public func FfiConverterTypeUtxo_lower(_ value: Utxo) -> RustBuffer {
     return FfiConverterTypeUtxo.lower(value)
+}
+
+public struct VerifyMessageResponse {
+    public var valid: Bool
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(valid: Bool) {
+        self.valid = valid
+    }
+}
+
+extension VerifyMessageResponse: Equatable, Hashable {
+    public static func == (lhs: VerifyMessageResponse, rhs: VerifyMessageResponse) -> Bool {
+        if lhs.valid != rhs.valid {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(valid)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVerifyMessageResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VerifyMessageResponse {
+        return
+            try VerifyMessageResponse(
+                valid: FfiConverterBool.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: VerifyMessageResponse, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.valid, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVerifyMessageResponse_lift(_ buf: RustBuffer) throws -> VerifyMessageResponse {
+    return try FfiConverterTypeVerifyMessageResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVerifyMessageResponse_lower(_ value: VerifyMessageResponse) -> RustBuffer {
+    return FfiConverterTypeVerifyMessageResponse.lower(value)
 }
 
 public struct WitnessData {
@@ -10544,7 +10674,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transactions() != 24401 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transactions_by_txid() != 10806 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transfers() != 20315 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transfers_by_txid() != 12085 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_list_unspents() != 35087 {
@@ -10577,6 +10713,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_rgbinvoice() != 62357 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_rotate_address() != 12513 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_send_rgb() != 13590 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10602,6 +10741,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock() != 60312 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_verify_message() != 22653 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_vss_backup() != 63911 {
@@ -10638,6 +10780,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_constructor_nativeexternalsigner_new() != 50694 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_constructor_nativeexternalsigner_new_with_storage() != 25698 {
         return InitializationResult.apiChecksumMismatch
     }
 

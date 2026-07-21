@@ -32,6 +32,9 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnAssignmentKind,
+  RlnSignMessageResponse,
+  RlnVerifyMessageResponse,
   RlnClaimHodlInvoiceResponse,
   RlnApayNewResponse,
 } from './rln-types';
@@ -104,7 +107,8 @@ export class RLNBinding implements IRLN {
         params.vssAllowHttp ?? false,
         params.vssAllowEmptyRestore ?? false,
         params.lspBaseUrl ?? null,
-        params.lspBearerToken ?? null
+        params.lspBearerToken ?? null,
+        params.reuseAddresses ?? false
       );
       this.rlnNodeId = nodeId;
       this.lifecycleState = 'active';
@@ -210,13 +214,15 @@ export class RLNBinding implements IRLN {
   async rlnCreateNativeExternalSigner(
     seedHex: string,
     network: string,
-    permissivePolicy: boolean = true
+    permissivePolicy: boolean = true,
+    storageDirPath: string | null = null
   ): Promise<number> {
     return this.withNodeQueue(async () => {
       return Rgb.rlnCreateNativeExternalSigner(
         seedHex,
         network,
-        permissivePolicy
+        permissivePolicy,
+        storageDirPath
       );
     });
   }
@@ -439,7 +445,8 @@ export class RLNBinding implements IRLN {
     assetId: string | null,
     assetAmount: number | null,
     paymentHash?: string | null,
-    minFinalCltvExpiryDelta?: number | null
+    minFinalCltvExpiryDelta?: number | null,
+    descriptionHash?: string | null
   ): Promise<RlnLnInvoiceResponse> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnLnInvoice(
@@ -449,7 +456,8 @@ export class RLNBinding implements IRLN {
         assetId,
         assetAmount,
         paymentHash ?? null,
-        minFinalCltvExpiryDelta ?? null
+        minFinalCltvExpiryDelta ?? null,
+        descriptionHash ?? null
       )
     ) as Promise<RlnLnInvoiceResponse>;
   }
@@ -543,6 +551,27 @@ export class RLNBinding implements IRLN {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnAddress(nodeId)
     ) as Promise<RlnAddressResponse>;
+  }
+
+  async rlnRotateAddress(): Promise<RlnAddressResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnRotateAddress(nodeId)
+    ) as Promise<RlnAddressResponse>;
+  }
+
+  async rlnSignMessage(message: string): Promise<RlnSignMessageResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnSignMessage(nodeId, message)
+    ) as Promise<RlnSignMessageResponse>;
+  }
+
+  async rlnVerifyMessage(
+    message: string,
+    signature: string
+  ): Promise<RlnVerifyMessageResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnVerifyMessage(nodeId, message, signature)
+    ) as Promise<RlnVerifyMessageResponse>;
   }
 
   async rlnBtcBalance(skipSync: boolean = false): Promise<RlnBtcBalance> {
@@ -658,8 +687,14 @@ export class RLNBinding implements IRLN {
     assignmentAmount: number | null,
     durationSeconds: number | null,
     minConfirmations: number,
-    witness: boolean
+    witness: boolean,
+    assignmentKind?: RlnAssignmentKind | null
   ): Promise<RlnRgbInvoiceResponse> {
+    // RLN pairs kind+amount strictly: it only honours assignmentAmount when a kind
+    // is set, and falls back to `Any` (dropping the amount) otherwise. Default to
+    // Fungible whenever an amount is present so the amount is actually enforced.
+    const kind =
+      assignmentKind ?? (assignmentAmount != null ? 'Fungible' : null);
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnRgbInvoice(
         nodeId,
@@ -667,7 +702,8 @@ export class RLNBinding implements IRLN {
         assignmentAmount,
         durationSeconds,
         minConfirmations,
-        witness
+        witness,
+        kind
       )
     ) as Promise<RlnRgbInvoiceResponse>;
   }
@@ -712,9 +748,30 @@ export class RLNBinding implements IRLN {
     }));
   }
 
+  async rlnListTransactionsByTxid(
+    txid: string,
+    skipSync: boolean
+  ): Promise<RlnTransaction[]> {
+    const raw = (await this.withNodeOperation((nodeId) =>
+      Rgb.rlnListTransactionsByTxid(nodeId, txid, skipSync)
+    )) as RlnTransaction[];
+    return raw.map((t) => ({
+      ...t,
+      transactionType: canonicalEnum(
+        (t as any).transactionType
+      ) as RlnTransaction['transactionType'],
+    }));
+  }
+
   async rlnListTransfers(assetId: string): Promise<RlnTransfer[]> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnListTransfers(nodeId, assetId)
+    ) as Promise<RlnTransfer[]>;
+  }
+
+  async rlnListTransfersByTxid(txid: string): Promise<RlnTransfer[]> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnListTransfersByTxid(nodeId, txid)
     ) as Promise<RlnTransfer[]>;
   }
 

@@ -11,11 +11,20 @@ function toSeedHex(input: RLNKeyMaterial): string {
   return Buffer.from(bytes).slice(0, 32).toString('hex');
 }
 
+/**
+ * `storageDirPath` is injected by the wallet from its own node params, so a signer's
+ * on-disk state always lands beside the node it signs for. Implementations that keep
+ * no state may ignore it.
+ */
 export interface IRLNSigner {
   /** Called once on first-time node creation. Sets up keys on disk. */
-  initNode(rln: RLNManager): Promise<void>;
+  initNode(rln: RLNManager, storageDirPath?: string): Promise<void>;
   /** Called on every start (first time and restarts). */
-  unlockNode(rln: RLNManager, params: IRLNUnlockParams): Promise<void>;
+  unlockNode(
+    rln: RLNManager,
+    params: IRLNUnlockParams,
+    storageDirPath?: string
+  ): Promise<void>;
   /** Optional cleanup — release signer resources. */
   dispose?(rln: RLNManager): Promise<void>;
 }
@@ -70,23 +79,39 @@ export class NativeExternalRLNSigner implements IRLNSigner {
     this.permissivePolicy = permissivePolicy;
   }
 
-  async initNode(rln: RLNManager): Promise<void> {
-    this.signerId = await rln.rlnCreateNativeExternalSigner(
+  /**
+   * Without a storage dir the native signer is ephemeral: it can re-derive channel keys
+   * from the seed on restart, but it cannot validate commitment state it never tracked,
+   * so payments over channels restored from LDK persistence force-close the channel.
+   * The wallet always supplies one; the null path exists only for callers driving the
+   * signer directly.
+   */
+  private createSigner(
+    rln: RLNManager,
+    storageDirPath?: string
+  ): Promise<number> {
+    return rln.rlnCreateNativeExternalSigner(
       this.seedHex,
       this.network,
-      this.permissivePolicy
+      this.permissivePolicy,
+      storageDirPath ?? null
     );
+  }
+
+  async initNode(rln: RLNManager, storageDirPath?: string): Promise<void> {
+    this.signerId = await this.createSigner(rln, storageDirPath);
     await rln.rlnInitNodeWithNativeExternalSigner(this.signerId);
   }
 
-  async unlockNode(rln: RLNManager, params: IRLNUnlockParams): Promise<void> {
+  async unlockNode(
+    rln: RLNManager,
+    params: IRLNUnlockParams,
+    storageDirPath?: string
+  ): Promise<void> {
     if (this.signerId === null) {
       // Fresh instance (app cold start) — recreate signer from seed then attach.
-      this.signerId = await rln.rlnCreateNativeExternalSigner(
-        this.seedHex,
-        this.network,
-        this.permissivePolicy
-      );
+      // The storage dir is what lets it pick its channel state back up.
+      this.signerId = await this.createSigner(rln, storageDirPath);
       await rln.rlnAttachNativeExternalSigner(this.signerId);
     }
     await rln.rlnUnlockNodeWithNativeExternalSigner(this.signerId, params);

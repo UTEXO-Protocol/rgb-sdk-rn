@@ -86,13 +86,15 @@ Two implementations of `IRLNSigner`:
 
 On cold start (after `shutdown`), `NativeExternalRLNSigner.unlockNode` recreates the native signer from the stored seed hex and attaches it before unlocking.
 
+The signer is created with a disk-backed VLS store (`NativeExternalSigner.newWithStorage`) rooted at the node's `storageDirPath`, which `UTEXOWallet` injects into `IRLNSigner.initNode`/`unlockNode`. This is what makes the cold-start path safe: an ephemeral signer can re-derive channel keys from the seed but cannot validate commitment state it never tracked, so channels restored from LDK persistence would fail validation and force-close. Signers driven outside `UTEXOWallet` may omit the path to get the legacy ephemeral behaviour.
+
 ### Native modules
 
 **iOS**: `Rgb.mm` (ObjC++ bridge) dispatches to `RgbSwiftHelper.swift` synchronous static methods, returning NSDictionary results. The `.mm` file bridges async Promise calls into those sync helpers via Grand Central Dispatch.
 
-**Android**: `RgbModule.kt` extends the codegen-generated `NativeRgbSpec`, dispatches each bridge call via Kotlin coroutines (`Dispatchers.IO`). The Android binding (`com.utexo:rgb-lightning-node-android:0.6.0-beta.2`) is resolved from Maven Central. JNA (`net.java.dev.jna:jna:5.17.0@aar`) is required for UniFFI.
+**Android**: `RgbModule.kt` extends the codegen-generated `NativeRgbSpec`, dispatches each bridge call via Kotlin coroutines (`Dispatchers.IO`). The Android binding (`com.utexo:rgb-lightning-node-android:0.9.0-beta.3`) is resolved from Maven Central. JNA (`net.java.dev.jna:jna:5.17.0@aar`) is required for UniFFI.
 
-**iOS native framework**: `RGBLightningNode.xcframework` is downloaded from GitHub releases during `postinstall` (`scripts/download-rln-bindings.js`). It is not committed. Version is pinned at `0.6.0-beta.2`. For local development with a custom build, place `swift-release.zip` at `src/bindings/swift-release.zip` — the script will use it instead.
+**iOS native framework**: `RGBLightningNode.xcframework` is downloaded from GitHub releases during `postinstall` (`scripts/download-rln-bindings.js`). It is not committed. Version is pinned at `0.9.0-beta.3`. For local development with a custom build, place `swift-release.zip` at `src/bindings/swift-release.zip` — the script will use it instead.
 
 ### Type mapping
 

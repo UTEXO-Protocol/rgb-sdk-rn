@@ -118,6 +118,10 @@ export const toLightningPayment: WireMapper<RlnPayment, LightningPayment> = (
 ) => ({
   paymentHash: w.paymentHash,
   status: tryNormalizePaymentStatus(w.status) ?? 'Pending',
+  // RlnPaymentType and LightningPaymentType share the same vocabulary, so this
+  // passes through; `inbound` is derived from it rather than sent on the wire.
+  paymentType: w.paymentType,
+  inbound: w.paymentType == null ? undefined : w.paymentType !== 'Outbound',
   amtMsat: w.amtMsat,
   assetId: w.assetId,
   assetAmount: w.assetAmount,

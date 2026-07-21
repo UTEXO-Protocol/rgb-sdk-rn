@@ -31,6 +31,9 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnAssignmentKind,
+  RlnSignMessageResponse,
+  RlnVerifyMessageResponse,
   RlnClaimHodlInvoiceResponse,
   RlnApayNewResponse,
 } from '../binding/rln-types';
@@ -75,12 +78,14 @@ export class RLNManager implements IRLN {
   rlnCreateNativeExternalSigner(
     seedHex: string,
     network: string,
-    permissivePolicy?: boolean
+    permissivePolicy?: boolean,
+    storageDirPath?: string | null
   ): Promise<number> {
     return this.rlnBinding.rlnCreateNativeExternalSigner(
       seedHex,
       network,
-      permissivePolicy
+      permissivePolicy,
+      storageDirPath
     );
   }
 
@@ -191,7 +196,8 @@ export class RLNManager implements IRLN {
     assetId: string | null,
     assetAmount: number | null,
     paymentHash?: string | null,
-    minFinalCltvExpiryDelta?: number | null
+    minFinalCltvExpiryDelta?: number | null,
+    descriptionHash?: string | null
   ): Promise<RlnLnInvoiceResponse> {
     return this.rlnBinding.rlnLnInvoice(
       amtMsat,
@@ -199,7 +205,8 @@ export class RLNManager implements IRLN {
       assetId,
       assetAmount,
       paymentHash,
-      minFinalCltvExpiryDelta
+      minFinalCltvExpiryDelta,
+      descriptionHash
     );
   }
 
@@ -266,6 +273,21 @@ export class RLNManager implements IRLN {
 
   rlnAddress(): Promise<RlnAddressResponse> {
     return this.rlnBinding.rlnAddress();
+  }
+
+  rlnRotateAddress(): Promise<RlnAddressResponse> {
+    return this.rlnBinding.rlnRotateAddress();
+  }
+
+  rlnSignMessage(message: string): Promise<RlnSignMessageResponse> {
+    return this.rlnBinding.rlnSignMessage(message);
+  }
+
+  rlnVerifyMessage(
+    message: string,
+    signature: string
+  ): Promise<RlnVerifyMessageResponse> {
+    return this.rlnBinding.rlnVerifyMessage(message, signature);
   }
 
   rlnBtcBalance(skipSync?: boolean): Promise<RlnBtcBalance> {
@@ -357,14 +379,16 @@ export class RLNManager implements IRLN {
     assignmentAmount: number | null,
     durationSeconds: number | null,
     minConfirmations: number,
-    witness: boolean
+    witness: boolean,
+    assignmentKind?: RlnAssignmentKind | null
   ): Promise<RlnRgbInvoiceResponse> {
     return this.rlnBinding.rlnRgbInvoice(
       assetId,
       assignmentAmount,
       durationSeconds,
       minConfirmations,
-      witness
+      witness,
+      assignmentKind
     );
   }
 
@@ -396,8 +420,19 @@ export class RLNManager implements IRLN {
     return this.rlnBinding.rlnListTransactions(skipSync);
   }
 
+  rlnListTransactionsByTxid(
+    txid: string,
+    skipSync: boolean
+  ): Promise<RlnTransaction[]> {
+    return this.rlnBinding.rlnListTransactionsByTxid(txid, skipSync);
+  }
+
   rlnListTransfers(assetId: string): Promise<RlnTransfer[]> {
     return this.rlnBinding.rlnListTransfers(assetId);
+  }
+
+  rlnListTransfersByTxid(txid: string): Promise<RlnTransfer[]> {
+    return this.rlnBinding.rlnListTransfersByTxid(txid);
   }
 
   rlnListUnspents(skipSync: boolean): Promise<RlnUnspent[]> {

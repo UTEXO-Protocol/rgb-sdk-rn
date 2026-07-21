@@ -50,6 +50,7 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
   vssAllowEmptyRestore:(BOOL)vssAllowEmptyRestore
            lspBaseUrl:(NSString *)lspBaseUrl
        lspBearerToken:(NSString *)lspBearerToken
+       reuseAddresses:(BOOL)reuseAddresses
               resolve:(RCTPromiseResolveBlock)resolve
                reject:(RCTPromiseRejectBlock)reject
 {
@@ -67,6 +68,7 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
             @"vssAllowEmptyRestore": @(vssAllowEmptyRestore),
             @"lspBaseUrl": lspBaseUrl ?: [NSNull null],
             @"lspBearerToken": lspBearerToken ?: [NSNull null],
+            @"reuseAddresses": @(reuseAddresses),
         };
         NSDictionary *result = [RgbSwiftHelper _rlnCreateNode:request];
         NSString *errorMessage = result[@"error"];
@@ -359,6 +361,54 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
     });
 }
 
+- (void)rlnRotateAddress:(double)nodeId
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnRotateAddress:@(nodeId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_ROTATE_ADDRESS_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
+- (void)rlnSignMessage:(double)nodeId
+               message:(NSString *)message
+               resolve:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnSignMessage:@(nodeId) message:message];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_SIGN_MESSAGE_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
+- (void)rlnVerifyMessage:(double)nodeId
+                 message:(NSString *)message
+               signature:(NSString *)signature
+                 resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnVerifyMessage:@(nodeId) message:message signature:signature];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_VERIFY_MESSAGE_ERROR", errorMessage, nil);
+        } else {
+            resolve(result);
+        }
+    });
+}
+
 - (void)rlnAssetBalance:(double)nodeId
                 assetId:(NSString *)assetId
                 resolve:(RCTPromiseResolveBlock)resolve
@@ -632,6 +682,23 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
     });
 }
 
+- (void)rlnListTransactionsByTxid:(double)nodeId
+                             txid:(NSString *)txid
+                         skipSync:(BOOL)skipSync
+                          resolve:(RCTPromiseResolveBlock)resolve
+                           reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnListTransactionsByTxid:@(nodeId) txid:txid skipSync:skipSync];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_LIST_TRANSACTIONS_BY_TXID_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"transactions"] ?: @[]);
+        }
+    });
+}
+
 - (void)rlnListTransfers:(double)nodeId
                  assetId:(NSString *)assetId
                  resolve:(RCTPromiseResolveBlock)resolve
@@ -642,6 +709,22 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_LIST_TRANSFERS_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"transfers"] ?: @[]);
+        }
+    });
+}
+
+- (void)rlnListTransfersByTxid:(double)nodeId
+                          txid:(NSString *)txid
+                       resolve:(RCTPromiseResolveBlock)resolve
+                        reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnListTransfersByTxid:@(nodeId) txid:txid];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_LIST_TRANSFERS_BY_TXID_ERROR", errorMessage, nil);
         } else {
             resolve(result[@"transfers"] ?: @[]);
         }
@@ -671,11 +754,12 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
           assetAmount:(NSNumber *)assetAmount
           paymentHash:(NSString *)paymentHash
 minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
+      descriptionHash:(NSString *)descriptionHash
               resolve:(RCTPromiseResolveBlock)resolve
                reject:(RCTPromiseRejectBlock)reject
 {
     EXEC_ASYNC({
-        NSDictionary *result = [RgbSwiftHelper _rlnLnInvoice:@(nodeId) amtMsat:amtMsat expirySec:@(expirySec) assetId:assetId assetAmount:assetAmount paymentHash:paymentHash minFinalCltvExpiryDelta:minFinalCltvExpiryDelta];
+        NSDictionary *result = [RgbSwiftHelper _rlnLnInvoice:@(nodeId) amtMsat:amtMsat expirySec:@(expirySec) assetId:assetId assetAmount:assetAmount paymentHash:paymentHash minFinalCltvExpiryDelta:minFinalCltvExpiryDelta descriptionHash:descriptionHash];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_LN_INVOICE_ERROR", errorMessage, nil);
@@ -774,11 +858,12 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
        durationSeconds:(NSNumber *)durationSeconds
       minConfirmations:(double)minConfirmations
                witness:(BOOL)witness
+        assignmentKind:(NSString *)assignmentKind
                resolve:(RCTPromiseResolveBlock)resolve
                 reject:(RCTPromiseRejectBlock)reject
 {
     EXEC_ASYNC({
-        NSDictionary *result = [RgbSwiftHelper _rlnRgbInvoice:@(nodeId) assetId:assetId assignmentAmount:assignmentAmount durationSeconds:durationSeconds minConfirmations:@(minConfirmations) witness:witness];
+        NSDictionary *result = [RgbSwiftHelper _rlnRgbInvoice:@(nodeId) assetId:assetId assignmentAmount:assignmentAmount durationSeconds:durationSeconds minConfirmations:@(minConfirmations) witness:witness assignmentKind:assignmentKind];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_RGB_INVOICE_ERROR", errorMessage, nil);
@@ -906,11 +991,12 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
 - (void)rlnCreateNativeExternalSigner:(NSString *)seedHex
                              network:(NSString *)network
                      permissivePolicy:(BOOL)permissivePolicy
+                      storageDirPath:(NSString *)storageDirPath
                               resolve:(RCTPromiseResolveBlock)resolve
                                reject:(RCTPromiseRejectBlock)reject
 {
     EXEC_ASYNC({
-        NSDictionary *result = [RgbSwiftHelper _rlnCreateNativeExternalSigner:seedHex network:network permissivePolicy:permissivePolicy];
+        NSDictionary *result = [RgbSwiftHelper _rlnCreateNativeExternalSigner:seedHex network:network permissivePolicy:permissivePolicy storageDirPath:storageDirPath];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_CREATE_NATIVE_SIGNER_ERROR", errorMessage, nil);

@@ -43,7 +43,7 @@ import type {
   OnchainSendResponse,
   BitcoinNetwork,
 } from '@utexo/rgb-sdk-core';
-import { AssetSchema } from '@utexo/rgb-sdk-core';
+import { AssetSchema, normalizeRlnNetwork } from '@utexo/rgb-sdk-core';
 
 import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
@@ -369,7 +369,7 @@ function mapInvoiceData(
     recipientId: r.recipientId,
     assetSchema: r.assetSchema ? schemaMap[r.assetSchema] : undefined,
     assetId: r.assetId,
-    network: r.network as BitcoinNetwork,
+    network: normalizeRlnNetwork(r.network),
     assignment: parseAssignment(r.assignment),
     expirationTimestamp: r.expirationTimestamp ?? null,
     transportEndpoints: r.transportEndpoints,
@@ -559,14 +559,17 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
     return mapAssetNia(raw);
   }
 
-  async issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<any> {
-    return this.rln.rlnIssueAssetIfa(
-      params.ticker,
-      params.name,
-      params.precision,
-      params.amounts,
-      params.inflationAmounts,
-      params.rejectListUrl
+  /** Issue an inflatable (IFA) asset — mapped like `listAssets().ifa` entries. */
+  async issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<AssetIfa> {
+    return mapAssetIfa(
+      await this.rln.rlnIssueAssetIfa(
+        params.ticker,
+        params.name,
+        params.precision,
+        params.amounts,
+        params.inflationAmounts,
+        params.rejectListUrl
+      )
     );
   }
 

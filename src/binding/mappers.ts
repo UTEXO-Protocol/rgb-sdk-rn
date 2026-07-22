@@ -27,6 +27,7 @@ import {
   satToMsat,
   tryNormalizeChannelStatus,
   tryNormalizePaymentStatus,
+  tryNormalizeRlnNetwork,
 } from '@utexo/rgb-sdk-core';
 import type {
   RlnChannel,
@@ -97,7 +98,9 @@ export const toLightningNetworkInfo: WireMapper<
   RlnNetworkInfo,
   LightningNetworkInfo
 > = (w) => ({
-  network: w.network,
+  // `try…`: an unrecognised network stays visible rather than throwing inside
+  // a read-only info call.
+  network: tryNormalizeRlnNetwork(w.network) ?? w.network,
   blockHeight: w.height,
 });
 
@@ -152,7 +155,7 @@ export const toDecodedLnInvoice: WireMapper<
   paymentSecret: w.paymentSecret,
   assetId: w.assetId,
   assetAmount: w.assetAmount,
-  network: w.network,
+  network: tryNormalizeRlnNetwork(w.network) ?? w.network,
 });
 
 /**

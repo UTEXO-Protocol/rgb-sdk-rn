@@ -1,14 +1,16 @@
 // Wallet utilities
 export { createWallet } from './wallet/wallet-manager';
-export type { WalletInitParams } from '@utexo/rgb-sdk-core';
 
 // RLN node manager
 export { RLNManager, createRLNManager } from './wallet/rln-manager';
 
-// UTEXO wallet (implements IWalletManager + IUTEXOProtocol, backed by RLN)
+// UTEXO wallet — implements the shared IUTEXOProtocol contract, backed by RLN.
 export { UTEXOWallet } from './wallet/utexo-wallet';
 export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
-export { getNetworkDefaults, resolveUnlockParams } from './wallet/network-defaults';
+export {
+  getNetworkDefaults,
+  resolveUnlockParams,
+} from './wallet/network-defaults';
 export type { NetworkEndpoints } from './wallet/network-defaults';
 export {
   PasswordRLNSigner,
@@ -18,7 +20,6 @@ export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln-signers';
 
 // Binding and signer (for advanced / testing use)
 export { RLNBinding } from './binding/RLNBinding';
-export { RNSigner } from './signer/RNSigner';
 export type * from './binding/rln-types';
 export type {
   IRLN,
@@ -27,10 +28,22 @@ export type {
   IRLNExternalSignerBootstrap,
 } from './binding/IRLN';
 
-// LSP client + types (temporary in rgb-sdk-rn; moves to @utexo/rgb-sdk-core next release)
-export { UtexoLSPClient, LspError } from './lsp/UtexoLSPClient';
-export type { IUtexoLSPClient } from './lsp/IUtexoLSPClient';
+// ── LSP (utexo-lsp) ──────────────────────────────────────────────────────────
+// Now lives in @utexo/rgb-sdk-core (was duplicated here and in rgb-sdk-web).
+// Re-exported so this package's public API is unchanged.
+export {
+  UtexoLSPClient,
+  LspError,
+  UtexoLsp,
+  LspChannelTimeoutError,
+  LspLiquidityTimeoutError,
+  LspSettlementError,
+  normalizeReceiveStatus,
+  peerUri,
+} from '@utexo/rgb-sdk-core';
 export type {
+  IUtexoLSPClient,
+  ILspWallet,
   LspClientConfig,
   LspGetInfoResponse,
   LspLnParams,
@@ -42,23 +55,15 @@ export type {
   LspLnurlpCallbackResponse,
   LspLightningAddressByPubkeyResponse,
   CreateHodlInvoiceParams,
-  HodlInvoice,
   HodlInvoiceResult,
   ApayHashEntry,
   ApayNewResponse,
   ApayInvoiceProof,
   ApayMerkleProofElement,
-  // New LSP types
   LspPeer,
   ReceiveStatus,
   ReceiveSettlementOutcome,
   ChannelReadyInfo,
-} from './lsp/lsp-types';
-export { normalizeReceiveStatus, peerUri } from './lsp/lsp-types';
-
-// UtexoLsp — composed LSP flows (connect, channel wait, receive, send, pay address, APay)
-export { UtexoLsp } from './lsp/UtexoLsp';
-export type {
   WaitOptions,
   ReceiveAssetOptions,
   ReceiveAssetResult,
@@ -67,11 +72,7 @@ export type {
   PayAddressOptions,
   LightningAddressInfo,
   ClaimResult,
-} from './lsp/UtexoLsp';
-export { LspChannelTimeoutError, LspSettlementError } from './lsp/LspErrors';
-
-// Crypto — PSBT signing stubs (bdk-rn removed; throws — use NativeExternalRLNSigner for PSBT)
-export { signPsbt, signPsbtFromSeed, estimatePsbt } from './crypto/signer';
+} from '@utexo/rgb-sdk-core';
 
 // Re-export everything consumers need from core
 export {
@@ -113,21 +114,8 @@ export {
   toUnitsNumber,
   fromUnitsNumber,
   // UTEXO network config
-  utexoNetworkMap,
-  utexoNetworkIdMap,
-  getDestinationAsset,
   DEFAULT_TRANSPORT_ENDPOINTS,
   DEFAULT_INDEXER_URLS,
-  // Bridge API
-  getBridgeAPI,
-  encodeTransferStatus,
-  TransferStatuses,
-  // Interfaces / base classes
-  UTEXOProtocol,
-  LightningProtocol,
-  OnchainProtocol,
-  UTEXOWalletCore,
-  BaseWalletManager,
 } from '@utexo/rgb-sdk-core';
 
 export type {
@@ -138,13 +126,23 @@ export type {
   Descriptors,
   GeneratedKeys,
   AccountXpubs,
-  // Wallet interfaces
-  IWalletManager,
-  IRgbLibBinding,
-  ISigner,
+  // UTEXO protocol contract — shared surface, lifecycle, and the optional
+  // carrier types. The carriers are all absent on this platform (see
+  // UTEXOWallet), but the types are exported so app code can be written against
+  // the shared contract and stay portable to rgb-sdk-web.
   IUTEXOProtocol,
-  ILightningProtocol,
-  IOnchainProtocol,
+  IUTEXOProtocolCore,
+  IWalletLifecycle,
+  WalletCapabilities,
+  IPsbtSigning,
+  IBeginEndFlows,
+  CreateLnInvoiceRequest,
+  ILightningNode,
+  ILightningPayments,
+  IAsyncPayments,
+  IOnchainTransfers,
+  IRgbAssets,
+  IBitcoinWallet,
   // All model types
   BtcBalance,
   Unspent,
@@ -173,9 +171,9 @@ export type {
   VssBackupInfo,
   WalletBackupResponse,
   TransferStatus,
-  OnchainSendStatus,
   PublicKeys,
   CreateLightningInvoiceRequestModel,
+  GetLightningSendFeeEstimateRequestModel,
   LightningReceiveRequest,
   LightningSendRequest,
   PayLightningInvoiceRequestModel,
@@ -186,9 +184,4 @@ export type {
   OnchainReceiveResponse,
   ListLightningPaymentsResponse,
   GetFeeEstimationResponse,
-  // Bridge types
-  NetworkAddress,
-  BridgeInSignatureRequest,
-  BridgeInSignatureResponse,
-  TransferByMainnetInvoiceResponse,
 } from '@utexo/rgb-sdk-core';

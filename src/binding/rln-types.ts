@@ -1,20 +1,14 @@
-export type {
-  CreateLightningInvoiceRequestModel,
-  LightningReceiveRequest,
-  GetLightningSendFeeEstimateRequestModel,
-  PayLightningInvoiceRequestModel,
-  LightningSendRequest,
-  OnchainReceiveRequestModel,
-  OnchainReceiveResponse,
-  OnchainSendRequestModel,
-  OnchainSendResponse,
-  OnchainSendStatus,
-  SendAssetEndRequestModel,
-  TransferStatus,
-  Transfer,
-  ListLightningPaymentsResponse,
-} from '@utexo/rgb-sdk-core';
-
+// UniFFI wire types — the binding contract.
+//
+// Only `Rln*` shapes live here. Shared model types come from
+// @utexo/rgb-sdk-core; import them from there, not through this module.
+//
+// Unit conventions:
+// - Every timestamp is **Unix seconds**, passed through from the native layer
+//   unconverted. JS `Date` expects milliseconds, so multiply by 1000 before
+//   constructing one — treating these as ms yields dates in 1970.
+// - Fields named `*Sec`/`*Seconds` are durations, not absolute times.
+// - Amounts are sats unless the name ends in `Msat`.
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
 export interface RlnBtcSubBalance {
@@ -31,6 +25,7 @@ export interface RlnMedia {
 
 export interface RlnBlockTime {
   height: number;
+  /** Block time as **Unix seconds** (not JS milliseconds). */
   timestamp: number;
 }
 
@@ -57,6 +52,7 @@ export interface RlnNodeInfo {
   channelAssetMaxAmount?: number;
   networkNodes?: number;
   networkChannels?: number;
+  /** **Unix seconds** (not JS milliseconds). */
   latestRgsSnapshotTimestamp?: number | null;
 }
 
@@ -74,12 +70,12 @@ export interface RlnPeer {
 // ── Channels ──────────────────────────────────────────────────────────────────
 
 /** Canonical SCREAMING_SNAKE — normalized at the RLNBinding boundary. */
-export type RlnChannelStatus = 'OPENING' | 'OPENED' | 'CLOSING';
+export type RlnChannelStatusWire = 'OPENING' | 'OPENED' | 'CLOSING';
 
 export interface RlnChannel {
   channelId: string;
   peerPubkey: string;
-  status?: RlnChannelStatus;
+  status?: RlnChannelStatusWire;
   ready: boolean;
   capacitySat: number;
   isUsable?: boolean;
@@ -105,7 +101,7 @@ export interface RlnOpenChannelResponse {
 // ── Payments ──────────────────────────────────────────────────────────────────
 
 export type RlnPaymentType = 'Outbound' | 'InboundAutoClaim' | 'InboundHodl';
-export type RlnPaymentStatus =
+export type RlnPaymentStatusWire =
   | 'Pending'
   | 'Claimable'
   | 'Claiming'
@@ -116,8 +112,10 @@ export type RlnPaymentStatus =
 export interface RlnPayment {
   paymentHash: string;
   paymentType?: RlnPaymentType;
-  status?: RlnPaymentStatus;
+  status?: RlnPaymentStatusWire;
+  /** **Unix seconds** (not JS milliseconds) — multiply by 1000 for `new Date()`. */
   createdAt: number;
+  /** **Unix seconds** (not JS milliseconds) — multiply by 1000 for `new Date()`. */
   updatedAt: number;
   payeePubkey: string;
   amtMsat?: number;
@@ -130,16 +128,16 @@ export interface RlnSendPaymentResponse {
   paymentId: string;
   paymentHash?: string;
   paymentSecret?: string;
-  status: RlnPaymentStatus;
+  status: RlnPaymentStatusWire;
 }
 
 export interface RlnKeysendResponse {
   paymentHash: string;
   paymentPreimage: string;
-  status: RlnPaymentStatus;
+  status: RlnPaymentStatusWire;
 }
 
-export type RlnInvoiceStatus =
+export type RlnInvoiceStatusWire =
   | 'PENDING'
   | 'CLAIMABLE'
   | 'CLAIMING'
@@ -154,7 +152,9 @@ export interface RlnLnInvoiceResponse {
 
 export interface RlnDecodeLnInvoiceResponse {
   amtMsat?: number;
+  /** Duration in seconds from `timestamp`, not an absolute time. */
   expirySec: number;
+  /** Invoice creation time as **Unix seconds** (not JS milliseconds). */
   timestamp: number;
   assetId?: string;
   assetAmount?: number;
@@ -168,6 +168,22 @@ export interface RlnDecodeLnInvoiceResponse {
 
 export interface RlnAddressResponse {
   address: string;
+}
+
+/** Mirrors the native `AssignmentKind` enum. */
+export type RlnAssignmentKind =
+  | 'Fungible'
+  | 'NonFungible'
+  | 'InflationRight'
+  | 'ReplaceRight'
+  | 'Any';
+
+export interface RlnSignMessageResponse {
+  signedMessage: string;
+}
+
+export interface RlnVerifyMessageResponse {
+  valid: boolean;
 }
 
 export interface RlnBtcBalance {
@@ -201,7 +217,9 @@ interface RlnAssetBase {
   assetId: string;
   name: string;
   precision: number;
+  /** Issuance time as **Unix seconds** (not JS milliseconds). */
   timestamp: number;
+  /** Time the asset entered this wallet, as **Unix seconds**. */
   addedAt: number;
   balance: RlnAssetBalance;
   media?: RlnMedia;
@@ -246,6 +264,7 @@ export interface RlnRgbInvoiceResponse {
   invoice: string;
   batchTransferIdx: number;
   recipientId?: string;
+  /** **Unix seconds** (not JS milliseconds). */
   expirationTimestamp?: number;
 }
 
@@ -256,6 +275,7 @@ export interface RlnDecodeRgbInvoiceResponse {
   assetId?: string;
   assignment: string;
   network: string;
+  /** **Unix seconds** (not JS milliseconds). */
   expirationTimestamp?: number;
   transportEndpoints: string[];
 }
@@ -277,6 +297,8 @@ export interface RlnUtxo {
 export interface RlnUnspent {
   utxo: RlnUtxo;
   rgbAllocations?: RlnRgbAllocation[];
+  /** Blinded assignments awaiting a matching incoming transfer. */
+  pendingBlinded?: number;
 }
 
 /** Canonical SCREAMING_SNAKE — normalized at the RLNBinding boundary. */
@@ -299,13 +321,16 @@ export interface RlnTransaction {
 export interface RlnTransfer {
   idx: number;
   status: string;
+  /** **Unix seconds** (not JS milliseconds) — multiply by 1000 for `new Date()`. */
   createdAt?: number;
+  /** **Unix seconds** (not JS milliseconds) — multiply by 1000 for `new Date()`. */
   updatedAt?: number;
   kind?: string;
   txid?: string;
   recipientId?: string;
   receiveUtxo?: string;
   changeUtxo?: string;
+  /** **Unix seconds** (not JS milliseconds). */
   expiration?: number;
   transportEndpoints?: RlnTransportEndpoint[];
   requestedAssignment?: string;
@@ -345,6 +370,17 @@ export interface RlnApayNewResponse {
 export interface RlnSendRgbResponse {
   txid: string;
   batchTransferIdx: number;
+}
+
+// ── Inflate (IFA) ─────────────────────────────────────────────────────────────
+
+/**
+ * Mirrors the UniFFI `InflateResponse`, which carries **only** a txid — unlike
+ * `RlnSendRgbResponse` there is no `batchTransferIdx`, because the node
+ * performs inflation atomically rather than through a batch transfer.
+ */
+export interface RlnInflateResponse {
+  txid: string;
 }
 
 // ── Fail transfers ────────────────────────────────────────────────────────────

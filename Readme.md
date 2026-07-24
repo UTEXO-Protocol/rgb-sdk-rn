@@ -71,8 +71,9 @@ const address = await wallet.getAddress();
 await wallet.syncWallet();
 await wallet.createUtxos({ upTo: false, num: 4, feeRate: 1 });
 
-// Blind RGB invoice — share with the sender (omit assetId/amount if you don't hold the asset yet)
-const { invoice } = await wallet.blindReceive({ minConfirmations: 1 });
+// RGB invoice — share with the sender (omit assetId/amount if you don't hold the asset yet).
+// witness: false gives a blinded invoice; omit or pass true for a witness invoice.
+const { invoice } = await wallet.onchainReceive({ witness: false, minConfirmations: 1 });
 console.log('RGB invoice:', invoice);
 ```
 
@@ -96,7 +97,7 @@ After shutdown, restart on the same instance with `await wallet.reinit(unlockPar
 
 ## Primary Class: `UTEXOWallet`
 
-`UTEXOWallet` implements `IWalletManager` + `IUTEXOProtocol` and is backed by an on-device RLN node. It owns the node lifecycle, abstracts signer authentication, and exposes the full RGB Lightning API surface.
+`UTEXOWallet` implements the shared `IUTEXOProtocol` contract and is backed by an on-device RLN node. It owns the node lifecycle, abstracts signer authentication, and exposes the full RGB Lightning API surface.
 
 ### Construction
 
@@ -234,23 +235,23 @@ await wallet.destroy();
 
 ### Method Reference
 
-#### IWalletManager — Balance & Address
+#### Balance & Address
 
 | Method | Description |
 |--------|-------------|
 | `getBtcBalance()` | BTC balance (vanilla + colored) |
 | `getAddress()` | Current on-chain deposit address |
-| `getXpub()` | `{ xpubVan, xpubCol }` |
+| `rotateVanillaAddress()` | Derive a fresh on-chain (vanilla/BTC) address |
 | `getNetwork()` | Configured network string |
 
-#### IWalletManager — UTXO Management
+#### UTXO Management
 
 | Method | Description |
 |--------|-------------|
 | `createUtxos({ upTo?, num?, size?, feeRate? })` | Create UTXOs (all-in-one) |
 | `listUnspents()` | List unspent UTXOs with RGB allocations |
 
-#### IWalletManager — Assets
+#### Assets
 
 | Method | Description |
 |--------|-------------|
@@ -258,18 +259,17 @@ await wallet.destroy();
 | `getAssetBalance(assetId)` | Balance for one asset |
 | `issueAssetNia({ ticker, name, precision, amounts })` | Issue a Non-Inflationary Asset |
 | `issueAssetIfa({ ticker, name, precision, amounts, inflationAmounts, rejectListUrl })` | Issue an Inflatable Asset |
-| `send({ invoice, assetId?, amount, donation?, feeRate?, minConfirmations?, skipSync?, witnessData? })` | RGB transfer — decodes invoice and sends. `witnessData: { amountSat, blinding? }` required for witness sends |
 | `blindReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a blinded RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
 | `witnessReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a witness RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
 | `decodeRGBInvoice({ invoice })` | Decode an RGB invoice |
 
-#### IWalletManager — BTC Sends
+#### BTC Sends
 
 | Method | Description |
 |--------|-------------|
 | `sendBtc({ address, amount, feeRate, skipSync? })` | On-chain BTC send |
 
-#### IWalletManager — Transactions & Transfers
+#### Transactions & Transfers
 
 | Method | Description |
 |--------|-------------|
@@ -279,12 +279,13 @@ await wallet.destroy();
 | `refreshWallet()` | Refresh RGB transfer state |
 | `syncWallet()` | Sync blockchain state |
 
-#### IWalletManager — Fees & Backup
+#### Fees & Backup
 
 | Method | Description |
 |--------|-------------|
 | `estimateFeeRate(blocks)` | Fee rate estimate for target confirmation |
-| `createBackup({ backupPath, password })` | Encrypted local backup |
+| `createBackup({ backupPath, password })` | Encrypted local backup (file) |
+| `backupNow()` | Replicate state to VSS now; returns the new backup version |
 
 #### IUTEXOProtocol — Lightning
 
@@ -292,8 +293,8 @@ await wallet.destroy();
 |--------|-------------|
 | `createLightningInvoice({ amountSats?, asset, expirySeconds? })` | Create a Lightning invoice |
 | `payLightningInvoice({ lnInvoice, amount?, assetId? })` | Pay a Lightning invoice |
-| `getLightningSendRequest(paymentHash)` | Poll send status (`'WaitingCounterparty'` → `'Settled'` \| `'Failed'`) |
-| `getLightningReceiveRequest(invoice)` | Poll receive status |
+| `getLightningSendStatus(paymentHash)` | Poll send status — `RlnPaymentStatus` (`'Pending'` \| `'Claimable'` \| `'Claiming'` \| `'Succeeded'` \| `'Cancelled'` \| `'Failed'`); `null` if the hash is unknown |
+| `getLightningReceiveStatus(invoice)` | Poll receive status (`RlnInvoiceStatus`) |
 | `listLightningPayments()` | List all Lightning payments |
 
 #### IUTEXOProtocol — LSP & Async payments (APay)
@@ -307,7 +308,7 @@ await wallet.destroy();
 | `createHodlInvoice(params)` | Create a HODL invoice tied to a specific payment hash |
 | `claimHodlInvoice(paymentHash, preimage)` | Reveal preimage to claim an inbound HODL payment |
 | `cancelHodlInvoice(paymentHash)` | Cancel a HODL invoice |
-| `listPaymentsRaw()` | Return all payments including `InboundHodl` with preimage |
+| `listPayments()` | Return all payments including `InboundHodl` with preimage |
 
 See **[docs/lsp.md](./docs/lsp.md)** for `UtexoLsp` composed flows and full examples.
 
@@ -472,11 +473,11 @@ const { txid: paymentHash } = await senderWallet.payLightningInvoice({ lnInvoice
 
 // Poll until settled
 let status = null;
-while (status !== 'Settled') {
+while (status !== 'Succeeded') {
   await senderWallet.syncWallet();
-  status = await senderWallet.getLightningSendRequest(paymentHash);
+  status = await senderWallet.getLightningSendStatus(paymentHash);
   if (status === 'Failed') throw new Error('Payment failed');
-  if (status !== 'Settled') await new Promise(r => setTimeout(r, 2000));
+  if (status !== 'Succeeded') await new Promise(r => setTimeout(r, 2000));
 }
 ```
 
@@ -577,7 +578,11 @@ await walletRestored.unlock(unlockParams);           // pulls LDK state from VSS
 
 Clears the VSS single-writer fence lock. Must be called **after `init()` but before `unlock()`** in the restore path. Requires the same password used to init the original node.
 
-> **Note:** `configureVssBackup`, `disableVssAutoBackup`, `vssBackup`, and `vssBackupInfo` from the `IWalletManager` interface exist on `UTEXOWallet` but are not yet implemented and will throw.
+### `backupNow()`
+
+Uploads a snapshot now instead of waiting for the node's own schedule, and returns the new backup version. Requires `vssUrl`.
+
+The imperative `configureVssBackup` / `disableVssAutoBackup` / `vssBackup` / `vssBackupInfo` quartet is **not** part of the contract: the node owns its single state store and configures its VSS client at `init()` from `vssUrl`. Web has those methods because it also runs an rgb-lib wallet with a second store to replicate.
 
 A full end-to-end example (fund → channel → simulate device loss → restore → verify channels recovered) is in the demo app: [`flows/vss/runRlnVssFlow.ts`](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/flows/vss/runRlnVssFlow.ts).
 
@@ -707,7 +712,7 @@ const { lnInvoice } = await nodeB.createLightningInvoice({
 
 const { txid: paymentHash } = await nodeA.payLightningInvoice({ lnInvoice });
 
-// poll nodeA.getLightningSendRequest(paymentHash) until 'Settled'
+// poll nodeA.getLightningSendStatus(paymentHash) until 'Succeeded'
 
 // ── Cooperative close ─────────────────────────────────────────────────────────
 // After two payments (100 + 50 units), channel balances: nodeA=450, nodeB=150
@@ -728,8 +733,8 @@ while (Date.now() < deadline) {
 }
 
 // ── RGB on-chain send: nodeB returns 150 units to nodeA ──────────────────────
-const invoice = await nodeA.blindReceive({ minConfirmations: 1 });
-await nodeB.send({
+const invoice = await nodeA.onchainReceive({ witness: false, minConfirmations: 1 });
+await nodeB.onchainSend({
   invoice: invoice.invoice,
   assetId,
   amount: 150,
@@ -1016,7 +1021,7 @@ const result = await wallet.claimHodlInvoice(
 // result.changed — true if the invoice state was updated
 ```
 
-Call after `listPaymentsRaw()` finds a payment with `status === 'Claimable'`.
+Call after `listPayments()` finds a payment with `status === 'Claimable'`.
 
 ---
 
@@ -1031,19 +1036,19 @@ const result = await wallet.cancelHodlInvoice(paymentHash);
 
 ---
 
-##### `listPaymentsRaw()`
+##### `listPayments()`
 
 Return all payments the node knows about. Monitor inbound `INBOUND_HODL` → `Succeeded` for APay receive; filter `Claimable` + call `claimHodlInvoice` for HODL invoices you issued.
 
 ```typescript
-const payments = await wallet.listPaymentsRaw();
+const payments = await wallet.listPayments();
 
 const claimable = payments.filter(
   p => p.paymentType === 'InboundHodl' && p.status === 'Claimable'
 );
 ```
 
-**Each payment (`RlnPayment`):**
+**Each payment (`LightningPayment`):**
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -1086,17 +1091,17 @@ let settled = false;
 while (!settled) {
   await senderWallet.syncWallet();
   await wallet.syncWallet();
-  const sendSt = await senderWallet.getLightningSendRequest(paymentHash!);
-  const inbound = (await wallet.listPaymentsRaw())
+  const sendSt = await senderWallet.getLightningSendStatus(paymentHash!);
+  const inbound = (await wallet.listPayments())
     .find(p => p.paymentHash === paymentHash);
-  if (sendSt === 'Settled' && inbound?.status === 'Succeeded') settled = true;
+  if (sendSt === 'Succeeded' && inbound?.status === 'Succeeded') settled = true;
 }
 ```
 
 ##### Claim pending HODL payments
 
 ```typescript
-for (const p of await wallet.listPaymentsRaw()) {
+for (const p of await wallet.listPayments()) {
   if (p.paymentType !== 'InboundHodl' || p.status !== 'Claimable') continue;
   if (!p.preimage) continue;
   await wallet.claimHodlInvoice(p.paymentHash, p.preimage);

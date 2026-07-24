@@ -55,7 +55,9 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "version:patch": "npm version patch && git push && git push --tags && npm publish --access public",
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
-    "version:major": "npm version major && git push && git push --tags && npm publish --access public"
+    "version:major": "npm version major && git push && git push --tags && npm publish --access public",
+    "check:contract": "bob build && node --experimental-loader ./scripts/rn-stub-loader.mjs scripts/check-contract.mjs",
+    "test": "npm run typecheck && npm run check:contract"
   },
   "repository": {
     "type": "git",
@@ -100,7 +102,7 @@
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
-    "@utexo/rgb-sdk-core": "1.0.0-beta.4"
+    "@utexo/rgb-sdk-core": "1.0.0-beta.5"
   },
   "react-native-builder-bob": {
     "source": "src",

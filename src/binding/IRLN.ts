@@ -7,7 +7,7 @@ import type {
   RlnPayment,
   RlnSendPaymentResponse,
   RlnKeysendResponse,
-  RlnInvoiceStatus,
+  RlnInvoiceStatusWire,
   RlnLnInvoiceResponse,
   RlnDecodeLnInvoiceResponse,
   RlnDecodeRgbInvoiceResponse,
@@ -20,10 +20,14 @@ import type {
   RlnListAssetsResponse,
   RlnRgbInvoiceResponse,
   RlnSendRgbResponse,
+  RlnInflateResponse,
   RlnTransaction,
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnAssignmentKind,
+  RlnSignMessageResponse,
+  RlnVerifyMessageResponse,
   RlnClaimHodlInvoiceResponse,
   RlnApayNewResponse,
 } from './rln-types';
@@ -43,6 +47,8 @@ export interface IRLNNodeCreateParams {
   vssAllowEmptyRestore?: boolean;
   lspBaseUrl?: string | null;
   lspBearerToken?: string | null;
+  /** Reuse on-chain addresses instead of deriving a fresh one each call. Defaults to false. */
+  reuseAddresses?: boolean;
 }
 
 export interface IRLNUnlockParams {
@@ -83,10 +89,15 @@ export interface IRLN {
 
   // ── External signer (optional — node can be used with password only) ────────
 
+  /**
+   * @param storageDirPath  Enables the disk-backed VLS store so signer channel state
+   *                        survives a restart. Omit for the legacy ephemeral signer.
+   */
   rlnCreateNativeExternalSigner(
     seedHex: string,
     network: string,
-    permissivePolicy?: boolean
+    permissivePolicy?: boolean,
+    storageDirPath?: string | null
   ): Promise<number>;
 
   rlnInitNodeWithNativeExternalSigner(signerId: number): Promise<void>;
@@ -142,7 +153,7 @@ export interface IRLN {
 
   rlnListPayments(): Promise<RlnPayment[]>;
   rlnGetPayment(paymentHash: string): Promise<RlnPayment>;
-  rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatus>;
+  rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatusWire>;
 
   rlnLnInvoice(
     amtMsat: number | null,
@@ -150,7 +161,9 @@ export interface IRLN {
     assetId: string | null,
     assetAmount: number | null,
     paymentHash?: string | null,
-    minFinalCltvExpiryDelta?: number | null
+    minFinalCltvExpiryDelta?: number | null,
+    /** BOLT11 `h` tag — commits the invoice to LNURL-pay metadata. */
+    descriptionHash?: string | null
   ): Promise<RlnLnInvoiceResponse>;
 
   rlnClaimHodlInvoice(
@@ -188,6 +201,12 @@ export interface IRLN {
   // ── On-chain wallet (RLN-managed) ───────────────────────────────────────────
 
   rlnAddress(): Promise<RlnAddressResponse>;
+  rlnRotateAddress(): Promise<RlnAddressResponse>;
+  rlnSignMessage(message: string): Promise<RlnSignMessageResponse>;
+  rlnVerifyMessage(
+    message: string,
+    signature: string
+  ): Promise<RlnVerifyMessageResponse>;
   rlnBtcBalance(skipSync?: boolean): Promise<RlnBtcBalance>;
   rlnSendBtc(
     amount: number,
@@ -227,15 +246,28 @@ export interface IRLN {
     mediaFileDigest: string | null,
     attachmentsFileDigests: string[]
   ): Promise<any>;
+  /** Atomic IFA inflation — see {@link RlnInflateResponse}. */
+  rlnInflate(
+    assetId: string,
+    inflationAmounts: number[],
+    feeRate: number,
+    minConfirmations: number
+  ): Promise<RlnInflateResponse>;
 
   rlnListAssets(filterAssetSchemas: string[]): Promise<RlnListAssetsResponse>;
   rlnAssetBalance(assetId: string): Promise<RlnAssetBalance>;
+  /**
+   * `assignmentKind` defaults to `'Fungible'` when an amount is given and `null`
+   * (→ native `Any`) otherwise. RLN discards `assignmentAmount` unless a kind is
+   * set, so omitting it would silently produce an any-amount invoice.
+   */
   rlnRgbInvoice(
     assetId: string | null,
     assignmentAmount: number | null,
     durationSeconds: number | null,
     minConfirmations: number,
-    witness: boolean
+    witness: boolean,
+    assignmentKind?: RlnAssignmentKind | null
   ): Promise<RlnRgbInvoiceResponse>;
   rlnSendRgb(
     donation: boolean,
@@ -249,7 +281,12 @@ export interface IRLN {
     witnessData?: { amountSat: number; blinding?: number } | null
   ): Promise<RlnSendRgbResponse>;
   rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]>;
+  rlnListTransactionsByTxid(
+    txid: string,
+    skipSync: boolean
+  ): Promise<RlnTransaction[]>;
   rlnListTransfers(assetId: string): Promise<RlnTransfer[]>;
+  rlnListTransfersByTxid(txid: string): Promise<RlnTransfer[]>;
   rlnListUnspents(skipSync: boolean): Promise<RlnUnspent[]>;
   rlnRefreshTransfers(skipSync: boolean): Promise<void>;
   rlnFailTransfers(
@@ -279,4 +316,6 @@ export interface IRLN {
   // ── VSS ──────────────────────────────────────────────────────────────────────
 
   rlnVssClearFence(password: string): Promise<void>;
+  /** Upload a wallet-state snapshot to VSS now; resolves to the new version. */
+  rlnVssBackup(): Promise<number>;
 }

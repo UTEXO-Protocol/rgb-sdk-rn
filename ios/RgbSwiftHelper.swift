@@ -52,7 +52,8 @@ public class RgbSwiftHelper: NSObject {
         lspBearerToken: request["lspBearerToken"] as? String,
         vssUrl: request["vssUrl"] as? String,
         vssAllowHttp: request["vssAllowHttp"] as? Bool ?? false,
-        vssAllowEmptyRestore: request["vssAllowEmptyRestore"] as? Bool ?? false
+        vssAllowEmptyRestore: request["vssAllowEmptyRestore"] as? Bool ?? false,
+        reuseAddresses: request["reuseAddresses"] as? Bool ?? false
       )
       let node = try SdkNode.create(request: initReq)
       let nodeId = try RlnNodeStore.shared.create(node: node, storageDirPath: storageDirPath)
@@ -343,6 +344,45 @@ public class RgbSwiftHelper: NSObject {
       }
       let address = try node.address()
       return ["address": address.address] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnRotateAddress:)
+  public static func _rlnRotateAddress(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let address = try node.rotateAddress()
+      return ["address": address.address] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnSignMessage:message:)
+  public static func _rlnSignMessage(_ nodeId: NSNumber, message: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let result = try node.signMessage(message: message)
+      return ["signedMessage": result.signedMessage] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnVerifyMessage:message:signature:)
+  public static func _rlnVerifyMessage(_ nodeId: NSNumber, message: String, signature: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let result = try node.verifyMessage(message: message, signature: signature)
+      return ["valid": result.valid] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -711,25 +751,61 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
+  private static func serializeTransaction(_ tx: Transaction) -> NSDictionary {
+    var txDict: [String: Any] = [
+      "txid": tx.txid,
+      "transactionType": "\(tx.transactionType)",
+      "received": NSNumber(value: UInt64(tx.received)),
+      "sent": NSNumber(value: UInt64(tx.sent)),
+      "fee": NSNumber(value: UInt64(tx.fee)),
+    ]
+    if let ct = tx.confirmationTime {
+      txDict["confirmationTime"] = ["height": NSNumber(value: ct.height), "timestamp": NSNumber(value: ct.timestamp)] as NSDictionary
+    }
+    return txDict as NSDictionary
+  }
+
+  private static func serializeTransfer(_ t: Transfer) -> NSDictionary {
+    var d: [String: Any] = [
+      "idx": NSNumber(value: t.idx),
+      "createdAt": NSNumber(value: t.createdAt),
+      "updatedAt": NSNumber(value: t.updatedAt),
+      "status": "\(t.status)",
+      "kind": "\(t.kind)",
+      "assignments": t.assignments,
+    ]
+    if let ra = t.requestedAssignment { d["requestedAssignment"] = "\(ra)" }
+    if let v = t.txid { d["txid"] = v }
+    if let v = t.recipientId { d["recipientId"] = v }
+    if let v = t.receiveUtxo { d["receiveUtxo"] = v }
+    if let v = t.changeUtxo { d["changeUtxo"] = v }
+    if let v = t.expiration { d["expiration"] = NSNumber(value: v) }
+    d["transportEndpoints"] = t.transportEndpoints.map { ep -> NSDictionary in
+      ["endpoint": ep.endpoint, "transportType": "\(ep.transportType)", "used": ep.used] as NSDictionary
+    }
+    return d as NSDictionary
+  }
+
   @objc(_rlnListTransactions:skipSync:)
   public static func _rlnListTransactions(_ nodeId: NSNumber, skipSync: Bool) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      let txs = try node.listTransactions(skipSync: skipSync).map { tx -> NSDictionary in
-        var txDict: [String: Any] = [
-          "txid": tx.txid,
-          "transactionType": "\(tx.transactionType)",
-          "received": NSNumber(value: UInt64(tx.received)),
-          "sent": NSNumber(value: UInt64(tx.sent)),
-          "fee": NSNumber(value: UInt64(tx.fee)),
-        ]
-        if let ct = tx.confirmationTime {
-          txDict["confirmationTime"] = ["height": NSNumber(value: ct.height), "timestamp": NSNumber(value: ct.timestamp)] as NSDictionary
-        }
-        return txDict as NSDictionary
+      let txs = try node.listTransactions(skipSync: skipSync).map(serializeTransaction)
+      return ["transactions": txs] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListTransactionsByTxid:txid:skipSync:)
+  public static func _rlnListTransactionsByTxid(_ nodeId: NSNumber, txid: String, skipSync: Bool) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
+      let txs = try node.listTransactionsByTxid(txid: txid, skipSync: skipSync).map(serializeTransaction)
       return ["transactions": txs] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -742,26 +818,20 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      let transfers = try node.listTransfers(assetId: assetId).map { t -> NSDictionary in
-        var d: [String: Any] = [
-          "idx": NSNumber(value: t.idx),
-          "createdAt": NSNumber(value: t.createdAt),
-          "updatedAt": NSNumber(value: t.updatedAt),
-          "status": "\(t.status)",
-          "kind": "\(t.kind)",
-          "assignments": t.assignments,
-        ]
-        if let ra = t.requestedAssignment { d["requestedAssignment"] = "\(ra)" }
-        if let v = t.txid { d["txid"] = v }
-        if let v = t.recipientId { d["recipientId"] = v }
-        if let v = t.receiveUtxo { d["receiveUtxo"] = v }
-        if let v = t.changeUtxo { d["changeUtxo"] = v }
-        if let v = t.expiration { d["expiration"] = NSNumber(value: v) }
-        d["transportEndpoints"] = t.transportEndpoints.map { ep -> NSDictionary in
-          ["endpoint": ep.endpoint, "transportType": "\(ep.transportType)", "used": ep.used] as NSDictionary
-        }
-        return d as NSDictionary
+      let transfers = try node.listTransfers(assetId: assetId).map(serializeTransfer)
+      return ["transfers": transfers] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnListTransfersByTxid:txid:)
+  public static func _rlnListTransfersByTxid(_ nodeId: NSNumber, txid: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
+      let transfers = try node.listTransfersByTxid(txid: txid).map(serializeTransfer)
       return ["transfers": transfers] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -780,7 +850,10 @@ public class RgbSwiftHelper: NSObject {
           "btcAmount": NSNumber(value: u.utxo.btcAmount),
           "colorable": u.utxo.colorable,
         ]
-        var dict: [String: Any] = ["utxo": utxoDict as NSDictionary]
+        var dict: [String: Any] = [
+          "utxo": utxoDict as NSDictionary,
+          "pendingBlinded": NSNumber(value: u.pendingBlinded),
+        ]
         let allocs = u.rgbAllocations.map { a -> NSDictionary in
           var allocDict: [String: Any] = [
             "assignment": "\(a.assignment)",
@@ -798,7 +871,7 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnLnInvoice:amtMsat:expirySec:assetId:assetAmount:paymentHash:minFinalCltvExpiryDelta:)
+  @objc(_rlnLnInvoice:amtMsat:expirySec:assetId:assetAmount:paymentHash:minFinalCltvExpiryDelta:descriptionHash:)
   public static func _rlnLnInvoice(
     _ nodeId: NSNumber,
     amtMsat: NSNumber?,
@@ -806,7 +879,8 @@ public class RgbSwiftHelper: NSObject {
     assetId: String?,
     assetAmount: NSNumber?,
     paymentHash: String?,
-    minFinalCltvExpiryDelta: NSNumber?
+    minFinalCltvExpiryDelta: NSNumber?,
+    descriptionHash: String?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -819,7 +893,7 @@ public class RgbSwiftHelper: NSObject {
           assetId: assetId,
           assetAmount: assetAmount.map { UInt64(truncating: $0) },
           paymentHash: paymentHash,
-          descriptionHash: nil,
+          descriptionHash: descriptionHash,
           minFinalCltvExpiryDelta: minFinalCltvExpiryDelta.map { UInt16(truncating: $0) }
         )
       )
@@ -935,14 +1009,28 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnRgbInvoice:assetId:assignmentAmount:durationSeconds:minConfirmations:witness:)
+  private static func mapAssignmentKind(_ raw: String?) throws -> AssignmentKind? {
+    guard let raw = raw else { return nil }
+    switch raw {
+    case "Fungible": return .fungible
+    case "NonFungible": return .nonFungible
+    case "InflationRight": return .inflationRight
+    case "ReplaceRight": return .replaceRight
+    case "Any": return .any
+    default:
+      throw NSError(domain: "Rgb", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown assignmentKind: \(raw)"])
+    }
+  }
+
+  @objc(_rlnRgbInvoice:assetId:assignmentAmount:durationSeconds:minConfirmations:witness:assignmentKind:)
   public static func _rlnRgbInvoice(
     _ nodeId: NSNumber,
     assetId: String?,
     assignmentAmount: NSNumber?,
     durationSeconds: NSNumber?,
     minConfirmations: NSNumber,
-    witness: Bool
+    witness: Bool,
+    assignmentKind: String?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -951,7 +1039,7 @@ public class RgbSwiftHelper: NSObject {
       let res = try node.rgbinvoice(
         request: SdkRgbInvoiceRequest(
           assetId: assetId,
-          assignmentKind: nil,
+          assignmentKind: try mapAssignmentKind(assignmentKind),
           assignmentAmount: assignmentAmount.map { UInt64(truncating: $0) },
           durationSeconds: durationSeconds.map { UInt32(truncating: $0) },
           minConfirmations: UInt8(truncating: minConfirmations),
@@ -1199,6 +1287,40 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
+  /// Atomic IFA inflation — the node signs internally, so there is no
+  /// begin/end PSBT pair (contrast rgb-sdk-web, which has an rgb-lib wallet).
+  ///
+  /// `feeRate` arrives as an NSNumber for bridge symmetry with `_rlnSendRgb`,
+  /// but `InflateRequest.feeRate` is a `UInt64` — fractional rates truncate,
+  /// exactly as they do in `_rlnSendRgb`.
+  @objc(_rlnInflate:assetId:inflationAmounts:feeRate:minConfirmations:)
+  public static func _rlnInflate(
+    _ nodeId: NSNumber,
+    _ assetId: String,
+    _ inflationAmounts: NSArray,
+    _ feeRate: NSNumber,
+    _ minConfirmations: NSNumber
+  ) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      var inflationList: [UInt64] = []
+      for amount in inflationAmounts {
+        if let n = amount as? NSNumber { inflationList.append(n.uint64Value) }
+      }
+      let res = try node.inflate(request: InflateRequest(
+        assetId: assetId,
+        inflationAmounts: inflationList,
+        feeRate: feeRate.uint64Value,
+        minConfirmations: minConfirmations.uint8Value
+      ))
+      return ["txid": res.txid] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
   @objc(_rlnIssueAssetIfa:ticker:name:precision:amounts:inflationAmounts:rejectListUrl:)
   public static func _rlnIssueAssetIfa(
     _ nodeId: NSNumber,
@@ -1324,10 +1446,18 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnCreateNativeExternalSigner:network:permissivePolicy:)
-  public static func _rlnCreateNativeExternalSigner(_ seedHex: String, network: String, permissivePolicy: Bool) -> NSDictionary {
+  /// A non-nil `storageDirPath` selects the disk-backed VLS store, so the signer's channel
+  /// state survives a process restart; without it, channels restored from LDK persistence
+  /// fail validation and force-close.
+  @objc(_rlnCreateNativeExternalSigner:network:permissivePolicy:storageDirPath:)
+  public static func _rlnCreateNativeExternalSigner(_ seedHex: String, network: String, permissivePolicy: Bool, storageDirPath: String?) -> NSDictionary {
     do {
-      let signer = try NativeExternalSigner(seedHex: seedHex, network: network, permissivePolicy: permissivePolicy)
+      let signer: NativeExternalSigner
+      if let dir = storageDirPath {
+        signer = try NativeExternalSigner.newWithStorage(seedHex: seedHex, network: network, permissivePolicy: permissivePolicy, storageDirPath: dir)
+      } else {
+        signer = try NativeExternalSigner(seedHex: seedHex, network: network, permissivePolicy: permissivePolicy)
+      }
       let signerId = RlnNodeStore.shared.createSigner(signer)
       return ["signerId": signerId] as NSDictionary
     } catch {
@@ -1413,6 +1543,19 @@ public class RgbSwiftHelper: NSObject {
   }
 
   // MARK: - VSS
+
+  @objc(_rlnVssBackup:)
+  public static func _rlnVssBackup(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let version = try node.vssBackup()
+      return ["value": NSNumber(value: version)] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
 
   @objc(_rlnVssClearFence:password:)
   public static func _rlnVssClearFence(_ nodeId: NSNumber, password: String) -> NSDictionary {

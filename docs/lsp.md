@@ -126,7 +126,7 @@ Internally:
 
 ### `awaitReceiveSettlement(lnInvoice, opts?)` 
 
-Poll `wallet.getLightningReceiveRequest(lnInvoice)` until it reaches a terminal state.
+Poll `wallet.getLightningReceiveStatus(lnInvoice)` until it reaches a terminal state.
 
 ```typescript
 const outcome = await lsp.awaitReceiveSettlement(lnInvoice, {
@@ -362,7 +362,7 @@ const { address } = await lsp.enableLightningAddress();
 console.log('Lightning Address:', address);
 
 // When app is foreground / expecting payment: lsp.connect() so LSP outbox can reach you.
-// Settlement is automatic — poll listPaymentsRaw() or sender getLightningSendRequest until Succeeded.
+// Settlement is automatic — poll listPayments() or sender getLightningSendStatus until Succeeded.
 ```
 
 Sender side:
@@ -375,8 +375,8 @@ await senderLsp.waitForOutboundLiquidity(3_000_000, { … });
 const { pr } = await senderLsp.http.resolveAddress(username, 3_000_000, ASSET_ID, 1);
 const pay = await senderWallet.payLightningInvoice({ lnInvoice: pr, assetId: ASSET_ID, assetAmount: 1 });
 
-// Poll until Settled
-const status = await senderWallet.getLightningSendRequest(pay.txid!);
+// Poll until Succeeded
+const status = await senderWallet.getLightningSendStatus(pay.txid!);
 ```
 
 Full flow → [async-payments.md](./async-payments.md). Demo → [rgb-sdk-rn-demo `useApayFlow.ts`](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/screens/apay/useApayFlow.ts).

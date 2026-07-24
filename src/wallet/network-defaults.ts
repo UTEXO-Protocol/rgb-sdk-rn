@@ -14,45 +14,24 @@ export interface NetworkEndpoints {
  * RLN-specific overrides for networks where the rgb-sdk-core defaults point to
  * the wrong endpoint for the RLN proxy infrastructure.
  */
-const RLN_NETWORK_OVERRIDES: Partial<Record<string, Partial<NetworkEndpoints>>> = {
+const RLN_NETWORK_OVERRIDES: Partial<
+  Record<string, Partial<NetworkEndpoints>>
+> = {
   utexo: { proxyEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc' },
   signet: { proxyEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc' },
 };
 
-/**
- * Default utexo-lsp HTTP base URLs per network. Used when the caller omits
- * lspBaseUrl in the wallet params so LSP-backed flows work out of the box.
- * Networks without an entry have no default and must be configured explicitly.
- */
-const DEFAULT_LSP_BASE_URLS: Partial<Record<string, string>> = {
-  utexo: 'https://lsp-signet.utexo.com',
-};
+// LSP defaults moved to @utexo/rgb-sdk-core (they were duplicated here and in
+// rgb-sdk-web). Re-exported for import-site compatibility.
+export {
+  DEFAULT_LSP_BASE_URLS,
+  getDefaultLspBaseUrl,
+  resolveLspBaseUrl,
+} from '@utexo/rgb-sdk-core';
 
-/** Returns the default lspBaseUrl for a network, or undefined if none exists. */
-export function getDefaultLspBaseUrl(network: string): string | undefined {
-  return DEFAULT_LSP_BASE_URLS[network];
-}
-
-/**
- * Resolves the lspBaseUrl to use: the explicit value if provided, otherwise the
- * per-network default. Throws when neither is available so callers fail loudly
- * instead of silently hitting a missing LSP.
- */
-export function resolveLspBaseUrl(
-  network: string,
-  lspBaseUrl?: string | null
-): string {
-  const resolved = lspBaseUrl ?? DEFAULT_LSP_BASE_URLS[network];
-  if (!resolved) {
-    throw new Error(
-      `No lspBaseUrl configured for network "${network}" and no default is available. ` +
-        'Set lspBaseUrl in the wallet params or pass an explicit LspPeer to createLsp().'
-    );
-  }
-  return resolved;
-}
-
-export function getNetworkDefaults(network: string): NetworkEndpoints | undefined {
+export function getNetworkDefaults(
+  network: string
+): NetworkEndpoints | undefined {
   const indexerUrl = DEFAULT_INDEXER_URLS[network as Network];
   const proxyEndpoint = DEFAULT_TRANSPORT_ENDPOINTS[network as Network];
   if (!indexerUrl || !proxyEndpoint) return undefined;

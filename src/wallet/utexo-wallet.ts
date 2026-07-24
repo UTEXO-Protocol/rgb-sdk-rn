@@ -1,5 +1,5 @@
 import type {
-  IUTEXOWallet,
+  IUTEXOProtocol,
   WalletCapabilities,
   CreateLnInvoiceRequest,
   UTEXOWalletCreateParams,
@@ -378,7 +378,7 @@ function mapInvoiceData(
 
 // ── UTEXOWallet ────────────────────────────────────────────────────────────
 
-export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
+export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   /**
    * All three optional groups are **absent** on this platform, so the carrier
    * properties are simply not present — there is nothing to call, and the
@@ -389,18 +389,16 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
    * wallet in wasm *plus* the RLN node, while this SDK has only the node. No
    * second engine means no PSBT to hand out (`psbt`), no externally-signed
    * begin/end flows (`beginEnd`), and one state store that the node replicates
-   * itself rather than two needing manual backup (`vss`). See §2.7a.
+   * itself rather than two needing manual backup.
    */
   readonly psbt = undefined;
   readonly beginEnd = undefined;
-  readonly vss = undefined;
 
   /** Derived from carrier presence, so it cannot drift from reality. */
   get capabilities(): WalletCapabilities {
     return {
       psbtSigning: this.psbt !== undefined,
       beginEndFlows: this.beginEnd !== undefined,
-      vssBackup: this.vss !== undefined,
     };
   }
 
@@ -469,7 +467,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
     this.disposed = true;
   }
 
-  // ── IWalletManager — Initialization & Lifecycle ───────────────────────────
+  // ── Initialization & Lifecycle ───────────────────────────
 
   /** Backward-compat alias for init(). */
   async initialize(): Promise<void> {
@@ -479,7 +477,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
   // `goOnline` and `getXpub` are gone, not stubbed: the first was rgb-lib
   // lifecycle superseded by `unlock(params)`, the second an rgb-lib wallet
   // concept with no meaning on an RLN node (`getNodeInfo()` covers the real
-  // need). See MIGRATION-PLAN-v3.md §2.3.
+  // need).
 
   getNetwork(): Network {
     return this.params.network as Network;
@@ -493,7 +491,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
     return this.disposed;
   }
 
-  // ── IWalletManager — Balance & Address ────────────────────────────────────
+  // ── Balance & Address ────────────────────────────────────
 
   async getBtcBalance(): Promise<BtcBalance> {
     return mapBtcBalance(await this.rln.rlnBtcBalance(false));
@@ -506,7 +504,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
   /**
    * Derives a fresh on-chain address, matching getAddress()'s vanilla (BTC)
    * wallet. Platform extra — address rotation left the shared contract because
-   * the *coloured* variant threw on both platforms (§2.3).
+   * the *coloured* variant threw on both platforms.
    */
   async rotateVanillaAddress(): Promise<string> {
     return (await this.rln.rlnRotateAddress()).address;
@@ -520,8 +518,8 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
 
   // `createUtxosBegin`/`createUtxosEnd` belong to the `beginEnd` carrier, which
   // this wallet does not expose — the node creates UTXOs atomically and signs
-  // internally, so there is no PSBT to hand out (§2.7a). `createUtxos()` below
-  // is the whole operation.
+  // internally, so there is no PSBT to hand out. `createUtxos()` below is the
+  // whole operation.
 
   async createUtxos(params: {
     upTo?: boolean;
@@ -539,7 +537,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
     return params.num ?? 0;
   }
 
-  // ── IWalletManager — Asset Operations ────────────────────────────────────
+  // ── Asset Operations ────────────────────────────────────
 
   async listAssets(): Promise<ListAssets> {
     return mapListAssets(await this.rln.rlnListAssets([]));
@@ -600,8 +598,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
 
   // The `send`/`sendBegin`/`sendEnd` trio is gone. `sendBegin`/`sendEnd` were
   // stubs, and web had already dropped the names in favour of `onchainSend*` —
-  // dead surface on both platforms (§6.0, §2.3). `onchainSend()` below is the
-  // one spelling.
+  // dead surface on both platforms. `onchainSend()` below is the one spelling.
 
   // ── Sending BTC ───────────────────────────────────────────────────────────
   //
@@ -617,7 +614,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
     return resp.txid;
   }
 
-  // ── IWalletManager — Receiving Assets ────────────────────────────────────
+  // ── Receiving Assets ────────────────────────────────────
 
   async blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
     return mapInvoiceReceiveData(
@@ -650,7 +647,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
     );
   }
 
-  // ── IWalletManager — Transactions & Transfers ─────────────────────────────
+  // ── Transactions & Transfers ─────────────────────────────
 
   async listTransactions(): Promise<Transaction[]> {
     return (await this.rln.rlnListTransactions(false)).map(mapTransaction);
@@ -698,7 +695,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
   // does not expose. That is not a gap: the node replicates its single state
   // store automatically, so there is nothing to drive from JS. web needs the
   // carrier because it has *two* stores — the rgb-lib wallet and the node —
-  // and must back the wallet up manually (§2.7, §2.7a).
+  // and must back the wallet up manually.
   //
   // `vssClearFence` below stays on the shared contract: taking over another
   // device's single-writer fence is a deliberate act, never automatic.
@@ -731,7 +728,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
   // `signPsbt` is on the `psbt` carrier, absent here. bdk-rn was removed and
   // the node signs internally; `NativeExternalRLNSigner` does not restore it,
   // since it signs channel/LDK operations inside the node rather than
-  // arbitrary PSBTs handed in from JS (§2.8).
+  // arbitrary PSBTs handed in from JS.
 
   /** Signs with the node's own key — the counterpart to verifyMessage(). */
   async signMessage(message: string): Promise<string> {
@@ -739,12 +736,8 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
   }
 
   /**
-   * Verifies against this node's own key.
-   *
-   * §2.5 fix — the `accountXpub?` parameter is gone. It was optional in the old
-   * contract but rejected here at runtime and honoured on web, so the signature
-   * was untrue in both directions. Verification is always against the node key,
-   * and the shared contract now says so.
+   * Verifies against this node's own key. No `accountXpub` parameter —
+   * verification on an RLN node is always against the node key.
    */
   async verifyMessage(message: string, signature: string): Promise<boolean> {
     return (await this.rln.rlnVerifyMessage(message, signature)).valid;
@@ -753,8 +746,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
   // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
 
   /**
-   * §2.5 — takes the narrowed {@link CreateLnInvoiceRequest}, plus two rn-only
-   * extras.
+   * Takes the narrowed {@link CreateLnInvoiceRequest}, plus two rn-only extras.
    *
    * `paymentHash` was dropped: it made this method a second way to create a
    * HODL invoice, and web declared it while silently discarding it (its wasm
@@ -972,10 +964,10 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
     return tryNormalizePaymentStatus(payment.status);
   }
 
-  // §6.0 — the `& { assetAmount?: number }` intersection that used to sit here
-  // was redundant: core's `PayLightningInvoiceRequestModel` already declares
-  // `assetAmount`. Re-declaring core fields locally made the two platforms look
-  // divergent when they were not.
+  // No local `& { assetAmount?: number }` intersection — core's
+  // `PayLightningInvoiceRequestModel` already declares `assetAmount`, and
+  // re-declaring core fields would make the two platforms look divergent when
+  // they are not.
   async payLightningInvoice(
     params: PayLightningInvoiceRequestModel
   ): Promise<LightningSendRequest> {
@@ -1022,7 +1014,7 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
   }
 
   // `onchainSendBegin`/`onchainSendEnd` are on the `beginEnd` carrier, absent
-  // here — the node sends atomically and signs internally (§2.7a).
+  // here — the node sends atomically and signs internally.
 
   async onchainSend(
     params: OnchainSendRequestModel
@@ -1075,7 +1067,27 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
     return (await this.rln.rlnListChannels()).map(toLightningChannel);
   }
 
-  async openChannel(params: OpenChannelParams): Promise<OpenChannelResult> {
+  /**
+   * Open a channel.
+   *
+   * The extras below are **rn-only** and declared here rather than in core: the
+   * wasm node takes no argument for any of them, and virtual mode is a
+   * node-wide setting on web.
+   */
+  async openChannel(
+    params: OpenChannelParams & {
+      /** Msat pushed to the peer at open. Default 0. */
+      pushMsat?: number | bigint;
+      /** Open an anchor-outputs channel. Default true. */
+      withAnchors?: boolean;
+      feeBaseMsat?: number | null;
+      feeProportionalMillionths?: number | null;
+      /** Caller-supplied temporary channel id (advanced). */
+      temporaryChannelId?: string | null;
+      pushAssetAmount?: number | bigint | null;
+      virtualOpenMode?: string | null;
+    }
+  ): Promise<OpenChannelResult> {
     const resp = await this.rln.rlnOpenChannel({
       peerPubkeyAndOptAddr: params.peerPubkey,
       capacitySat: Number(params.capacitySat),
@@ -1158,6 +1170,17 @@ export class UTEXOWallet implements IUTEXOWallet<IRLNUnlockParams> {
       );
     }
     return this.rln.rlnVssClearFence(password);
+  }
+
+  /**
+   * Replicate wallet state to VSS now; returns the new backup version.
+   *
+   * The node also backs up on its own — this is the "don't wait" call. There
+   * is no configure/disable pair to go with it: the node owns its single state
+   * store and its VSS client is configured at `init()` from `vssUrl`.
+   */
+  backupNow(): Promise<number> {
+    return this.rln.rlnVssBackup();
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────

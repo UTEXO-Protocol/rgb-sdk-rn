@@ -509,6 +509,10 @@ export class RLNManager implements IRLN {
   rlnVssClearFence(password: string): Promise<void> {
     return this.rlnBinding.rlnVssClearFence(password);
   }
+
+  rlnVssBackup(): Promise<number> {
+    return this.rlnBinding.rlnVssBackup();
+  }
 }
 
 export function createRLNManager(): RLNManager {

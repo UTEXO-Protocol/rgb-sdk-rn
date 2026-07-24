@@ -1765,6 +1765,21 @@ class RgbModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun rlnVssBackup(nodeId: Double, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val version = node.vssBackup()
+        withContext(Dispatchers.Main) { promise.resolve(version.toDouble()) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
   override fun rlnVssClearFence(nodeId: Double, password: String, promise: Promise) {
     coroutineScope.launch(Dispatchers.IO) {
       try {

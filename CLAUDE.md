@@ -66,7 +66,7 @@ The native layers (iOS: `RlnNodeStore.swift`, Android: `RlnNodeStore.kt`) mainta
 
 ### `UTEXOWallet` — the primary public API
 
-Implements `IWalletManager + IUTEXOProtocol` (both from `@utexo/rgb-sdk-core`). It owns the node lifecycle and type-mapping between RLN-native types (`Rln*` prefixed) and core SDK types. Many `IWalletManager` methods throw "not implemented" — only the RLN-backed equivalents work (e.g. `createUtxos()` works, `createUtxosBegin/End()` do not).
+Implements the shared `IUTEXOProtocol` contract (from `@utexo/rgb-sdk-core`). It owns the node lifecycle and type-mapping between RLN-native types (`Rln*` prefixed) and core SDK types. Web-only surface (PSBT signing, begin/end flows) lives on optional carriers that are absent here — e.g. `createUtxos()` works; the `createUtxosBegin/End()` carrier methods are not exposed.
 
 **Node lifecycle:**
 1. `init()` — `rlnCreateNode` + `signer.initNode` (writes keys to `storageDirPath`)
@@ -102,7 +102,7 @@ The signer is created with a disk-backed VLS store (`NativeExternalSigner.newWit
 
 ### Core dependency
 
-`@utexo/rgb-sdk-core` provides all interfaces (`IWalletManager`, `IUTEXOProtocol`, etc.), base classes, error types, key derivation utilities, and network config. `src/index.ts` re-exports most of that surface so consumers only need one package.
+`@utexo/rgb-sdk-core` provides the shared contract (`IUTEXOProtocol` and its domain groups), error types, key derivation utilities, and network config. `src/index.ts` re-exports most of that surface so consumers only need one package.
 
 ### Codegen
 

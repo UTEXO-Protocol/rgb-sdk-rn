@@ -50,7 +50,7 @@ flowchart TD
 | **③** | Payer pays BOLT11; inbound HTLC held at Host | **Sender app** | `lsp.waitForOutboundLiquidity(…)` then `wallet.payLightningInvoice(…)` |
 | **④** | Outbox asks Recipient for outbound invoice over P2P | **Host + utexo-lsp** | Recipient must be reachable — **`lsp.connect()`** |
 | **⑤** | Host pays outbound invoice; Recipient **auto-claims** | **Host + Recipient RLN** | App: optional `listPaymentsRaw()` → `INBOUND_HODL/SUCCEEDED` |
-| **⑥** | Host settles payer HTLC with preimage | **Host + utexo-lsp** | App: poll `getLightningSendRequest(hash)` → `Settled` |
+| **⑥** | Host settles payer HTLC with preimage | **Host + utexo-lsp** | App: poll `getLightningSendStatus(hash)` → `Succeeded` |
 
 **Blue steps (①②③)** — your app. **Green steps (④⑤⑥)** — LSP outbox; recipient app keeps **`lsp.connect()`** alive when online.
 
@@ -198,13 +198,13 @@ const payments = await wallet.listPaymentsRaw();
 **Sender:**
 
 ```typescript
-const status = await senderWallet.getLightningSendRequest(paymentHash);
-// Poll until status === 'Settled' (or 'Failed')
+const status = await senderWallet.getLightningSendStatus(paymentHash);
+// Poll until status === 'Succeeded' (or 'Failed')
 ```
 
 **Success checks (RGB):**
 
-- Sender: `getLightningSendRequest` → `Settled`
+- Sender: `getLightningSendStatus` → `Succeeded`
 - Recipient: inbound `INBOUND_HODL/SUCCEEDED`, or `getAssetBalance(assetId).offchainOutbound` increased
 - Use **`offchainOutbound`** (local spendable RGB), not `offchainInbound`, for receive confirmation
 
@@ -241,7 +241,7 @@ for (const p of await wallet.listPaymentsRaw()) {
 | `lsp.http.resolveAddress(…)` | ② | LNURL callback → HODL BOLT11 |
 | `lsp.waitForOutboundLiquidity(msat)` | ③ | Confirm sender can route before pay |
 | `wallet.payLightningInvoice(…)` | ③ | Pay HODL invoice |
-| `wallet.getLightningSendRequest(hash)` | ⑥ | Poll sender until `Settled` |
+| `wallet.getLightningSendStatus(hash)` | ⑥ | Poll sender until `Succeeded` |
 | `wallet.listPaymentsRaw()` | ⑤ | Monitor recipient inbound (`SUCCEEDED`) |
 | `wallet.getAssetBalance(assetId)` | ⑤ | Confirm RGB received (`offchainOutbound` ↑) |
 | `wallet.createHodlInvoice(…)` | — | Issue a HODL invoice you control (pairs with claim below) |

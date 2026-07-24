@@ -273,6 +273,7 @@ export interface Spec extends TurboModule {
 
   // ── VSS ─────────────────────────────────────────────────────────────────────
   rlnVssClearFence(nodeId: number, password: string): Promise<void>;
+  rlnVssBackup(nodeId: number): Promise<number>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Rgb');

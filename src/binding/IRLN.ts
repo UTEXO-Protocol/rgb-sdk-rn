@@ -316,4 +316,6 @@ export interface IRLN {
   // ── VSS ──────────────────────────────────────────────────────────────────────
 
   rlnVssClearFence(password: string): Promise<void>;
+  /** Upload a wallet-state snapshot to VSS now; resolves to the new version. */
+  rlnVssBackup(): Promise<number>;
 }

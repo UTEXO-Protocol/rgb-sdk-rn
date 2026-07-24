@@ -1,11 +1,10 @@
 // Wallet utilities
 export { createWallet } from './wallet/wallet-manager';
 
-
 // RLN node manager
 export { RLNManager, createRLNManager } from './wallet/rln-manager';
 
-// UTEXO wallet — implements the shared IUTEXOWallet contract, backed by RLN.
+// UTEXO wallet — implements the shared IUTEXOProtocol contract, backed by RLN.
 export { UTEXOWallet } from './wallet/utexo-wallet';
 export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
 export {
@@ -127,21 +126,20 @@ export type {
   Descriptors,
   GeneratedKeys,
   AccountXpubs,
-  // Wallet contract — shared surface, lifecycle, and the optional carrier
-  // types. The carriers are all absent on this platform (see UTEXOWallet), but
-  // the types are exported so app code can be written against the shared
-  // contract and stay portable to rgb-sdk-web.
-  IUTEXOWallet,
-  IUTEXOWalletCore,
+  // UTEXO protocol contract — shared surface, lifecycle, and the optional
+  // carrier types. The carriers are all absent on this platform (see
+  // UTEXOWallet), but the types are exported so app code can be written against
+  // the shared contract and stay portable to rgb-sdk-web.
+  IUTEXOProtocol,
+  IUTEXOProtocolCore,
   IWalletLifecycle,
   WalletCapabilities,
   IPsbtSigning,
   IBeginEndFlows,
-  IVssBackup,
   CreateLnInvoiceRequest,
   ILightningNode,
   ILightningPayments,
-  ILightningAddress,
+  IAsyncPayments,
   IOnchainTransfers,
   IRgbAssets,
   IBitcoinWallet,

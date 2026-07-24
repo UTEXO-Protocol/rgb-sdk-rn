@@ -872,6 +872,12 @@ export class RLNBinding implements IRLN {
     );
   }
 
+  async rlnVssBackup(): Promise<number> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnVssBackup(nodeId)
+    ) as Promise<number>;
+  }
+
   // ── Private helpers ──────────────────────────────────────────────────────────
 
   private requireNodeId(): number {

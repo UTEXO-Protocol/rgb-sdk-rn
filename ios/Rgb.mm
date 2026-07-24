@@ -966,6 +966,21 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
     });
 }
 
+- (void)rlnVssBackup:(double)nodeId
+             resolve:(RCTPromiseResolveBlock)resolve
+              reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnVssBackup:@(nodeId)];
+        NSString *errorMessage = result[@"error"];
+        if (errorMessage != nil) {
+            reject(result[@"errorCode"] ?: @"RLN_VSS_BACKUP_ERROR", errorMessage, nil);
+        } else {
+            resolve(result[@"value"]);
+        }
+    });
+}
+
 - (void)rlnVssClearFence:(double)nodeId
                 password:(NSString *)password
                  resolve:(RCTPromiseResolveBlock)resolve

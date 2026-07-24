@@ -1544,6 +1544,19 @@ public class RgbSwiftHelper: NSObject {
 
   // MARK: - VSS
 
+  @objc(_rlnVssBackup:)
+  public static func _rlnVssBackup(_ nodeId: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let version = try node.vssBackup()
+      return ["value": NSNumber(value: version)] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
   @objc(_rlnVssClearFence:password:)
   public static func _rlnVssClearFence(_ nodeId: NSNumber, password: String) -> NSDictionary {
     do {

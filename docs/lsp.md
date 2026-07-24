@@ -362,7 +362,7 @@ const { address } = await lsp.enableLightningAddress();
 console.log('Lightning Address:', address);
 
 // When app is foreground / expecting payment: lsp.connect() so LSP outbox can reach you.
-// Settlement is automatic — poll listPaymentsRaw() or sender getLightningSendStatus until Succeeded.
+// Settlement is automatic — poll listPayments() or sender getLightningSendStatus until Succeeded.
 ```
 
 Sender side:

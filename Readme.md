@@ -71,8 +71,9 @@ const address = await wallet.getAddress();
 await wallet.syncWallet();
 await wallet.createUtxos({ upTo: false, num: 4, feeRate: 1 });
 
-// Blind RGB invoice — share with the sender (omit assetId/amount if you don't hold the asset yet)
-const { invoice } = await wallet.blindReceive({ minConfirmations: 1 });
+// RGB invoice — share with the sender (omit assetId/amount if you don't hold the asset yet).
+// witness: false gives a blinded invoice; omit or pass true for a witness invoice.
+const { invoice } = await wallet.onchainReceive({ witness: false, minConfirmations: 1 });
 console.log('RGB invoice:', invoice);
 ```
 
@@ -240,7 +241,7 @@ await wallet.destroy();
 |--------|-------------|
 | `getBtcBalance()` | BTC balance (vanilla + colored) |
 | `getAddress()` | Current on-chain deposit address |
-| `getXpub()` | `{ xpubVan, xpubCol }` |
+| `rotateVanillaAddress()` | Derive a fresh on-chain (vanilla/BTC) address |
 | `getNetwork()` | Configured network string |
 
 #### UTXO Management
@@ -258,7 +259,6 @@ await wallet.destroy();
 | `getAssetBalance(assetId)` | Balance for one asset |
 | `issueAssetNia({ ticker, name, precision, amounts })` | Issue a Non-Inflationary Asset |
 | `issueAssetIfa({ ticker, name, precision, amounts, inflationAmounts, rejectListUrl })` | Issue an Inflatable Asset |
-| `send({ invoice, assetId?, amount, donation?, feeRate?, minConfirmations?, skipSync?, witnessData? })` | RGB transfer — decodes invoice and sends. `witnessData: { amountSat, blinding? }` required for witness sends |
 | `blindReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a blinded RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
 | `witnessReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a witness RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
 | `decodeRGBInvoice({ invoice })` | Decode an RGB invoice |
@@ -308,7 +308,7 @@ await wallet.destroy();
 | `createHodlInvoice(params)` | Create a HODL invoice tied to a specific payment hash |
 | `claimHodlInvoice(paymentHash, preimage)` | Reveal preimage to claim an inbound HODL payment |
 | `cancelHodlInvoice(paymentHash)` | Cancel a HODL invoice |
-| `listPaymentsRaw()` | Return all payments including `InboundHodl` with preimage |
+| `listPayments()` | Return all payments including `InboundHodl` with preimage |
 
 See **[docs/lsp.md](./docs/lsp.md)** for `UtexoLsp` composed flows and full examples.
 
@@ -733,8 +733,8 @@ while (Date.now() < deadline) {
 }
 
 // ── RGB on-chain send: nodeB returns 150 units to nodeA ──────────────────────
-const invoice = await nodeA.blindReceive({ minConfirmations: 1 });
-await nodeB.send({
+const invoice = await nodeA.onchainReceive({ witness: false, minConfirmations: 1 });
+await nodeB.onchainSend({
   invoice: invoice.invoice,
   assetId,
   amount: 150,
@@ -1021,7 +1021,7 @@ const result = await wallet.claimHodlInvoice(
 // result.changed — true if the invoice state was updated
 ```
 
-Call after `listPaymentsRaw()` finds a payment with `status === 'Claimable'`.
+Call after `listPayments()` finds a payment with `status === 'Claimable'`.
 
 ---
 
@@ -1036,19 +1036,19 @@ const result = await wallet.cancelHodlInvoice(paymentHash);
 
 ---
 
-##### `listPaymentsRaw()`
+##### `listPayments()`
 
 Return all payments the node knows about. Monitor inbound `INBOUND_HODL` → `Succeeded` for APay receive; filter `Claimable` + call `claimHodlInvoice` for HODL invoices you issued.
 
 ```typescript
-const payments = await wallet.listPaymentsRaw();
+const payments = await wallet.listPayments();
 
 const claimable = payments.filter(
   p => p.paymentType === 'InboundHodl' && p.status === 'Claimable'
 );
 ```
 
-**Each payment (`RlnPayment`):**
+**Each payment (`LightningPayment`):**
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -1092,7 +1092,7 @@ while (!settled) {
   await senderWallet.syncWallet();
   await wallet.syncWallet();
   const sendSt = await senderWallet.getLightningSendStatus(paymentHash!);
-  const inbound = (await wallet.listPaymentsRaw())
+  const inbound = (await wallet.listPayments())
     .find(p => p.paymentHash === paymentHash);
   if (sendSt === 'Succeeded' && inbound?.status === 'Succeeded') settled = true;
 }
@@ -1101,7 +1101,7 @@ while (!settled) {
 ##### Claim pending HODL payments
 
 ```typescript
-for (const p of await wallet.listPaymentsRaw()) {
+for (const p of await wallet.listPayments()) {
   if (p.paymentType !== 'InboundHodl' || p.status !== 'Claimable') continue;
   if (!p.preimage) continue;
   await wallet.claimHodlInvoice(p.paymentHash, p.preimage);

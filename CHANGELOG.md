@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.25
 
 __added__
 - **`verifyMessage(message, signature)`** on `UTEXOWallet` — previously threw "not implemented", now backed by the native `verifyMessage`. Verification is always against the node's own key; passing `accountXpub` throws rather than silently ignoring it.

@@ -71,6 +71,7 @@ export type {
   SendAssetResult,
   PayAddressOptions,
   LightningAddressInfo,
+  ParsedLightningAddress,
   ClaimResult,
 } from '@utexo/rgb-sdk-core';
 
@@ -113,6 +114,12 @@ export {
   isNetwork,
   toUnitsNumber,
   fromUnitsNumber,
+  // Lightning Address / UMA (`$user@host`) helpers
+  isUmaAddress,
+  normalizeLightningAddress,
+  parseLightningAddress,
+  UMA_PREFIX,
+  UMA_MAX_USERNAME_LENGTH,
   // UTEXO network config
   DEFAULT_TRANSPORT_ENDPOINTS,
   DEFAULT_INDEXER_URLS,

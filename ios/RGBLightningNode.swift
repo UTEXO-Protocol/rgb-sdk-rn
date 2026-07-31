@@ -8758,6 +8758,8 @@ public enum RlnError {
 
     case UnsupportedInExternalSignerMode(message: String)
 
+    case FailedVssInit(message: String)
+
     case Internal(message: String)
 }
 
@@ -8838,7 +8840,11 @@ public struct FfiConverterTypeRlnError: FfiConverterRustBuffer {
                 message: FfiConverterString.read(from: &buf)
             )
 
-        case 18: return try .Internal(
+        case 18: return try .FailedVssInit(
+                message: FfiConverterString.read(from: &buf)
+            )
+
+        case 19: return try .Internal(
                 message: FfiConverterString.read(from: &buf)
             )
 
@@ -8882,8 +8888,10 @@ public struct FfiConverterTypeRlnError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(16))
         case .UnsupportedInExternalSignerMode(_ /* message is ignored*/ ):
             writeInt(&buf, Int32(17))
-        case .Internal(_ /* message is ignored*/ ):
+        case .FailedVssInit(_ /* message is ignored*/ ):
             writeInt(&buf, Int32(18))
+        case .Internal(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(19))
         }
     }
 }

@@ -5,11 +5,34 @@ import Foundation
 public class RgbSwiftHelper: NSObject {
 
   private static func getErrorClassName(_ error: Error) -> String {
+    // UniFFI errors are Swift enums (`RlnError.Conflict(message:)`), so
+    // `type(of:)` only yields the enum name and loses the category the JS layer
+    // matches on. Recover the case name from the description when possible —
+    // Kotlin reports the nested class name (`Conflict`) for the same error.
+    if let caseName = uniffiErrorCaseName(error) {
+      return caseName
+    }
     let errorType = String(describing: type(of: error))
     if let dotIndex = errorType.lastIndex(of: ".") {
       return String(errorType[errorType.index(after: dotIndex)...])
     }
     return errorType
+  }
+
+  /// Extracts `Conflict` from `Conflict(message: "…")`. Returns nil for
+  /// anything that isn't a bare enum case with associated values.
+  private static func uniffiErrorCaseName(_ error: Error) -> String? {
+    let described = String(describing: error)
+    guard let paren = described.firstIndex(of: "(") else { return nil }
+    let name = String(described[described.startIndex..<paren])
+    guard !name.isEmpty, name.count <= 64 else { return nil }
+    guard let first = name.first, first.isLetter || first == "_" else {
+      return nil
+    }
+    guard name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) else {
+      return nil
+    }
+    return name
   }
 
   private static func parseErrorMessage(_ error: Error) -> String {

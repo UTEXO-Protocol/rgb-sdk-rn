@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.0-beta.26
+
+__changed__
+- Bumped RLN native bindings to **v0.10.0-beta.3** (from `0.9.0-beta.3`). The only binding API change is a new `RlnError.FailedVssInit` variant, so no call sites moved.
+- **Native errors now carry the real reason instead of a generic category message.** Previously every node-state conflict surfaced as `"conflict with current node state"`, no matter whether the wallet already had enough UTXOs, the node was already initialized, fees could not be estimated, or the network did not match. The `RlnError` variants now carry the underlying `APIError` display string, so the rejection reaching JS has the actual message (e.g. `"wallet has enough allocations available"`) while `error.code` keeps the category (`Conflict`, `NotFound`, `InsufficientFunds`, …). Note the category is still coarse — `AllocationsAlreadyAvailable`, `NetworkMismatch`, `CannotEstimateFees` and friends all remain `Conflict`, distinguishable only by message.
+- **iOS `errorCode` is now the error category, not `"RlnError"`.** `RgbSwiftHelper` derived the code from the Swift type name, which for a UniFFI enum is just the enum itself, so every RLN failure reached JS as `code: "RlnError"`. It now reports the case name, matching what Android already reported.
+
+__fixed__
+- Conflict-retry paths (`rlnInitNode`, `rlnUnlockNode`, `rlnUnlockNodeWithExternalSigner`) no longer depend on the word "conflict" appearing in the message. With the richer messages from `0.10.0-beta.3` the old text match would have stopped firing, silently dropping the init/unlock retry on both platforms; detection now keys off the error category.
+
+---
+
 ## 1.0.0-beta.25
 
 __added__

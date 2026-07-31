@@ -22,6 +22,7 @@ import org.utexo.rgblightningnode.SdkInitRequest
 import org.utexo.rgblightningnode.SdkKeysendRequest
 import org.utexo.rgblightningnode.LnInvoiceRequest
 import org.utexo.rgblightningnode.NativeExternalSigner
+import org.utexo.rgblightningnode.RlnException
 import org.utexo.rgblightningnode.SdkExternalSignerBootstrap
 import org.utexo.rgblightningnode.SdkNode
 import org.utexo.rgblightningnode.SdkOpenChannelRequest
@@ -1892,6 +1893,10 @@ class RgbModule(reactContext: ReactApplicationContext) :
   }
 
   private fun isConflictLike(error: Throwable): Boolean {
+    // Since RLN 0.10.0-beta.3 the exception message carries the real reason
+    // (e.g. "wallet has enough allocations available") instead of the generic
+    // "conflict with current node state", so match the variant class first.
+    if (error is RlnException.Conflict) return true
     val loweredMessage = (error.message ?: "").lowercase()
     return loweredMessage.contains("conflict")
   }

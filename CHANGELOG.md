@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.26
 
 __changed__
 - Bumped RLN native bindings to **v0.10.0-beta.3** (from `0.9.0-beta.3`). The only binding API change is a new `RlnError.FailedVssInit` variant, so no call sites moved.

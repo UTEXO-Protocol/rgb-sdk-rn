@@ -114,7 +114,7 @@ const wallet = new UTEXOWallet({
   lspBearerToken: 'bearer-token',
 }, signer);
 
-// createLsp() before init(): discovers pubkey/host from lspBaseUrl + GET /get_info
+// createLsp() before init(): discovers pubkey, host and port from GET /get_info
 // and auto-wires virtual channels into the node params.
 const lsp = await wallet.createLsp();
 
@@ -132,7 +132,8 @@ const wallet = new UTEXOWallet({
   virtualPeerPubkeys:      [lspPeerPubkey],  // fetch once from GET /get_info
 }, signer);
 
-const lsp = await wallet.createLsp(undefined, 9737);  // regtest LDK port ≠ default 9735
+// The port argument is only a fallback for an LSP that publishes no address.
+const lsp = await wallet.createLsp(undefined, 9737);
 ```
 
 Explicit `LspPeer` + `createLsp(LSP_PEER)` is still valid when you cannot set `lspBaseUrl` on the wallet (e.g. Android emulator host override).

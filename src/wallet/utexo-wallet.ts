@@ -879,7 +879,10 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
    *
    * No-arg form — auto-discovers peer info from the wallet's lspBaseUrl:
    *   const lsp = await wallet.createLsp();
-   *   // pubkey from GET /get_info, host from lspBaseUrl, port defaults to 9735
+   *   // pubkey, host and port all from GET /get_info
+   *
+   * An LSP that publishes no address falls back to the HTTP hostname and the
+   * `peerPort` argument.
    *
    * Explicit form — use when you already have the peer details:
    *   const lsp = await wallet.createLsp({ baseUrl, peerPubkey, peerHost, peerPort });
@@ -897,14 +900,13 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       bearerToken: this.params.lspBearerToken ?? undefined,
     });
     const info = await http.getInfo();
-    const peerHost = new URL(baseUrl).hostname;
     this.enableVirtualChannelsForPeer(info.pubkey);
 
     return new UtexoLsp(this, {
       baseUrl,
       peerPubkey: info.pubkey,
-      peerHost,
-      peerPort,
+      peerHost: info.host ?? new URL(baseUrl).hostname,
+      peerPort: info.port ?? peerPort,
       bearerToken: this.params.lspBearerToken ?? undefined,
     });
   }

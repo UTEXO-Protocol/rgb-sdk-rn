@@ -21,7 +21,7 @@ const wallet = new UTEXOWallet({
   lspBearerToken: 'bearer-token',  // only required for APay
 }, signer);
 
-// No-arg: peer pubkey from GET /get_info, host from lspBaseUrl, port 9735.
+// No-arg: peer pubkey, host and port all from GET /get_info.
 // MUST be called before init() — it auto-wires virtual channels into node params.
 const lsp = await wallet.createLsp();
 
@@ -425,7 +425,9 @@ SDK: `lsp.sendAsset()`
 ```typescript
 // Get LSP info
 const info = await lsp.http.getInfo();
-console.log(info.pubkey, info.numUsableChannels);
+console.log(`${info.pubkey}@${info.host}:${info.port}`, info.network);
+// Amounts are bigint — the wire sends u64 as strings.
+console.log(info.minPaymentSizeMsat, info.supportedAssets[0]?.schema);
 
 // Resolve a Lightning Address (LNURL discovery)
 const { pr } = await lsp.http.resolveAddress('alice@lsp-signet.utexo.com', 3_000_000);

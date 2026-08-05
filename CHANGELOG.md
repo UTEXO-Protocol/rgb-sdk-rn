@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0-beta.27
+
+__changed__
+- Bumped `@utexo/rgb-sdk-core` to **1.0.0-beta.7**. `LspGetInfoResponse` gains optional `host`/`port` fields (P2P address, additive-only contract).
+- **`createLsp()` no-arg form now discovers peer host and port from `GET /get_info`** instead of taking the hostname from `lspBaseUrl` and defaulting the port to `9735`. Falls back to the HTTP hostname and the `peerPort` argument only when the LSP publishes no address.
+
 ## 1.0.0-beta.26
 
 __changed__

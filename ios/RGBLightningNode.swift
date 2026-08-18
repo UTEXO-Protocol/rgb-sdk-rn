@@ -903,6 +903,8 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func assetBalance(assetId: ContractId) throws -> AssetBalanceInfo
 
+    func assetLink(request: SdkAssetLinkRequest) throws -> AssetLinkRecord
+
     func assetMetadata(assetId: ContractId) throws -> AssetMetadataInfo
 
     func btcBalance(skipSync: Bool) throws -> BtcBalanceInfo
@@ -967,13 +969,9 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func listSwaps() throws -> SwapList
 
-    func listTransactions(skipSync: Bool) throws -> [Transaction]
+    func listTransactions(skipSync: Bool, txid: String?) throws -> [Transaction]
 
-    func listTransactionsByTxid(txid: String, skipSync: Bool) throws -> [Transaction]
-
-    func listTransfers(assetId: ContractId) throws -> [Transfer]
-
-    func listTransfersByTxid(txid: String) throws -> [Transfer]
+    func listTransfers(assetId: ContractId?, txid: String?) throws -> [Transfer]
 
     func listUnspents(skipSync: Bool) throws -> [Unspent]
 
@@ -1117,6 +1115,13 @@ open class SdkNode:
         return try FfiConverterTypeAssetBalanceInfo.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_asset_balance(self.uniffiClonePointer(),
                                                                       FfiConverterTypeContractId.lower(assetId), $0)
+        })
+    }
+
+    open func assetLink(request: SdkAssetLinkRequest) throws -> AssetLinkRecord {
+        return try FfiConverterTypeAssetLinkRecord.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_asset_link(self.uniffiClonePointer(),
+                                                                   FfiConverterTypeSdkAssetLinkRequest.lower(request), $0)
         })
     }
 
@@ -1343,32 +1348,19 @@ open class SdkNode:
         })
     }
 
-    open func listTransactions(skipSync: Bool) throws -> [Transaction] {
+    open func listTransactions(skipSync: Bool, txid: String?) throws -> [Transaction] {
         return try FfiConverterSequenceTypeTransaction.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_list_transactions(self.uniffiClonePointer(),
-                                                                          FfiConverterBool.lower(skipSync), $0)
+                                                                          FfiConverterBool.lower(skipSync),
+                                                                          FfiConverterOptionString.lower(txid), $0)
         })
     }
 
-    open func listTransactionsByTxid(txid: String, skipSync: Bool) throws -> [Transaction] {
-        return try FfiConverterSequenceTypeTransaction.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
-            uniffi_rgb_lightning_node_fn_method_sdknode_list_transactions_by_txid(self.uniffiClonePointer(),
-                                                                                  FfiConverterString.lower(txid),
-                                                                                  FfiConverterBool.lower(skipSync), $0)
-        })
-    }
-
-    open func listTransfers(assetId: ContractId) throws -> [Transfer] {
+    open func listTransfers(assetId: ContractId?, txid: String?) throws -> [Transfer] {
         return try FfiConverterSequenceTypeTransfer.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_list_transfers(self.uniffiClonePointer(),
-                                                                       FfiConverterTypeContractId.lower(assetId), $0)
-        })
-    }
-
-    open func listTransfersByTxid(txid: String) throws -> [Transfer] {
-        return try FfiConverterSequenceTypeTransfer.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
-            uniffi_rgb_lightning_node_fn_method_sdknode_list_transfers_by_txid(self.uniffiClonePointer(),
-                                                                               FfiConverterString.lower(txid), $0)
+                                                                       FfiConverterOptionTypeContractId.lower(assetId),
+                                                                       FfiConverterOptionString.lower(txid), $0)
         })
     }
 
@@ -1902,10 +1894,13 @@ public struct AssetIfa {
     public var balance: AssetBalanceInfo
     public var media: Media?
     public var rejectListUrl: String?
+    public var issuanceLinkRightOutpoint: RgbOutpoint?
+    public var linkedFromAssetId: String?
+    public var linkedToAssetId: String?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(assetId: ContractId, ticker: String, name: String, details: String?, precision: UInt8, initialSupply: UInt64, maxSupply: UInt64, knownCirculatingSupply: UInt64, timestamp: Int64, addedAt: Int64, balance: AssetBalanceInfo, media: Media?, rejectListUrl: String?) {
+    public init(assetId: ContractId, ticker: String, name: String, details: String?, precision: UInt8, initialSupply: UInt64, maxSupply: UInt64, knownCirculatingSupply: UInt64, timestamp: Int64, addedAt: Int64, balance: AssetBalanceInfo, media: Media?, rejectListUrl: String?, issuanceLinkRightOutpoint: RgbOutpoint?, linkedFromAssetId: String?, linkedToAssetId: String?) {
         self.assetId = assetId
         self.ticker = ticker
         self.name = name
@@ -1919,6 +1914,9 @@ public struct AssetIfa {
         self.balance = balance
         self.media = media
         self.rejectListUrl = rejectListUrl
+        self.issuanceLinkRightOutpoint = issuanceLinkRightOutpoint
+        self.linkedFromAssetId = linkedFromAssetId
+        self.linkedToAssetId = linkedToAssetId
     }
 }
 
@@ -1963,6 +1961,15 @@ extension AssetIfa: Equatable, Hashable {
         if lhs.rejectListUrl != rhs.rejectListUrl {
             return false
         }
+        if lhs.issuanceLinkRightOutpoint != rhs.issuanceLinkRightOutpoint {
+            return false
+        }
+        if lhs.linkedFromAssetId != rhs.linkedFromAssetId {
+            return false
+        }
+        if lhs.linkedToAssetId != rhs.linkedToAssetId {
+            return false
+        }
         return true
     }
 
@@ -1980,6 +1987,9 @@ extension AssetIfa: Equatable, Hashable {
         hasher.combine(balance)
         hasher.combine(media)
         hasher.combine(rejectListUrl)
+        hasher.combine(issuanceLinkRightOutpoint)
+        hasher.combine(linkedFromAssetId)
+        hasher.combine(linkedToAssetId)
     }
 }
 
@@ -2002,7 +2012,10 @@ public struct FfiConverterTypeAssetIfa: FfiConverterRustBuffer {
                 addedAt: FfiConverterInt64.read(from: &buf),
                 balance: FfiConverterTypeAssetBalanceInfo.read(from: &buf),
                 media: FfiConverterOptionTypeMedia.read(from: &buf),
-                rejectListUrl: FfiConverterOptionString.read(from: &buf)
+                rejectListUrl: FfiConverterOptionString.read(from: &buf),
+                issuanceLinkRightOutpoint: FfiConverterOptionTypeRgbOutpoint.read(from: &buf),
+                linkedFromAssetId: FfiConverterOptionString.read(from: &buf),
+                linkedToAssetId: FfiConverterOptionString.read(from: &buf)
             )
     }
 
@@ -2020,6 +2033,9 @@ public struct FfiConverterTypeAssetIfa: FfiConverterRustBuffer {
         FfiConverterTypeAssetBalanceInfo.write(value.balance, into: &buf)
         FfiConverterOptionTypeMedia.write(value.media, into: &buf)
         FfiConverterOptionString.write(value.rejectListUrl, into: &buf)
+        FfiConverterOptionTypeRgbOutpoint.write(value.issuanceLinkRightOutpoint, into: &buf)
+        FfiConverterOptionString.write(value.linkedFromAssetId, into: &buf)
+        FfiConverterOptionString.write(value.linkedToAssetId, into: &buf)
     }
 }
 
@@ -2035,6 +2051,83 @@ public func FfiConverterTypeAssetIfa_lift(_ buf: RustBuffer) throws -> AssetIfa 
 #endif
 public func FfiConverterTypeAssetIfa_lower(_ value: AssetIfa) -> RustBuffer {
     return FfiConverterTypeAssetIfa.lower(value)
+}
+
+public struct AssetLinkRecord {
+    public var parentAssetId: ContractId
+    public var childAssetId: ContractId?
+    public var createdAt: UInt64?
+    public var txid: Txid?
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(parentAssetId: ContractId, childAssetId: ContractId?, createdAt: UInt64?, txid: Txid?) {
+        self.parentAssetId = parentAssetId
+        self.childAssetId = childAssetId
+        self.createdAt = createdAt
+        self.txid = txid
+    }
+}
+
+extension AssetLinkRecord: Equatable, Hashable {
+    public static func == (lhs: AssetLinkRecord, rhs: AssetLinkRecord) -> Bool {
+        if lhs.parentAssetId != rhs.parentAssetId {
+            return false
+        }
+        if lhs.childAssetId != rhs.childAssetId {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.txid != rhs.txid {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(parentAssetId)
+        hasher.combine(childAssetId)
+        hasher.combine(createdAt)
+        hasher.combine(txid)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAssetLinkRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AssetLinkRecord {
+        return
+            try AssetLinkRecord(
+                parentAssetId: FfiConverterTypeContractId.read(from: &buf),
+                childAssetId: FfiConverterOptionTypeContractId.read(from: &buf),
+                createdAt: FfiConverterOptionUInt64.read(from: &buf),
+                txid: FfiConverterOptionTypeTxid.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: AssetLinkRecord, into buf: inout [UInt8]) {
+        FfiConverterTypeContractId.write(value.parentAssetId, into: &buf)
+        FfiConverterOptionTypeContractId.write(value.childAssetId, into: &buf)
+        FfiConverterOptionUInt64.write(value.createdAt, into: &buf)
+        FfiConverterOptionTypeTxid.write(value.txid, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAssetLinkRecord_lift(_ buf: RustBuffer) throws -> AssetLinkRecord {
+    return try FfiConverterTypeAssetLinkRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAssetLinkRecord_lower(_ value: AssetLinkRecord) -> RustBuffer {
+    return FfiConverterTypeAssetLinkRecord.lower(value)
 }
 
 public struct AssetMediaResponse {
@@ -2101,10 +2194,13 @@ public struct AssetMetadataInfo {
     public var ticker: String?
     public var details: String?
     public var token: Token?
+    public var unspentLinkRightOutpoint: RgbOutpoint?
+    public var linkedFromAssetId: String?
+    public var linkedToAssetId: String?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(assetSchema: String, initialSupply: UInt64, maxSupply: UInt64, knownCirculatingSupply: UInt64, timestamp: Int64, name: String, precision: UInt8, ticker: String?, details: String?, token: Token?) {
+    public init(assetSchema: String, initialSupply: UInt64, maxSupply: UInt64, knownCirculatingSupply: UInt64, timestamp: Int64, name: String, precision: UInt8, ticker: String?, details: String?, token: Token?, unspentLinkRightOutpoint: RgbOutpoint?, linkedFromAssetId: String?, linkedToAssetId: String?) {
         self.assetSchema = assetSchema
         self.initialSupply = initialSupply
         self.maxSupply = maxSupply
@@ -2115,6 +2211,9 @@ public struct AssetMetadataInfo {
         self.ticker = ticker
         self.details = details
         self.token = token
+        self.unspentLinkRightOutpoint = unspentLinkRightOutpoint
+        self.linkedFromAssetId = linkedFromAssetId
+        self.linkedToAssetId = linkedToAssetId
     }
 }
 
@@ -2150,6 +2249,15 @@ extension AssetMetadataInfo: Equatable, Hashable {
         if lhs.token != rhs.token {
             return false
         }
+        if lhs.unspentLinkRightOutpoint != rhs.unspentLinkRightOutpoint {
+            return false
+        }
+        if lhs.linkedFromAssetId != rhs.linkedFromAssetId {
+            return false
+        }
+        if lhs.linkedToAssetId != rhs.linkedToAssetId {
+            return false
+        }
         return true
     }
 
@@ -2164,6 +2272,9 @@ extension AssetMetadataInfo: Equatable, Hashable {
         hasher.combine(ticker)
         hasher.combine(details)
         hasher.combine(token)
+        hasher.combine(unspentLinkRightOutpoint)
+        hasher.combine(linkedFromAssetId)
+        hasher.combine(linkedToAssetId)
     }
 }
 
@@ -2183,7 +2294,10 @@ public struct FfiConverterTypeAssetMetadataInfo: FfiConverterRustBuffer {
                 precision: FfiConverterUInt8.read(from: &buf),
                 ticker: FfiConverterOptionString.read(from: &buf),
                 details: FfiConverterOptionString.read(from: &buf),
-                token: FfiConverterOptionTypeToken.read(from: &buf)
+                token: FfiConverterOptionTypeToken.read(from: &buf),
+                unspentLinkRightOutpoint: FfiConverterOptionTypeRgbOutpoint.read(from: &buf),
+                linkedFromAssetId: FfiConverterOptionString.read(from: &buf),
+                linkedToAssetId: FfiConverterOptionString.read(from: &buf)
             )
     }
 
@@ -2198,6 +2312,9 @@ public struct FfiConverterTypeAssetMetadataInfo: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.ticker, into: &buf)
         FfiConverterOptionString.write(value.details, into: &buf)
         FfiConverterOptionTypeToken.write(value.token, into: &buf)
+        FfiConverterOptionTypeRgbOutpoint.write(value.unspentLinkRightOutpoint, into: &buf)
+        FfiConverterOptionString.write(value.linkedFromAssetId, into: &buf)
+        FfiConverterOptionString.write(value.linkedToAssetId, into: &buf)
     }
 }
 
@@ -3455,6 +3572,7 @@ public func FfiConverterTypeDecodeLnInvoiceResponse_lower(_ value: DecodeLnInvoi
 
 public struct DecodeRgbInvoiceResponse {
     public var recipientId: String
+    public var proxyRecipientId: String
     public var recipientType: String
     public var assetSchema: String?
     public var assetId: ContractId?
@@ -3465,8 +3583,9 @@ public struct DecodeRgbInvoiceResponse {
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(recipientId: String, recipientType: String, assetSchema: String?, assetId: ContractId?, assignment: String, network: String, expirationTimestamp: Int64?, transportEndpoints: [String]) {
+    public init(recipientId: String, proxyRecipientId: String, recipientType: String, assetSchema: String?, assetId: ContractId?, assignment: String, network: String, expirationTimestamp: Int64?, transportEndpoints: [String]) {
         self.recipientId = recipientId
+        self.proxyRecipientId = proxyRecipientId
         self.recipientType = recipientType
         self.assetSchema = assetSchema
         self.assetId = assetId
@@ -3480,6 +3599,9 @@ public struct DecodeRgbInvoiceResponse {
 extension DecodeRgbInvoiceResponse: Equatable, Hashable {
     public static func == (lhs: DecodeRgbInvoiceResponse, rhs: DecodeRgbInvoiceResponse) -> Bool {
         if lhs.recipientId != rhs.recipientId {
+            return false
+        }
+        if lhs.proxyRecipientId != rhs.proxyRecipientId {
             return false
         }
         if lhs.recipientType != rhs.recipientType {
@@ -3508,6 +3630,7 @@ extension DecodeRgbInvoiceResponse: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(recipientId)
+        hasher.combine(proxyRecipientId)
         hasher.combine(recipientType)
         hasher.combine(assetSchema)
         hasher.combine(assetId)
@@ -3526,6 +3649,7 @@ public struct FfiConverterTypeDecodeRgbInvoiceResponse: FfiConverterRustBuffer {
         return
             try DecodeRgbInvoiceResponse(
                 recipientId: FfiConverterString.read(from: &buf),
+                proxyRecipientId: FfiConverterString.read(from: &buf),
                 recipientType: FfiConverterString.read(from: &buf),
                 assetSchema: FfiConverterOptionString.read(from: &buf),
                 assetId: FfiConverterOptionTypeContractId.read(from: &buf),
@@ -3538,6 +3662,7 @@ public struct FfiConverterTypeDecodeRgbInvoiceResponse: FfiConverterRustBuffer {
 
     public static func write(_ value: DecodeRgbInvoiceResponse, into buf: inout [UInt8]) {
         FfiConverterString.write(value.recipientId, into: &buf)
+        FfiConverterString.write(value.proxyRecipientId, into: &buf)
         FfiConverterString.write(value.recipientType, into: &buf)
         FfiConverterOptionString.write(value.assetSchema, into: &buf)
         FfiConverterOptionTypeContractId.write(value.assetId, into: &buf)
@@ -3889,17 +4014,19 @@ public struct LnInvoiceRequest {
     public var assetId: ContractId?
     public var assetAmount: UInt64?
     public var paymentHash: PaymentHash?
+    public var description: String?
     public var descriptionHash: String?
     public var minFinalCltvExpiryDelta: UInt16?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amtMsat: UInt64?, expirySec: UInt32, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash?, descriptionHash: String?, minFinalCltvExpiryDelta: UInt16?) {
+    public init(amtMsat: UInt64?, expirySec: UInt32, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash?, description: String? = nil, descriptionHash: String?, minFinalCltvExpiryDelta: UInt16?) {
         self.amtMsat = amtMsat
         self.expirySec = expirySec
         self.assetId = assetId
         self.assetAmount = assetAmount
         self.paymentHash = paymentHash
+        self.description = description
         self.descriptionHash = descriptionHash
         self.minFinalCltvExpiryDelta = minFinalCltvExpiryDelta
     }
@@ -3922,6 +4049,9 @@ extension LnInvoiceRequest: Equatable, Hashable {
         if lhs.paymentHash != rhs.paymentHash {
             return false
         }
+        if lhs.description != rhs.description {
+            return false
+        }
         if lhs.descriptionHash != rhs.descriptionHash {
             return false
         }
@@ -3937,6 +4067,7 @@ extension LnInvoiceRequest: Equatable, Hashable {
         hasher.combine(assetId)
         hasher.combine(assetAmount)
         hasher.combine(paymentHash)
+        hasher.combine(description)
         hasher.combine(descriptionHash)
         hasher.combine(minFinalCltvExpiryDelta)
     }
@@ -3954,6 +4085,7 @@ public struct FfiConverterTypeLnInvoiceRequest: FfiConverterRustBuffer {
                 assetId: FfiConverterOptionTypeContractId.read(from: &buf),
                 assetAmount: FfiConverterOptionUInt64.read(from: &buf),
                 paymentHash: FfiConverterOptionTypePaymentHash.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
                 descriptionHash: FfiConverterOptionString.read(from: &buf),
                 minFinalCltvExpiryDelta: FfiConverterOptionUInt16.read(from: &buf)
             )
@@ -3965,6 +4097,7 @@ public struct FfiConverterTypeLnInvoiceRequest: FfiConverterRustBuffer {
         FfiConverterOptionTypeContractId.write(value.assetId, into: &buf)
         FfiConverterOptionUInt64.write(value.assetAmount, into: &buf)
         FfiConverterOptionTypePaymentHash.write(value.paymentHash, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
         FfiConverterOptionString.write(value.descriptionHash, into: &buf)
         FfiConverterOptionUInt16.write(value.minFinalCltvExpiryDelta, into: &buf)
     }
@@ -4436,11 +4569,12 @@ public struct Payment {
     public var updatedAt: UInt64
     public var payeePubkey: PublicKey
     public var preimage: String?
+    public var description: String?
     public var descriptionHash: String?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amtMsat: UInt64?, assetAmount: UInt64?, assetId: ContractId?, paymentHash: PaymentHash, paymentType: PaymentType, status: HtlcStatus, createdAt: UInt64, updatedAt: UInt64, payeePubkey: PublicKey, preimage: String?, descriptionHash: String?) {
+    public init(amtMsat: UInt64?, assetAmount: UInt64?, assetId: ContractId?, paymentHash: PaymentHash, paymentType: PaymentType, status: HtlcStatus, createdAt: UInt64, updatedAt: UInt64, payeePubkey: PublicKey, preimage: String?, description: String?, descriptionHash: String?) {
         self.amtMsat = amtMsat
         self.assetAmount = assetAmount
         self.assetId = assetId
@@ -4451,6 +4585,7 @@ public struct Payment {
         self.updatedAt = updatedAt
         self.payeePubkey = payeePubkey
         self.preimage = preimage
+        self.description = description
         self.descriptionHash = descriptionHash
     }
 }
@@ -4487,6 +4622,9 @@ extension Payment: Equatable, Hashable {
         if lhs.preimage != rhs.preimage {
             return false
         }
+        if lhs.description != rhs.description {
+            return false
+        }
         if lhs.descriptionHash != rhs.descriptionHash {
             return false
         }
@@ -4504,6 +4642,7 @@ extension Payment: Equatable, Hashable {
         hasher.combine(updatedAt)
         hasher.combine(payeePubkey)
         hasher.combine(preimage)
+        hasher.combine(description)
         hasher.combine(descriptionHash)
     }
 }
@@ -4525,6 +4664,7 @@ public struct FfiConverterTypePayment: FfiConverterRustBuffer {
                 updatedAt: FfiConverterUInt64.read(from: &buf),
                 payeePubkey: FfiConverterTypePublicKey.read(from: &buf),
                 preimage: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
                 descriptionHash: FfiConverterOptionString.read(from: &buf)
             )
     }
@@ -4540,6 +4680,7 @@ public struct FfiConverterTypePayment: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.updatedAt, into: &buf)
         FfiConverterTypePublicKey.write(value.payeePubkey, into: &buf)
         FfiConverterOptionString.write(value.preimage, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
         FfiConverterOptionString.write(value.descriptionHash, into: &buf)
     }
 }
@@ -4741,6 +4882,67 @@ public func FfiConverterTypeRgbAllocation_lower(_ value: RgbAllocation) -> RustB
     return FfiConverterTypeRgbAllocation.lower(value)
 }
 
+public struct RgbOutpoint {
+    public var txid: String
+    public var vout: UInt32
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(txid: String, vout: UInt32) {
+        self.txid = txid
+        self.vout = vout
+    }
+}
+
+extension RgbOutpoint: Equatable, Hashable {
+    public static func == (lhs: RgbOutpoint, rhs: RgbOutpoint) -> Bool {
+        if lhs.txid != rhs.txid {
+            return false
+        }
+        if lhs.vout != rhs.vout {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(txid)
+        hasher.combine(vout)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRgbOutpoint: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RgbOutpoint {
+        return
+            try RgbOutpoint(
+                txid: FfiConverterString.read(from: &buf),
+                vout: FfiConverterUInt32.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: RgbOutpoint, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.txid, into: &buf)
+        FfiConverterUInt32.write(value.vout, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRgbOutpoint_lift(_ buf: RustBuffer) throws -> RgbOutpoint {
+    return try FfiConverterTypeRgbOutpoint.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRgbOutpoint_lower(_ value: RgbOutpoint) -> RustBuffer {
+    return FfiConverterTypeRgbOutpoint.lower(value)
+}
+
 public struct RgbRecipient {
     public var recipientId: RecipientId
     public var witnessData: WitnessData?
@@ -4824,6 +5026,75 @@ public func FfiConverterTypeRgbRecipient_lift(_ buf: RustBuffer) throws -> RgbRe
 #endif
 public func FfiConverterTypeRgbRecipient_lower(_ value: RgbRecipient) -> RustBuffer {
     return FfiConverterTypeRgbRecipient.lower(value)
+}
+
+public struct SdkAssetLinkRequest {
+    public var parentAssetId: ContractId
+    public var childAssetId: ContractId
+    public var minConfirmations: UInt8
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(parentAssetId: ContractId, childAssetId: ContractId, minConfirmations: UInt8) {
+        self.parentAssetId = parentAssetId
+        self.childAssetId = childAssetId
+        self.minConfirmations = minConfirmations
+    }
+}
+
+extension SdkAssetLinkRequest: Equatable, Hashable {
+    public static func == (lhs: SdkAssetLinkRequest, rhs: SdkAssetLinkRequest) -> Bool {
+        if lhs.parentAssetId != rhs.parentAssetId {
+            return false
+        }
+        if lhs.childAssetId != rhs.childAssetId {
+            return false
+        }
+        if lhs.minConfirmations != rhs.minConfirmations {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(parentAssetId)
+        hasher.combine(childAssetId)
+        hasher.combine(minConfirmations)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkAssetLinkRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkAssetLinkRequest {
+        return
+            try SdkAssetLinkRequest(
+                parentAssetId: FfiConverterTypeContractId.read(from: &buf),
+                childAssetId: FfiConverterTypeContractId.read(from: &buf),
+                minConfirmations: FfiConverterUInt8.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: SdkAssetLinkRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeContractId.write(value.parentAssetId, into: &buf)
+        FfiConverterTypeContractId.write(value.childAssetId, into: &buf)
+        FfiConverterUInt8.write(value.minConfirmations, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkAssetLinkRequest_lift(_ buf: RustBuffer) throws -> SdkAssetLinkRequest {
+    return try FfiConverterTypeSdkAssetLinkRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkAssetLinkRequest_lower(_ value: SdkAssetLinkRequest) -> RustBuffer {
+    return FfiConverterTypeSdkAssetLinkRequest.lower(value)
 }
 
 public struct SdkCloseChannelRequest {
@@ -5489,16 +5760,18 @@ public struct SdkIssueAssetIfaRequest {
     public var name: String
     public var precision: UInt8
     public var rejectListUrl: String?
+    public var issuanceType: IfaIssuanceType?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amounts: [UInt64], inflationAmounts: [UInt64], ticker: String, name: String, precision: UInt8, rejectListUrl: String?) {
+    public init(amounts: [UInt64], inflationAmounts: [UInt64], ticker: String, name: String, precision: UInt8, rejectListUrl: String?, issuanceType: IfaIssuanceType? = nil) {
         self.amounts = amounts
         self.inflationAmounts = inflationAmounts
         self.ticker = ticker
         self.name = name
         self.precision = precision
         self.rejectListUrl = rejectListUrl
+        self.issuanceType = issuanceType
     }
 }
 
@@ -5522,6 +5795,9 @@ extension SdkIssueAssetIfaRequest: Equatable, Hashable {
         if lhs.rejectListUrl != rhs.rejectListUrl {
             return false
         }
+        if lhs.issuanceType != rhs.issuanceType {
+            return false
+        }
         return true
     }
 
@@ -5532,6 +5808,7 @@ extension SdkIssueAssetIfaRequest: Equatable, Hashable {
         hasher.combine(name)
         hasher.combine(precision)
         hasher.combine(rejectListUrl)
+        hasher.combine(issuanceType)
     }
 }
 
@@ -5547,7 +5824,8 @@ public struct FfiConverterTypeSdkIssueAssetIfaRequest: FfiConverterRustBuffer {
                 ticker: FfiConverterString.read(from: &buf),
                 name: FfiConverterString.read(from: &buf),
                 precision: FfiConverterUInt8.read(from: &buf),
-                rejectListUrl: FfiConverterOptionString.read(from: &buf)
+                rejectListUrl: FfiConverterOptionString.read(from: &buf),
+                issuanceType: FfiConverterOptionTypeIfaIssuanceType.read(from: &buf)
             )
     }
 
@@ -5558,6 +5836,7 @@ public struct FfiConverterTypeSdkIssueAssetIfaRequest: FfiConverterRustBuffer {
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterUInt8.write(value.precision, into: &buf)
         FfiConverterOptionString.write(value.rejectListUrl, into: &buf)
+        FfiConverterOptionTypeIfaIssuanceType.write(value.issuanceType, into: &buf)
     }
 }
 
@@ -7919,6 +8198,7 @@ public struct Transfer {
     public var kind: String
     public var txid: Txid?
     public var recipientId: String?
+    public var proxyRecipientId: String?
     public var receiveUtxo: String?
     public var changeUtxo: String?
     public var expiration: Int64?
@@ -7926,7 +8206,7 @@ public struct Transfer {
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(idx: Int32, createdAt: Int64, updatedAt: Int64, status: String, requestedAssignment: String?, assignments: [String], kind: String, txid: Txid?, recipientId: String?, receiveUtxo: String?, changeUtxo: String?, expiration: Int64?, transportEndpoints: [TransferTransportEndpoint]) {
+    public init(idx: Int32, createdAt: Int64, updatedAt: Int64, status: String, requestedAssignment: String?, assignments: [String], kind: String, txid: Txid?, recipientId: String?, proxyRecipientId: String?, receiveUtxo: String?, changeUtxo: String?, expiration: Int64?, transportEndpoints: [TransferTransportEndpoint]) {
         self.idx = idx
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -7936,6 +8216,7 @@ public struct Transfer {
         self.kind = kind
         self.txid = txid
         self.recipientId = recipientId
+        self.proxyRecipientId = proxyRecipientId
         self.receiveUtxo = receiveUtxo
         self.changeUtxo = changeUtxo
         self.expiration = expiration
@@ -7972,6 +8253,9 @@ extension Transfer: Equatable, Hashable {
         if lhs.recipientId != rhs.recipientId {
             return false
         }
+        if lhs.proxyRecipientId != rhs.proxyRecipientId {
+            return false
+        }
         if lhs.receiveUtxo != rhs.receiveUtxo {
             return false
         }
@@ -7997,6 +8281,7 @@ extension Transfer: Equatable, Hashable {
         hasher.combine(kind)
         hasher.combine(txid)
         hasher.combine(recipientId)
+        hasher.combine(proxyRecipientId)
         hasher.combine(receiveUtxo)
         hasher.combine(changeUtxo)
         hasher.combine(expiration)
@@ -8020,6 +8305,7 @@ public struct FfiConverterTypeTransfer: FfiConverterRustBuffer {
                 kind: FfiConverterString.read(from: &buf),
                 txid: FfiConverterOptionTypeTxid.read(from: &buf),
                 recipientId: FfiConverterOptionString.read(from: &buf),
+                proxyRecipientId: FfiConverterOptionString.read(from: &buf),
                 receiveUtxo: FfiConverterOptionString.read(from: &buf),
                 changeUtxo: FfiConverterOptionString.read(from: &buf),
                 expiration: FfiConverterOptionInt64.read(from: &buf),
@@ -8037,6 +8323,7 @@ public struct FfiConverterTypeTransfer: FfiConverterRustBuffer {
         FfiConverterString.write(value.kind, into: &buf)
         FfiConverterOptionTypeTxid.write(value.txid, into: &buf)
         FfiConverterOptionString.write(value.recipientId, into: &buf)
+        FfiConverterOptionString.write(value.proxyRecipientId, into: &buf)
         FfiConverterOptionString.write(value.receiveUtxo, into: &buf)
         FfiConverterOptionString.write(value.changeUtxo, into: &buf)
         FfiConverterOptionInt64.write(value.expiration, into: &buf)
@@ -8582,6 +8869,66 @@ public func FfiConverterTypeHtlcStatus_lower(_ value: HtlcStatus) -> RustBuffer 
 }
 
 extension HtlcStatus: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum IfaIssuanceType {
+    case legacy
+    case linkRightOnly
+    case linkedFromParent(contractId: ContractId, requestLinkRight: Bool)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIfaIssuanceType: FfiConverterRustBuffer {
+    typealias SwiftType = IfaIssuanceType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IfaIssuanceType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .legacy
+
+        case 2: return .linkRightOnly
+
+        case 3: return try .linkedFromParent(contractId: FfiConverterTypeContractId.read(from: &buf), requestLinkRight: FfiConverterBool.read(from: &buf))
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: IfaIssuanceType, into buf: inout [UInt8]) {
+        switch value {
+        case .legacy:
+            writeInt(&buf, Int32(1))
+
+        case .linkRightOnly:
+            writeInt(&buf, Int32(2))
+
+        case let .linkedFromParent(contractId, requestLinkRight):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeContractId.write(contractId, into: &buf)
+            FfiConverterBool.write(requestLinkRight, into: &buf)
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfaIssuanceType_lift(_ buf: RustBuffer) throws -> IfaIssuanceType {
+    return try FfiConverterTypeIfaIssuanceType.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIfaIssuanceType_lower(_ value: IfaIssuanceType) -> RustBuffer {
+    return FfiConverterTypeIfaIssuanceType.lower(value)
+}
+
+extension IfaIssuanceType: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -9335,6 +9682,30 @@ private struct FfiConverterOptionTypeProofOfReserves: FfiConverterRustBuffer {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+private struct FfiConverterOptionTypeRgbOutpoint: FfiConverterRustBuffer {
+    typealias SwiftType = RgbOutpoint?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeRgbOutpoint.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeRgbOutpoint.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
 private struct FfiConverterOptionTypeToken: FfiConverterRustBuffer {
     typealias SwiftType = Token?
 
@@ -9423,6 +9794,30 @@ private struct FfiConverterOptionTypeAssignmentKind: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeAssignmentKind.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterOptionTypeIfaIssuanceType: FfiConverterRustBuffer {
+    typealias SwiftType = IfaIssuanceType?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeIfaIssuanceType.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeIfaIssuanceType.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -10583,6 +10978,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_asset_balance() != 20956 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_asset_link() != 24955 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_asset_metadata() != 9103 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10679,16 +11077,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_list_swaps() != 64587 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transactions() != 24401 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transactions() != 44247 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transactions_by_txid() != 10806 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transfers() != 20315 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transfers_by_txid() != 12085 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_list_transfers() != 25060 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_list_unspents() != 35087 {

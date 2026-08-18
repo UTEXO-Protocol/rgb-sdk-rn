@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.0-beta.28
+
+__changed__
+- Bumped RLN native bindings to **v0.11.0-beta.3** (from `0.10.0-beta.3`) — iOS xcframework and the Maven artifact `com.utexo:rgb-lightning-node-android`.
+- The binding merged the txid-filtered list calls into the general ones: `listTransactionsByTxid(txid, skipSync)` → `listTransactions(skipSync, txid)`, `listTransfersByTxid(txid)` → `listTransfers(assetId, txid)`, with `assetId` now nullable. The native layers were rewired accordingly; **the JS surface is unchanged** — `listTransactionsByTxid()` / `listTransfersByTxid()` / `listTransfers()` keep working exactly as before, and `listTransfers()` with no asset id now passes `null` instead of an empty string.
+
+__added__
+- Linked-asset fields on IFA assets, surfaced by `rlnListAssets` and `rlnIssueAssetIfa`: `issuanceLinkRightOutpoint` (`{ txid, vout }`), `linkedFromAssetId`, `linkedToAssetId` (`RlnAssetIfa` in `src/binding/rln-types.ts`).
+- `proxyRecipientId` on transfers (`RlnTransfer`) and on the decoded RGB invoice (`RlnDecodeRgbInvoiceResponse`) — the recipient id as registered with the proxy, which may differ from `recipientId`.
+
+Both live on the raw `Rln*` binding types only; they do not reach the `UTEXOWallet` return types until `@utexo/rgb-sdk-core` declares them.
+
+__not wired yet__
+- `assetLink(SdkAssetLinkRequest)` (link a child asset to a parent) and the new `issuanceType` field on the IFA issuance request (`Legacy` / `LinkRightOnly` / `LinkedFromParent`) exist in `0.11.0-beta.3` but are not exposed through the TurboModule yet.
+- `Payment.description` and `LnInvoiceRequest.description` are likewise available in the binding but not bridged (the bridge does not surface `descriptionHash` either).
+
 ## 1.0.0-beta.27
 
 __changed__

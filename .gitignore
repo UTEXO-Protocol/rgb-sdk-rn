@@ -51,5 +51,11 @@ ios/RGBLightningNode.xcframework/
                                                                    
 # UniFFI auto-generated bindings                                 
 ios/RGBLightningNode.swift
-ios/RGBLightningNodeFFI.h                                                                                    
+ios/RGBLightningNodeFFI.h
 ios/RGBLightningNodeFFI.modulemap
+
+# graphify knowledge graph (generated, local-only)
+graphify-out/
+
+# Claude Code local settings
+.claude/

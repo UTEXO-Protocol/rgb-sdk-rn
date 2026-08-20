@@ -904,6 +904,36 @@ await lsp.payAddress({
 });
 ```
 
+Omit `assetId` and the SDK chooses one, reading the address's payout and
+accepted assets off LNURL discovery and checking local liquidity:
+
+```typescript
+const { assetSelection } = await lsp.payAddress({
+  address: 'alice@lsp-signet.utexo.com',
+  amtMsat: 3_000_000,
+  asset:   { assetAmount: 500_000 },   // always base units
+});
+// assetSelection.converted → the LSP converts between the two legs
+```
+
+### Paying across two assets
+
+Where an LSP serves one asset over Lightning (say `LNUSDT`) but accepts a
+canonical on-chain one (`USDT`), it can convert 1:1 between the two legs of a
+single payment. Three methods build on that, and none of them require the other
+side to know anything about this SDK:
+
+| Method | Flow |
+|--------|------|
+| `requestExternalInvoice()` | Quote a hosted BOLT11 for someone else to pay. Any RGB Lightning node with the right channel settles it with a bare `POST /sendpayment`. |
+| `payExternalInvoice()` | Pay a plain third-party BOLT11 out of an asset you do not hold. The LSP quotes a HODL invoice carrying that invoice's own payment hash; the SDK verifies the two legs bind before paying. |
+| `receiveAsset({ onchainAsset: 'convertible' })` | Be paid on-chain in the canonical asset and delivered the Lightning one. The LSP resolves the on-chain asset, so its contract id is never configured client-side. |
+
+`listPayableAssets()` returns what an address can be paid in — payout asset plus
+convertible ones, with tickers and precisions — so a picker needs no config.
+
+**Worked examples → [examples/lsp-two-assets](./examples/lsp-two-assets)**
+
 **Full reference → [docs/lsp.md](./docs/lsp.md)**
 
 ---
@@ -1114,6 +1144,7 @@ for (const p of await wallet.listPayments()) {
 | Doc | Description |
 |-----|-------------|
 | [docs/lsp.md](./docs/lsp.md) | Full LSP reference: `UtexoLsp`, `LspPeer`, all methods, examples |
+| [examples/lsp-two-assets](./examples/lsp-two-assets) | Four annotated flows for an LSP serving one asset and converting another |
 | [docs/async-payments.md](./docs/async-payments.md) | Async payment (APay) protocol, six-step flow diagrams, SDK usage |
 | [docs/virtual-channels.md](./docs/virtual-channels.md) | Virtual channels: trusted no-broadcast, host-key allowlist, `virtualPeerPubkeys`, SDK usage |
 

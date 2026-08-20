@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.0.0-beta.29
+
+__changed__
+- Bumped `@utexo/rgb-sdk-core` to **1.0.0-beta.8**.
+- **`lsp.receiveAsset()` no longer sends the on-chain asset id by default.** You name only what you are paid over Lightning; the LSP resolves the on-chain counterpart from its own convertible pairs, so a sender can pay in the canonical asset it already holds without that contract id ever being configured here. It comes back as `onchainAssetId`, with `converted` saying whether the two legs differ. Pass `onchainAsset: 'payout'` for the previous one-asset-end-to-end behaviour — also the only form LSPs predating convertible `/lightning_receive` accept.
+
+__added__
+- Re-exports for the new LSP surface in core, so it is reachable from `@utexo/rgb-sdk-rn` directly:
+  - `lsp.quoteAddress()` — everything `payAddress` does except paying.
+  - `lsp.discoverAddress()` / `lsp.listPayableAssets()` — what an address can be paid in, from LNURL discovery, with tickers and precisions.
+  - `lsp.requestExternalInvoice()` — quote a hosted BOLT11 for a payer that is not this wallet. Any RGB Lightning node with the right channel settles it with a bare `POST /sendpayment`; no LNURL and no SDK on that side.
+  - `lsp.payExternalInvoice()` / `lsp.quoteExternalPayment()` / `lsp.externalPaymentStatus()` — pay a third party's plain BOLT11 out of an asset this wallet does not hold. Both legs share the third party's payment hash, and the SDK decodes the LSP's HODL invoice locally and refuses the quote unless the hash, the assets and the amounts match what the LSP reported.
+  - Types `PayAddressAssetParam`, `AddressQuote`, `PayableAssets`, `RequestExternalInvoiceOptions`, `ExternalInvoice`, `PayExternalInvoiceOptions`, `ExternalPaymentQuote`, `SelectPaymentAssetOptions`, `AssetSelection`, `LspSupportedAsset`, `LspLnurlpDiscovery`, `LspLightningSend*`; errors `LspAmbiguousPayableAssetError`, `LspInsufficientAssetLiquidityError`, `LspNoPayableAssetError`, `LspQuoteMismatchError`, `LspUnknownPayableAssetError`.
+- `lsp.payAddress()` accepts an asset leg with no `assetId`, which asks the SDK to choose one: it reads the address's payout and accepted assets off discovery and picks by local liquidity, returning the choice as `assetSelection`. Conversion is the fallback, not the default.
+- **[examples/lsp-two-assets](./examples/lsp-two-assets)** — four annotated flows for an LSP serving one asset over Lightning and converting another 1:1: paying a Lightning Address, being paid by an outside node, paying an outside node's invoice, and receiving on-chain in one asset to be delivered another.
+- `docs/lsp.md` covers all of the above, plus `POST /lightning_send` and the full error list.
+
+## 1.0.0-beta.28
+
+__changed__
+- Bumped RLN native bindings to **v0.11.0-beta.3** (from `0.10.0-beta.3`) — iOS xcframework and the Maven artifact `com.utexo:rgb-lightning-node-android`.
+- The binding merged the txid-filtered list calls into the general ones: `listTransactionsByTxid(txid, skipSync)` → `listTransactions(skipSync, txid)`, `listTransfersByTxid(txid)` → `listTransfers(assetId, txid)`, with `assetId` now nullable. The native layers were rewired accordingly; **the JS surface is unchanged** — `listTransactionsByTxid()` / `listTransfersByTxid()` / `listTransfers()` keep working exactly as before, and `listTransfers()` with no asset id now passes `null` instead of an empty string.
+
+__added__
+- Linked-asset fields on IFA assets, surfaced by `rlnListAssets` and `rlnIssueAssetIfa`: `issuanceLinkRightOutpoint` (`{ txid, vout }`), `linkedFromAssetId`, `linkedToAssetId` (`RlnAssetIfa` in `src/binding/rln-types.ts`).
+- `proxyRecipientId` on transfers (`RlnTransfer`) and on the decoded RGB invoice (`RlnDecodeRgbInvoiceResponse`) — the recipient id as registered with the proxy, which may differ from `recipientId`.
+
+Both live on the raw `Rln*` binding types only; they do not reach the `UTEXOWallet` return types until `@utexo/rgb-sdk-core` declares them.
+
+__not wired yet__
+- `assetLink(SdkAssetLinkRequest)` (link a child asset to a parent) and the new `issuanceType` field on the IFA issuance request (`Legacy` / `LinkRightOnly` / `LinkedFromParent`) exist in `0.11.0-beta.3` but are not exposed through the TurboModule yet.
+- `Payment.description` and `LnInvoiceRequest.description` are likewise available in the binding but not bridged (the bridge does not surface `descriptionHash` either).
+
 ## 1.0.0-beta.27
 
 __changed__

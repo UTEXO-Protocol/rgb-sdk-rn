@@ -901,6 +901,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val res = node.decodeRgbInvoice(invoice)
         val map = Arguments.createMap()
         map.putString("recipientId", res.recipientId)
+        map.putString("proxyRecipientId", res.proxyRecipientId)
         map.putString("recipientType", res.recipientType)
         res.assetSchema?.let { map.putString("assetSchema", it) }
         res.assetId?.let { map.putString("assetId", it) }
@@ -1122,6 +1123,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
       map.putString("kind", t.kind)
       t.txid?.let { map.putString("txid", it) }
       t.recipientId?.let { map.putString("recipientId", it) }
+      t.proxyRecipientId?.let { map.putString("proxyRecipientId", it) }
       t.receiveUtxo?.let { map.putString("receiveUtxo", it) }
       t.changeUtxo?.let { map.putString("changeUtxo", it) }
       t.expiration?.let { map.putDouble("expiration", it.toDouble()) }
@@ -1144,7 +1146,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
       try {
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        val arr = serializeTransactions(node.listTransactions(skipSync))
+        val arr = serializeTransactions(node.listTransactions(skipSync, null))
         withContext(Dispatchers.Main) { promise.resolve(arr) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1159,7 +1161,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
       try {
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        val arr = serializeTransactions(node.listTransactionsByTxid(txid, skipSync))
+        val arr = serializeTransactions(node.listTransactions(skipSync, txid))
         withContext(Dispatchers.Main) { promise.resolve(arr) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1174,7 +1176,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
       try {
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        val arr = serializeTransfers(node.listTransfers(assetId))
+        val arr = serializeTransfers(node.listTransfers(assetId.ifEmpty { null }, null))
         withContext(Dispatchers.Main) { promise.resolve(arr) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1189,7 +1191,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
       try {
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        val arr = serializeTransfers(node.listTransfersByTxid(txid))
+        val arr = serializeTransfers(node.listTransfers(null, txid))
         withContext(Dispatchers.Main) { promise.resolve(arr) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1843,6 +1845,13 @@ class RgbModule(reactContext: ReactApplicationContext) :
     return m
   }
 
+  private fun serializeRgbOutpoint(o: org.utexo.rgblightningnode.RgbOutpoint): WritableMap {
+    val m = Arguments.createMap()
+    m.putString("txid", o.txid)
+    m.putDouble("vout", o.vout.toDouble())
+    return m
+  }
+
   private fun serializeAssetIfa(a: AssetIfa): WritableMap {
     val m = Arguments.createMap()
     m.putString("assetId", a.assetId)
@@ -1857,6 +1866,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
     m.putDouble("addedAt", a.addedAt.toDouble())
     m.putMap("balance", serializeBalance(a.balance))
     a.rejectListUrl?.let { m.putString("rejectListUrl", it) }
+    a.issuanceLinkRightOutpoint?.let { m.putMap("issuanceLinkRightOutpoint", serializeRgbOutpoint(it)) }
+    a.linkedFromAssetId?.let { m.putString("linkedFromAssetId", it) }
+    a.linkedToAssetId?.let { m.putString("linkedToAssetId", it) }
     return m
   }
 
@@ -1989,6 +2001,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
     map.putMap("balance", rlnAssetBalanceInfoToMap(asset.balance))
     asset.media?.let { map.putMap("media", rlnMediaToMap(it)) }
     asset.rejectListUrl?.let { map.putString("rejectListUrl", it) }
+    asset.issuanceLinkRightOutpoint?.let { map.putMap("issuanceLinkRightOutpoint", serializeRgbOutpoint(it)) }
+    asset.linkedFromAssetId?.let { map.putString("linkedFromAssetId", it) }
+    asset.linkedToAssetId?.let { map.putString("linkedToAssetId", it) }
     return map
   }
 

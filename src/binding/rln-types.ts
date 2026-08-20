@@ -243,6 +243,14 @@ export interface RlnAssetIfa extends RlnAssetBase {
   maxSupply: number;
   knownCirculatingSupply: number;
   rejectListUrl?: string;
+  issuanceLinkRightOutpoint?: RlnRgbOutpoint;
+  linkedFromAssetId?: string;
+  linkedToAssetId?: string;
+}
+
+export interface RlnRgbOutpoint {
+  txid: string;
+  vout: number;
 }
 
 export interface RlnAssetUda extends RlnAssetBase {
@@ -270,6 +278,7 @@ export interface RlnRgbInvoiceResponse {
 
 export interface RlnDecodeRgbInvoiceResponse {
   recipientId: string;
+  proxyRecipientId: string;
   recipientType: string;
   assetSchema?: string;
   assetId?: string;
@@ -328,6 +337,7 @@ export interface RlnTransfer {
   kind?: string;
   txid?: string;
   recipientId?: string;
+  proxyRecipientId?: string;
   receiveUtxo?: string;
   changeUtxo?: string;
   /** **Unix seconds** (not JS milliseconds). */

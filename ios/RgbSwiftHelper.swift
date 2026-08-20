@@ -546,6 +546,7 @@ public class RgbSwiftHelper: NSObject {
       let res = try node.decodeRgbInvoice(invoice: invoice)
       var dict: [String: Any] = [
         "recipientId": res.recipientId,
+        "proxyRecipientId": res.proxyRecipientId,
         "recipientType": res.recipientType,
         "assignment": res.assignment,
         "network": res.network,
@@ -739,6 +740,9 @@ public class RgbSwiftHelper: NSObject {
         if let v = a.details { d["details"] = v }
         if let m = a.media { d["media"] = ["filePath": m.filePath, "mime": m.mime, "digest": m.digest] as NSDictionary }
         if let url = a.rejectListUrl { d["rejectListUrl"] = url }
+        if let o = a.issuanceLinkRightOutpoint { d["issuanceLinkRightOutpoint"] = serializeOutpoint(o) }
+        if let v = a.linkedFromAssetId { d["linkedFromAssetId"] = v }
+        if let v = a.linkedToAssetId { d["linkedToAssetId"] = v }
         return d as NSDictionary
       }
 
@@ -788,6 +792,10 @@ public class RgbSwiftHelper: NSObject {
     return txDict as NSDictionary
   }
 
+  private static func serializeOutpoint(_ o: RgbOutpoint) -> NSDictionary {
+    ["txid": o.txid, "vout": NSNumber(value: o.vout)] as NSDictionary
+  }
+
   private static func serializeTransfer(_ t: Transfer) -> NSDictionary {
     var d: [String: Any] = [
       "idx": NSNumber(value: t.idx),
@@ -800,6 +808,7 @@ public class RgbSwiftHelper: NSObject {
     if let ra = t.requestedAssignment { d["requestedAssignment"] = "\(ra)" }
     if let v = t.txid { d["txid"] = v }
     if let v = t.recipientId { d["recipientId"] = v }
+    if let v = t.proxyRecipientId { d["proxyRecipientId"] = v }
     if let v = t.receiveUtxo { d["receiveUtxo"] = v }
     if let v = t.changeUtxo { d["changeUtxo"] = v }
     if let v = t.expiration { d["expiration"] = NSNumber(value: v) }
@@ -815,7 +824,7 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      let txs = try node.listTransactions(skipSync: skipSync).map(serializeTransaction)
+      let txs = try node.listTransactions(skipSync: skipSync, txid: nil).map(serializeTransaction)
       return ["transactions": txs] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -828,7 +837,7 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      let txs = try node.listTransactionsByTxid(txid: txid, skipSync: skipSync).map(serializeTransaction)
+      let txs = try node.listTransactions(skipSync: skipSync, txid: txid).map(serializeTransaction)
       return ["transactions": txs] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -841,7 +850,7 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      let transfers = try node.listTransfers(assetId: assetId).map(serializeTransfer)
+      let transfers = try node.listTransfers(assetId: assetId.isEmpty ? nil : assetId, txid: nil).map(serializeTransfer)
       return ["transfers": transfers] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -854,7 +863,7 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      let transfers = try node.listTransfersByTxid(txid: txid).map(serializeTransfer)
+      let transfers = try node.listTransfers(assetId: nil, txid: txid).map(serializeTransfer)
       return ["transfers": transfers] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -1397,6 +1406,9 @@ public class RgbSwiftHelper: NSObject {
         dict["media"] = ["filePath": media.filePath, "mime": media.mime, "digest": media.digest] as NSDictionary
       }
       if let url = asset.rejectListUrl { dict["rejectListUrl"] = url }
+      if let o = asset.issuanceLinkRightOutpoint { dict["issuanceLinkRightOutpoint"] = serializeOutpoint(o) }
+      if let v = asset.linkedFromAssetId { dict["linkedFromAssetId"] = v }
+      if let v = asset.linkedToAssetId { dict["linkedToAssetId"] = v }
       return dict as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary

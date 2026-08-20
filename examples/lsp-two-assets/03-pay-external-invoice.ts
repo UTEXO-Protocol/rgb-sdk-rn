@@ -6,7 +6,7 @@
  * way it only ever signs an ordinary invoice and never learns that APay, LNURL
  * or this SDK exist.
  *
- *     wallet --(LNUSDT)--> LSP --(BUSDT)--> external node
+ *     wallet --(LNUSDT)--> LSP --(USDT)--> external node
  *
  * The LSP quotes a HODL invoice carrying the *external invoice's own payment
  * hash*. That shared hash is the atomicity: the LSP can claim what this wallet
@@ -15,7 +15,7 @@
  * and refuses the quote unless the hash, the assets and the amounts match what
  * the LSP reported — the LSP's JSON is never taken at its word.
  *
- * Note the liquidity: the LSP delivers BUSDT out of its side of the payee's
+ * Note the liquidity: the LSP delivers USDT out of its side of the payee's
  * channel, which exists only because the payee spent through it earlier. The
  * LSP never provisions a convertible asset.
  */

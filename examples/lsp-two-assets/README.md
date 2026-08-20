@@ -5,7 +5,7 @@ have two USDT-shaped assets rather than one:
 
 - **LNUSDT** — what the LSP serves over Lightning channels. It provisions it,
   and every address it hosts is paid out in it.
-- **BUSDT** — the canonical contract people already hold on-chain. The LSP
+- **USDT** — the canonical contract people already hold on-chain. The LSP
   accepts and pays it out, but never provisions it.
 
 The two are ordinary, unrelated RGB contracts. What makes them interchangeable
@@ -16,23 +16,23 @@ contracts and nothing in a consignment says they are related.
 | File | Flow |
 |------|------|
 | [`01-pay-lightning-address.ts`](./01-pay-lightning-address.ts) | Two SDK wallets pay each other in LNUSDT. No conversion — the baseline. |
-| [`02-external-payer.ts`](./02-external-payer.ts) | A node holding canonical BUSDT pays a merchant's hosted BOLT11. |
-| [`03-pay-external-invoice.ts`](./03-pay-external-invoice.ts) | An outside node asks for BUSDT; a wallet holding only LNUSDT pays it. |
-| [`04-lightning-receive.ts`](./04-lightning-receive.ts) | Paid on-chain in BUSDT, delivered as LNUSDT liquidity. |
+| [`02-external-payer.ts`](./02-external-payer.ts) | A node holding canonical USDT pays a merchant's hosted BOLT11. |
+| [`03-pay-external-invoice.ts`](./03-pay-external-invoice.ts) | An outside node asks for USDT; a wallet holding only LNUSDT pays it. |
+| [`04-lightning-receive.ts`](./04-lightning-receive.ts) | Paid on-chain in USDT, delivered as LNUSDT liquidity. |
 
 [`setup.ts`](./setup.ts) holds the wallet + LSP bootstrap the four share.
 
 ## Which one you want
 
 ```
-                        ┌──────────────┐
+                         ┌──────────────┐
     01  wallet ─LNUSDT─▶ │              │ ─LNUSDT─▶ wallet
-                        │              │
-    02  outside ─BUSDT─▶ │     LSP      │ ─LNUSDT─▶ wallet
-                        │              │
-    03  wallet ─LNUSDT─▶ │  converts    │ ─BUSDT──▶ outside
-                        │     1:1      │
-    04  sender ─BUSDT──▶ │              │ ─LNUSDT─▶ wallet
+                         │              │
+    02  outside ─USDT──▶ │     LSP      │ ─LNUSDT─▶ wallet
+                         │              │
+    03  wallet ─LNUSDT─▶ │  converts    │ ─USDT───▶ outside
+                         │     1:1      │
+    04  sender ─USDT───▶ │              │ ─LNUSDT─▶ wallet
         (on-chain)       └──────────────┘
 ```
 
@@ -50,7 +50,7 @@ that shapes all four flows:
 
 - **Receiving in the payout asset** costs you nothing. Connect, and the LSP's
   cron opens you an LNUSDT channel.
-- **Sending the bridge asset** is on you. The LSP never provisions BUSDT, so a
+- **Sending the bridge asset** is on you. The LSP never provisions USDT, so a
   peer that wants to spend it receives it on-chain and colours its own
   channel-open with it.
 

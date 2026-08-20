@@ -1,11 +1,11 @@
 /**
  * Flow 2 — an outside node holding canonical USDT pays a BOLT11.
  *
- * The merchant is paid in LNUSDT and the payer holds only BUSDT. Instead of
+ * The merchant is paid in LNUSDT and the payer holds only USDT. Instead of
  * teaching the payer about LNURL, asset selection or this SDK, the merchant
  * quotes the invoice itself and hands over the string.
  *
- *     external node --(BUSDT)--> LSP --(LNUSDT)--> merchant
+ *     external node --(USDT)--> LSP --(LNUSDT)--> merchant
  *
  * That works because the invoice is *hosted*: the LSP signs it against a hash
  * the merchant pre-registered, so its payee is the LSP and nothing in it names
@@ -14,7 +14,7 @@
  *
  *     POST /sendpayment {"invoice": "lnbcrt…"}
  *
- * Any RGB Lightning node with a BUSDT channel to this LSP can settle it — no
+ * Any RGB Lightning node with a USDT channel to this LSP can settle it — no
  * SDK, no LNURL, no APay.
  */
 
@@ -35,7 +35,7 @@ export async function quoteForExternalPayer() {
   );
 
   // Quote without paying. With no `asset` argument this takes the single
-  // convertible asset the address advertises; pass a ticker (`asset: 'BUSDT'`)
+  // convertible asset the address advertises; pass a ticker (`asset: 'USDT'`)
   // when there is more than one, or `prefer: 'payout'` for the no-conversion
   // asset. Several matches and no `asset` throws rather than guessing — the
   // quote pins one asset for the invoice's life, and a payer holding the other
@@ -62,6 +62,6 @@ export async function quoteForExternalPayer() {
  */
 export async function payAsAnOutsideNode(invoice: string) {
   const payer = await startNode('/data/payer', 9900, 'payer-password');
-  // ...payer already has a BUSDT channel it funded itself — see setup.ts.
+  // ...payer already has a USDT channel it funded itself — see setup.ts.
   return payer.wallet.payLightningInvoice({ lnInvoice: invoice });
 }

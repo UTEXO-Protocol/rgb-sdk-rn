@@ -259,7 +259,7 @@ Quote a BOLT11 for a payer that is not this wallet — a node that knows nothing
 const quoted = await lsp.requestExternalInvoice({
   amtMsat:     3_000_000,
   assetAmount: 500_000,
-  asset:       'BUSDT',        // ticker or contract id; optional
+  asset:       'USDT',         // ticker or contract id; optional
   prefer:      'convertible',  // default; or 'payout'
 });
 // quoted.invoice | .asset | .converted | .paymentHash

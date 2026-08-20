@@ -919,7 +919,7 @@ const { assetSelection } = await lsp.payAddress({
 ### Paying across two assets
 
 Where an LSP serves one asset over Lightning (say `LNUSDT`) but accepts a
-canonical on-chain one (`BUSDT`), it can convert 1:1 between the two legs of a
+canonical on-chain one (`USDT`), it can convert 1:1 between the two legs of a
 single payment. Three methods build on that, and none of them require the other
 side to know anything about this SDK:
 

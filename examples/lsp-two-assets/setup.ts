@@ -22,7 +22,7 @@ export const LSP_PEER: LspPeer = {
  * only because the LSP operator declared the pair in `CONVERTIBLE_PAIRS`.
  */
 export const PAYOUT_ASSET = 'rgb:...LNUSDT'; // what the LSP serves over channels
-export const BRIDGE_ASSET = 'rgb:...BUSDT'; // what senders hold on-chain
+export const BRIDGE_ASSET = 'rgb:...USDT';   // what senders hold on-chain
 
 export type Node = {
   wallet: UTEXOWallet;

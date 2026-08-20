@@ -2,10 +2,10 @@
  * Flow 4 — paid on-chain in canonical USDT, delivered as LNUSDT liquidity.
  *
  * A user wants to be paid over Lightning in LNUSDT, but whoever is paying holds
- * BUSDT on-chain and has no channel to anyone. `receiveAsset` hands back an RGB
+ * USDT on-chain and has no channel to anyone. `receiveAsset` hands back an RGB
  * invoice for the sender and a BOLT11 for the LSP to pay:
  *
- *     sender --(BUSDT, on-chain)--> LSP --(LNUSDT, Lightning)--> user
+ *     sender --(USDT, on-chain)--> LSP --(LNUSDT, Lightning)--> user
  *
  * The interesting part is who chooses the on-chain asset. The user names only
  * what it wants over Lightning; the LSP resolves the counterpart from its own

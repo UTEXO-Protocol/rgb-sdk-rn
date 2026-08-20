@@ -122,6 +122,21 @@ Internally:
 
 `expirySeconds` is applied to **both** invoices simultaneously. The LSP validates that they match; `receiveAsset` ensures they always do.
 
+**Two assets.** `assetId` names only what you are paid over Lightning. By default (`onchainAsset: 'convertible'`) the LSP issues the RGB invoice in whichever asset it converts 1:1 to that one — typically the canonical contract the sender already holds — so its contract id never has to be configured client-side:
+
+```typescript
+const { rgbInvoice, onchainAssetId, converted } = await lsp.receiveAsset({
+  assetId:    LNUSDT,      // what you receive
+  amountSats: 3_000,
+  amountRgb:  500_000,     // base units
+});
+// converted → true, onchainAssetId → the asset the sender must send
+```
+
+Pass `onchainAsset: 'payout'` for one asset end to end. That is also the only form LSPs predating convertible `/lightning_receive` accept.
+
+A converted receive pins the inbound amount in the RGB invoice's assignment (`{"type":"Fungible","value":N}` rather than `Any`) — two unrelated contracts have nothing else tying what arrives on-chain to what the BOLT11 pays out. Read the assignment off the invoice rather than assuming it.
+
 ---
 
 ### `awaitReceiveSettlement(lnInvoice, opts?)` 
@@ -193,6 +208,99 @@ const { invoice, sendResult } = await lsp.payAddress({
   asset: { assetId: 'rgb:abc...', assetAmount: 1 },  // optional
 });
 ```
+
+Omitting `assetId` hands the choice to `selectPaymentAsset()` and returns it as `assetSelection`:
+
+```typescript
+const { assetSelection } = await lsp.payAddress({
+  address: 'alice@lsp-signet.utexo.com',
+  amtMsat: 3_000_000,
+  asset: { assetAmount: 500_000 },
+});
+// assetSelection.assetId | .asset.ticker | .converted | .localAssetAmount
+```
+
+Throws `LspInsufficientAssetLiquidityError` when no accepted asset has enough local outbound liquidity — before anything is quoted, so no hash is spent.
+
+---
+
+### `quoteAddress(opts)`
+
+Everything `payAddress` does except paying. Same options, returns `{ invoice, amtMsat, assetId, assetAmount, assetSelection, proof }`.
+
+Useful on its own because the invoice is **hosted**: the LSP signs it against a hash the receiver pre-registered, so its payee is the LSP and nothing in it names a payer. Whoever holds the string can pay it.
+
+Quoting is not free — the callback reserves a payment hash from the receiver's APay batch, and a quote that is never paid still costs one.
+
+---
+
+### `discoverAddress(address)` / `listPayableAssets(address?)`
+
+LNURL discovery, routed on the address domain exactly like `payAddress`.
+
+```typescript
+const { payoutAsset, accepted, convertible } = await lsp.listPayableAssets();
+// payoutAsset  — what the receiver is delivered
+// accepted     — everything the callback will quote
+// convertible  — accepted minus the payout asset
+```
+
+Entries carry ticker and precision, so a UI can offer an asset picker with no configuration. `address` defaults to this wallet's own LSP address.
+
+Note this reads discovery, **not** `/get_info`: `getInfo().supportedAssets` is the LSP-wide served set and leaves out the convertible assets it accepts but never provisions.
+
+---
+
+### `requestExternalInvoice(opts)`
+
+Quote a BOLT11 for a payer that is not this wallet — a node that knows nothing about this SDK, APay or Lightning Addresses and can only be handed an invoice.
+
+```typescript
+const quoted = await lsp.requestExternalInvoice({
+  amtMsat:     3_000_000,
+  assetAmount: 500_000,
+  asset:       'BUSDT',        // ticker or contract id; optional
+  prefer:      'convertible',  // default; or 'payout'
+});
+// quoted.invoice | .asset | .converted | .paymentHash
+```
+
+The RGB contract id and amount ride inside the BOLT11, so paying it is a plain `POST /sendpayment {"invoice": …}` on any RGB Lightning node with a channel to this LSP in the quoted asset.
+
+The asset comes from LNURL discovery, not configuration. More than one match with no `asset` throws `LspAmbiguousPayableAssetError` rather than guessing — the quote pins one asset for the invoice's life, and a payer holding the other one would only find out by failing to pay.
+
+Every call reserves a hash from the receiver's batch. Call `enableLightningAddress()` first and refill off `unusedHashes`.
+
+---
+
+### `payExternalInvoice(opts)` / `quoteExternalPayment(opts)` — `POST /lightning_send`
+
+Pay a third party's plain BOLT11 out of an asset this wallet does not hold. The mirror of `requestExternalInvoice`: there the outside node pays, here it is paid, and either way it only signs or settles an ordinary invoice.
+
+```typescript
+const { quote, sendResult } = await lsp.payExternalInvoice({
+  invoice:    'lnbcrt...',   // the third party's own invoice
+  payWith:    'LNUSDT',      // ticker or contract id; optional
+  maxFeeMsat: 0,             // default — the relay must be at cost
+});
+// quote.paymentHash | .inbound | .outbound | .converted | .verified
+```
+
+The LSP returns a HODL invoice carrying **the third party invoice's own payment hash**. That shared hash is the atomicity: the LSP can claim what this wallet pays only with a preimage the third party releases on being paid.
+
+The SDK decodes the returned BOLT11 on this wallet's own node and throws `LspQuoteMismatchError` unless the hash, the assets and the amounts match what the LSP reported — before anything is paid. `quoteExternalPayment()` does the same without paying.
+
+Omitting `payWith` picks the channel that can cover the amount, preferring the delivery asset itself (a plain relay, no conversion).
+
+---
+
+### `externalPaymentStatus(paymentHash)`
+
+Where a relay has got to: `'quoted' | 'claimable' | 'outbound_pending' | 'outbound_paid' | 'outbound_claimed' | 'settled' | 'cancelled' | 'failed'`.
+
+`settled` is final but not yet local — it reports the moment the LSP claimed the HTLC, while this wallet's channel balance moves only once its node applies the fulfilment. Code asserting on a balance should wait for the balance, or poll `wallet.getLightningSendStatus(paymentHash)` for the local half.
+
+`cancelled` and `failed` are terminal and refunded: nothing was delivered or spent.
 
 ---
 
@@ -272,6 +380,37 @@ class LspSettlementError extends Error {
   step:   'ln_invoice';
   status: ReceiveStatus;   // 'Failed' | 'Expired'
 }
+
+// ── Asset selection ────────────────────────────────────────────────────────
+
+// selectPaymentAsset(): nothing accepted has enough local outbound liquidity.
+// Raised before anything is quoted, so no hash is spent.
+class LspInsufficientAssetLiquidityError extends Error {
+  required:   number;
+  candidates: { assetId: string; localAmount: number }[];
+}
+
+// The address advertises no payout and no accepted asset — its receiver has no
+// usable asset channel yet.
+class LspNoPayableAssetError extends Error { address: string }
+
+// The asset asked for is not one this address can be paid in.
+class LspUnknownPayableAssetError extends Error {
+  requested: string;
+  accepted:  LspSupportedAsset[];
+}
+
+// More than one asset fits and the caller named none. Pass `asset`.
+class LspAmbiguousPayableAssetError extends Error {
+  candidates: LspSupportedAsset[];
+  prefer:     'payout' | 'convertible';
+}
+
+// ── Relay ──────────────────────────────────────────────────────────────────
+
+// payExternalInvoice(): the quote's two legs are not bound together as the LSP
+// described them. Thrown before anything is paid.
+class LspQuoteMismatchError extends Error {}
 ```
 
 ---
@@ -390,7 +529,7 @@ console.log(`Claimed ${claimed.filter(c => c.claimed).length} HODL payments`);
 
 ---
 
-## Two LSP flows explained
+## LSP flows explained
 
 ### `POST /lightning_receive` — on-chain RGB → Lightning
 
@@ -415,6 +554,25 @@ Recipient ←[RGB on-chain]── LSP
 Use case: user has RGB in a Lightning channel and wants to send to a recipient who only has an on-chain RGB invoice. User submits the RGB invoice to the LSP, pays the returned LN invoice, and the LSP delivers the RGB on-chain.
 
 SDK: `lsp.sendAsset()`
+
+### `POST /lightning_send` — Lightning → Lightning, across assets
+
+```
+User ─[LN, asset it holds]→ LSP  (HODL, held)
+                              │ pays the third party first
+        Third party ←[LN, asset in its invoice]── LSP
+                              │ then claims, with the preimage
+```
+
+Use case: user wants to pay an ordinary BOLT11 denominated in an asset it does not hold. Both legs share the third party's payment hash, so the LSP cannot claim the user's payment without having been given the preimage by the third party.
+
+SDK: `lsp.payExternalInvoice()` + `lsp.externalPaymentStatus()`
+
+### Where conversion applies
+
+`/lightning_receive` and `/lightning_send` both convert between two assets the LSP operator declared as a pair, 1:1, on the LSP's own books. So does an APay payment whose payer quotes an accepted asset rather than the receiver's payout asset. In every case the rate is the operator's word, not the protocol's — the two contracts are unrelated.
+
+Worked examples: **[examples/lsp-two-assets](../examples/lsp-two-assets)**
 
 ---
 

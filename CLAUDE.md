@@ -116,6 +116,100 @@ The TurboModule spec is `src/binding/NativeRgb.ts` (module name `'Rgb'`, package
 
 The `lib/` directory and native binary artifacts (`ios/RGBLightningNode.xcframework`, `android/src/main/jniLibs/`) are excluded from git and must be built/downloaded locally.
 
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Language | TypeScript 5, strict mode |
+| Output | ESM (`lib/module/`) + type declarations (`lib/typescript/`) |
+| Build | react-native-builder-bob |
+| Native bridge | TurboModules + Codegen (React Native new architecture) |
+| iOS native | `RGBLightningNode.xcframework` (downloaded via postinstall) |
+| Android native | `com.utexo:rgb-lightning-node-android` from Maven Central + JNA |
+| Crypto | `@noble/*` + `@scure/*` (via `@utexo/rgb-sdk-core`) |
+| Linting | ESLint + Prettier |
+| Package manager | yarn |
+
+## Project Structure
+
+```
+src/
+  index.ts                      Public entry — re-exports core surface + RN-specific
+  binding/
+    NativeRgb.ts                TurboModule spec (module name 'Rgb', package com.rgbsdkrn)
+    RLNBinding.ts               Sequential call queue (withNodeQueue), lifecycle state machine,
+                                normalizeBtcBalance parser
+    rln-types.ts                Raw Wire types as returned by native layer (Rln* prefix)
+  wallet/
+    utexo-wallet.ts             UTEXOWallet — public API, implements IUTEXOProtocol,
+                                owns map* converters (Wire → domain types)
+    rln-manager.ts              RLNManager — thin facade over RLNBinding
+    rln-signers.ts              PasswordRLNSigner, NativeExternalRLNSigner (IRLNSigner)
+  scripts/
+    download-rln-bindings.js    Downloads iOS xcframework from GitHub releases
+    setup-rln-bindings.js       Installs xcframework into ios/
+android/
+  src/main/java/com/rgbsdkrn/
+    RgbModule.kt                NativeRgbSpec impl, dispatches via Dispatchers.IO
+    RlnNodeStore.kt             Integer-keyed registry of live SdkNode instances
+ios/
+  Rgb.mm                        ObjC++ bridge → RgbSwiftHelper.swift (sync static methods)
+  RgbSwiftHelper.swift          Swift wrappers around RGBLightningNode.xcframework
+  RlnNodeStore.swift            Integer-keyed registry of live SdkNode instances
+```
+
+## Code Conventions
+
+**TypeScript**
+- `strict: true`, `import type` for type-only imports, no `any` in status/amount code paths.
+- Errors extend base classes from `@utexo/rgb-sdk-core`; call `Object.setPrototypeOf(this, new.target.prototype)` in constructors.
+
+**Naming**
+- `Rln*` prefix — raw types from the native layer (Wire types).
+- `map*` — converter functions from `Rln*` Wire types to `@utexo/rgb-sdk-core` domain types; live in `utexo-wallet.ts`.
+- `I*` — interfaces.
+- `normalize*` — throws on invalid input; `tryNormalize*` — returns `undefined`.
+
+**Node queue discipline** — all native calls must go through `withNodeQueue()` in `RLNBinding`. Never call native methods directly from `UTEXOWallet` or `RLNManager`. Queue ensures serial execution and blocks non-lifecycle calls during shutdown/destroy.
+
+**Enum normalization** — Android returns `SCREAMING_SNAKE_CASE`, iOS returns `lowerCamelCase`. Always pass raw native enum values through `canonicalEnum()` before use. Never hard-code platform-specific enum strings outside the normalizer.
+
+**Null vs undefined at bridge boundary** — native layer returns `null` for missing values; TypeScript surface uses `undefined`. `map*` functions must convert `null → undefined` explicitly.
+
+**Type mappers** — `map*` functions in `utexo-wallet.ts` must strip all `Rln*`-prefixed keys before returning domain objects. No Wire keys must leak into the public surface.
+
+**Adding a new native method**:
+1. Add to `NativeRgb.ts` spec
+2. Run `yarn codegen`
+3. Implement in `RgbModule.kt` (Android) and `RgbSwiftHelper.swift` + `Rgb.mm` (iOS)
+4. Add wrapper in `RLNBinding.ts` (through `withNodeQueue`)
+5. Expose via `RLNManager.ts` and `UTEXOWallet`/`IUTEXOProtocol` if public
+
+## Code Review Focus Areas
+
+### Security
+
+- **Seed/key material in memory**: `NativeExternalRLNSigner` holds seed hex to support cold-start re-derivation. Any change that logs, serializes, or exposes this value is a critical security bug.
+- **`vssAllowHttp` defaults**: VSS over HTTP must default to `false`. PRs that change this default or make it opt-out rather than opt-in require security review.
+- **`permissivePolicy` flag**: must not be set to `true` in production configs. Flag bypasses signer validation — review any PR that changes its default or passes it from external input.
+- **`lspBearerToken` leakage**: must not appear in logs, error messages, or responses. Check all new logging statements in LSP flow paths.
+- **TurboModule positional parameters**: codegen does not validate parameter names at runtime — only positions. A wrong parameter order passes TypeScript checking but silently sends wrong values to native. Review any reordering in `NativeRgb.ts`.
+
+### Correctness
+
+- **Node ID lifecycle**: `rlnNodeId` is assigned by native on `rlnCreateNode` and released on `rlnDestroyNode`. Any code path that reuses a stale `rlnNodeId` after destroy will corrupt the native registry.
+- **Queue deadlock risk**: calls inside `withNodeQueue` must not await another `withNodeQueue` call. Nested queue entries deadlock.
+- **Enum normalization gaps**: `canonicalEnum()` only normalizes known enum shapes. New enum types from the native layer must be added to the normalizer — otherwise they fall through as raw strings.
+- **Timestamp units**: RLN returns some timestamps in seconds, others in milliseconds. Check the unit of each new timestamp field — confusing them causes display and comparison bugs.
+- **Amount precision**: amounts that exceed `Number.MAX_SAFE_INTEGER` must use `bigint`. Any `Number()` conversion of a u64 amount field is a bug.
+- **Transfer status fallbacks**: `mapTransfer` must not silently default an unknown status to a valid status. Unknown statuses must either throw or propagate as a typed unknown variant.
+
+### Performance
+
+- **Serial queue implications**: `withNodeQueue` serializes all native calls. Long-running calls (e.g. `syncWallet`) block all subsequent calls. New blocking calls must be documented and considered for cancellation support.
+- **`probeNodeReady` stall**: can stall up to 24 s on cold start (worst case). Callers must not call it from UI thread without a loading state.
+- **`postinstall` binary download pinning**: xcframework version is pinned. Any PR that bumps the version must verify the SHA-256 of the new artifact matches the download script's expectation.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

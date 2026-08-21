@@ -41,7 +41,7 @@ jobs:
           kimi_api_key: ${{ secrets.KIMI_API_KEY }}
           kimi_base_url: https://api.moonshot.ai/v1
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          model: kimi-k2.6
+          model: kimi-k3
           language: en-US
           review_level: normal
           pr_number: ${{ inputs.pr_number }}

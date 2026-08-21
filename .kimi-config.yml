@@ -1,0 +1,8 @@
+categories:
+  bug: true
+  performance: true
+  security: true
+
+extra_instructions: |
+  Before starting the review, read the CLAUDE.md file in the root of this repository.
+  Use it as the primary guide for project conventions, code style, and review priorities.

@@ -32,6 +32,7 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnRefreshTransfersResponse,
   RlnAssignmentKind,
   RlnSignMessageResponse,
   RlnVerifyMessageResponse,
@@ -454,7 +455,7 @@ export class RLNManager implements IRLN {
     return this.rlnBinding.rlnListUnspents(skipSync);
   }
 
-  rlnRefreshTransfers(skipSync: boolean): Promise<void> {
+  rlnRefreshTransfers(skipSync: boolean): Promise<RlnRefreshTransfersResponse> {
     return this.rlnBinding.rlnRefreshTransfers(skipSync);
   }
 

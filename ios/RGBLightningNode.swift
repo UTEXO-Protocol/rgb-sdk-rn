@@ -989,7 +989,7 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func postassetmedia(request: SdkPostAssetMediaRequest) throws -> SdkPostAssetMediaResponse
 
-    func refreshtransfers(request: SdkRefreshTransfersRequest) throws
+    func refreshtransfers(request: SdkRefreshTransfersRequest) throws -> SdkRefreshTransfersResponse
 
     func rgbinvoice(request: SdkRgbInvoiceRequest) throws -> SdkRgbInvoiceResponse
 
@@ -1027,9 +1027,9 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func initWithNativeExternalSigner(signer: NativeExternalSigner) throws
 
-    func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+    func unlockWithAttachedExternalSigner(ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 
-    func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+    func unlockWithNativeExternalSigner(signer: NativeExternalSigner, ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 }
 
 open class SdkNode:
@@ -1418,11 +1418,11 @@ open class SdkNode:
         })
     }
 
-    open func refreshtransfers(request: SdkRefreshTransfersRequest) throws {
-        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+    open func refreshtransfers(request: SdkRefreshTransfersRequest) throws -> SdkRefreshTransfersResponse {
+        return try FfiConverterTypeSdkRefreshTransfersResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_refreshtransfers(self.uniffiClonePointer(),
                                                                          FfiConverterTypeSdkRefreshTransfersRequest.lower(request), $0)
-        }
+        })
     }
 
     open func rgbinvoice(request: SdkRgbInvoiceRequest) throws -> SdkRgbInvoiceResponse {
@@ -1548,13 +1548,10 @@ open class SdkNode:
         }
     }
 
-    open func unlockWithAttachedExternalSigner(bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+    open func unlockWithAttachedExternalSigner(ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_attached_external_signer(self.uniffiClonePointer(),
-                                                                                             FfiConverterOptionString.lower(bitcoindRpcUsername),
-                                                                                             FfiConverterOptionString.lower(bitcoindRpcPassword),
-                                                                                             FfiConverterOptionString.lower(bitcoindRpcHost),
-                                                                                             FfiConverterOptionUInt16.lower(bitcoindRpcPort),
+                                                                                             FfiConverterTypeSdkLdkChainSync.lower(ldkChainSync),
                                                                                              FfiConverterOptionString.lower(indexerUrl),
                                                                                              FfiConverterOptionString.lower(proxyEndpoint),
                                                                                              FfiConverterSequenceString.lower(announceAddresses),
@@ -1562,14 +1559,11 @@ open class SdkNode:
         }
     }
 
-    open func unlockWithNativeExternalSigner(signer: NativeExternalSigner, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
+    open func unlockWithNativeExternalSigner(signer: NativeExternalSigner, ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_native_external_signer(self.uniffiClonePointer(),
                                                                                            FfiConverterTypeNativeExternalSigner.lower(signer),
-                                                                                           FfiConverterOptionString.lower(bitcoindRpcUsername),
-                                                                                           FfiConverterOptionString.lower(bitcoindRpcPassword),
-                                                                                           FfiConverterOptionString.lower(bitcoindRpcHost),
-                                                                                           FfiConverterOptionUInt16.lower(bitcoindRpcPort),
+                                                                                           FfiConverterTypeSdkLdkChainSync.lower(ldkChainSync),
                                                                                            FfiConverterOptionString.lower(indexerUrl),
                                                                                            FfiConverterOptionString.lower(proxyEndpoint),
                                                                                            FfiConverterSequenceString.lower(announceAddresses),
@@ -3451,6 +3445,8 @@ public struct DecodeLnInvoiceResponse {
     public var timestamp: UInt64
     public var assetId: ContractId?
     public var assetAmount: UInt64?
+    public var description: String?
+    public var descriptionHash: String?
     public var paymentHash: PaymentHash
     public var paymentSecret: String
     public var payeePubkey: PublicKey?
@@ -3459,12 +3455,14 @@ public struct DecodeLnInvoiceResponse {
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(amtMsat: UInt64?, expirySec: UInt64, timestamp: UInt64, assetId: ContractId?, assetAmount: UInt64?, paymentHash: PaymentHash, paymentSecret: String, payeePubkey: PublicKey?, minFinalCltvExpiryDelta: UInt64, network: String) {
+    public init(amtMsat: UInt64?, expirySec: UInt64, timestamp: UInt64, assetId: ContractId?, assetAmount: UInt64?, description: String?, descriptionHash: String?, paymentHash: PaymentHash, paymentSecret: String, payeePubkey: PublicKey?, minFinalCltvExpiryDelta: UInt64, network: String) {
         self.amtMsat = amtMsat
         self.expirySec = expirySec
         self.timestamp = timestamp
         self.assetId = assetId
         self.assetAmount = assetAmount
+        self.description = description
+        self.descriptionHash = descriptionHash
         self.paymentHash = paymentHash
         self.paymentSecret = paymentSecret
         self.payeePubkey = payeePubkey
@@ -3488,6 +3486,12 @@ extension DecodeLnInvoiceResponse: Equatable, Hashable {
             return false
         }
         if lhs.assetAmount != rhs.assetAmount {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.descriptionHash != rhs.descriptionHash {
             return false
         }
         if lhs.paymentHash != rhs.paymentHash {
@@ -3514,6 +3518,8 @@ extension DecodeLnInvoiceResponse: Equatable, Hashable {
         hasher.combine(timestamp)
         hasher.combine(assetId)
         hasher.combine(assetAmount)
+        hasher.combine(description)
+        hasher.combine(descriptionHash)
         hasher.combine(paymentHash)
         hasher.combine(paymentSecret)
         hasher.combine(payeePubkey)
@@ -3534,6 +3540,8 @@ public struct FfiConverterTypeDecodeLnInvoiceResponse: FfiConverterRustBuffer {
                 timestamp: FfiConverterUInt64.read(from: &buf),
                 assetId: FfiConverterOptionTypeContractId.read(from: &buf),
                 assetAmount: FfiConverterOptionUInt64.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
+                descriptionHash: FfiConverterOptionString.read(from: &buf),
                 paymentHash: FfiConverterTypePaymentHash.read(from: &buf),
                 paymentSecret: FfiConverterString.read(from: &buf),
                 payeePubkey: FfiConverterOptionTypePublicKey.read(from: &buf),
@@ -3548,6 +3556,8 @@ public struct FfiConverterTypeDecodeLnInvoiceResponse: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.timestamp, into: &buf)
         FfiConverterOptionTypeContractId.write(value.assetId, into: &buf)
         FfiConverterOptionUInt64.write(value.assetAmount, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.descriptionHash, into: &buf)
         FfiConverterTypePaymentHash.write(value.paymentHash, into: &buf)
         FfiConverterString.write(value.paymentSecret, into: &buf)
         FfiConverterOptionTypePublicKey.write(value.payeePubkey, into: &buf)
@@ -6693,6 +6703,67 @@ public func FfiConverterTypeSdkPostAssetMediaResponse_lower(_ value: SdkPostAsse
     return FfiConverterTypeSdkPostAssetMediaResponse.lower(value)
 }
 
+public struct SdkRefreshFailure {
+    public var name: String
+    public var message: String
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(name: String, message: String) {
+        self.name = name
+        self.message = message
+    }
+}
+
+extension SdkRefreshFailure: Equatable, Hashable {
+    public static func == (lhs: SdkRefreshFailure, rhs: SdkRefreshFailure) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.message != rhs.message {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(message)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkRefreshFailure: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkRefreshFailure {
+        return
+            try SdkRefreshFailure(
+                name: FfiConverterString.read(from: &buf),
+                message: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: SdkRefreshFailure, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.message, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkRefreshFailure_lift(_ buf: RustBuffer) throws -> SdkRefreshFailure {
+    return try FfiConverterTypeSdkRefreshFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkRefreshFailure_lower(_ value: SdkRefreshFailure) -> RustBuffer {
+    return FfiConverterTypeSdkRefreshFailure.lower(value)
+}
+
 public struct SdkRefreshTransfersRequest {
     public var skipSync: Bool
 
@@ -6744,6 +6815,120 @@ public func FfiConverterTypeSdkRefreshTransfersRequest_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeSdkRefreshTransfersRequest_lower(_ value: SdkRefreshTransfersRequest) -> RustBuffer {
     return FfiConverterTypeSdkRefreshTransfersRequest.lower(value)
+}
+
+public struct SdkRefreshTransfersResponse {
+    public var transfers: [Int32: SdkRefreshedTransfer]
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(transfers: [Int32: SdkRefreshedTransfer]) {
+        self.transfers = transfers
+    }
+}
+
+extension SdkRefreshTransfersResponse: Equatable, Hashable {
+    public static func == (lhs: SdkRefreshTransfersResponse, rhs: SdkRefreshTransfersResponse) -> Bool {
+        if lhs.transfers != rhs.transfers {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(transfers)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkRefreshTransfersResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkRefreshTransfersResponse {
+        return
+            try SdkRefreshTransfersResponse(
+                transfers: FfiConverterDictionaryInt32TypeSdkRefreshedTransfer.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: SdkRefreshTransfersResponse, into buf: inout [UInt8]) {
+        FfiConverterDictionaryInt32TypeSdkRefreshedTransfer.write(value.transfers, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkRefreshTransfersResponse_lift(_ buf: RustBuffer) throws -> SdkRefreshTransfersResponse {
+    return try FfiConverterTypeSdkRefreshTransfersResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkRefreshTransfersResponse_lower(_ value: SdkRefreshTransfersResponse) -> RustBuffer {
+    return FfiConverterTypeSdkRefreshTransfersResponse.lower(value)
+}
+
+public struct SdkRefreshedTransfer {
+    public var updatedStatus: String?
+    public var failure: SdkRefreshFailure?
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(updatedStatus: String?, failure: SdkRefreshFailure?) {
+        self.updatedStatus = updatedStatus
+        self.failure = failure
+    }
+}
+
+extension SdkRefreshedTransfer: Equatable, Hashable {
+    public static func == (lhs: SdkRefreshedTransfer, rhs: SdkRefreshedTransfer) -> Bool {
+        if lhs.updatedStatus != rhs.updatedStatus {
+            return false
+        }
+        if lhs.failure != rhs.failure {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(updatedStatus)
+        hasher.combine(failure)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkRefreshedTransfer: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkRefreshedTransfer {
+        return
+            try SdkRefreshedTransfer(
+                updatedStatus: FfiConverterOptionString.read(from: &buf),
+                failure: FfiConverterOptionTypeSdkRefreshFailure.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: SdkRefreshedTransfer, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.updatedStatus, into: &buf)
+        FfiConverterOptionTypeSdkRefreshFailure.write(value.failure, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkRefreshedTransfer_lift(_ buf: RustBuffer) throws -> SdkRefreshedTransfer {
+    return try FfiConverterTypeSdkRefreshedTransfer.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkRefreshedTransfer_lower(_ value: SdkRefreshedTransfer) -> RustBuffer {
+    return FfiConverterTypeSdkRefreshedTransfer.lower(value)
 }
 
 public struct SdkRgbInvoiceRequest {
@@ -7324,10 +7509,7 @@ public func FfiConverterTypeSdkTakerRequest_lower(_ value: SdkTakerRequest) -> R
 
 public struct SdkUnlockRequest {
     public var password: String
-    public var bitcoindRpcUsername: String?
-    public var bitcoindRpcPassword: String?
-    public var bitcoindRpcHost: String?
-    public var bitcoindRpcPort: UInt16?
+    public var ldkChainSync: SdkLdkChainSync
     public var indexerUrl: String?
     public var proxyEndpoint: String?
     public var announceAddresses: [String]
@@ -7336,12 +7518,9 @@ public struct SdkUnlockRequest {
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(password: String, bitcoindRpcUsername: String?, bitcoindRpcPassword: String?, bitcoindRpcHost: String?, bitcoindRpcPort: UInt16?, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?, gossipRgsServerUrl: String? = nil) {
+    public init(password: String, ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?, gossipRgsServerUrl: String? = nil) {
         self.password = password
-        self.bitcoindRpcUsername = bitcoindRpcUsername
-        self.bitcoindRpcPassword = bitcoindRpcPassword
-        self.bitcoindRpcHost = bitcoindRpcHost
-        self.bitcoindRpcPort = bitcoindRpcPort
+        self.ldkChainSync = ldkChainSync
         self.indexerUrl = indexerUrl
         self.proxyEndpoint = proxyEndpoint
         self.announceAddresses = announceAddresses
@@ -7355,16 +7534,7 @@ extension SdkUnlockRequest: Equatable, Hashable {
         if lhs.password != rhs.password {
             return false
         }
-        if lhs.bitcoindRpcUsername != rhs.bitcoindRpcUsername {
-            return false
-        }
-        if lhs.bitcoindRpcPassword != rhs.bitcoindRpcPassword {
-            return false
-        }
-        if lhs.bitcoindRpcHost != rhs.bitcoindRpcHost {
-            return false
-        }
-        if lhs.bitcoindRpcPort != rhs.bitcoindRpcPort {
+        if lhs.ldkChainSync != rhs.ldkChainSync {
             return false
         }
         if lhs.indexerUrl != rhs.indexerUrl {
@@ -7387,10 +7557,7 @@ extension SdkUnlockRequest: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(password)
-        hasher.combine(bitcoindRpcUsername)
-        hasher.combine(bitcoindRpcPassword)
-        hasher.combine(bitcoindRpcHost)
-        hasher.combine(bitcoindRpcPort)
+        hasher.combine(ldkChainSync)
         hasher.combine(indexerUrl)
         hasher.combine(proxyEndpoint)
         hasher.combine(announceAddresses)
@@ -7407,10 +7574,7 @@ public struct FfiConverterTypeSdkUnlockRequest: FfiConverterRustBuffer {
         return
             try SdkUnlockRequest(
                 password: FfiConverterString.read(from: &buf),
-                bitcoindRpcUsername: FfiConverterOptionString.read(from: &buf),
-                bitcoindRpcPassword: FfiConverterOptionString.read(from: &buf),
-                bitcoindRpcHost: FfiConverterOptionString.read(from: &buf),
-                bitcoindRpcPort: FfiConverterOptionUInt16.read(from: &buf),
+                ldkChainSync: FfiConverterTypeSdkLdkChainSync.read(from: &buf),
                 indexerUrl: FfiConverterOptionString.read(from: &buf),
                 proxyEndpoint: FfiConverterOptionString.read(from: &buf),
                 announceAddresses: FfiConverterSequenceString.read(from: &buf),
@@ -7421,10 +7585,7 @@ public struct FfiConverterTypeSdkUnlockRequest: FfiConverterRustBuffer {
 
     public static func write(_ value: SdkUnlockRequest, into buf: inout [UInt8]) {
         FfiConverterString.write(value.password, into: &buf)
-        FfiConverterOptionString.write(value.bitcoindRpcUsername, into: &buf)
-        FfiConverterOptionString.write(value.bitcoindRpcPassword, into: &buf)
-        FfiConverterOptionString.write(value.bitcoindRpcHost, into: &buf)
-        FfiConverterOptionUInt16.write(value.bitcoindRpcPort, into: &buf)
+        FfiConverterTypeSdkLdkChainSync.write(value.ldkChainSync, into: &buf)
         FfiConverterOptionString.write(value.indexerUrl, into: &buf)
         FfiConverterOptionString.write(value.proxyEndpoint, into: &buf)
         FfiConverterSequenceString.write(value.announceAddresses, into: &buf)
@@ -8487,13 +8648,15 @@ public struct Utxo {
     public var outpoint: String
     public var btcAmount: UInt64
     public var colorable: Bool
+    public var exists: Bool
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(outpoint: String, btcAmount: UInt64, colorable: Bool) {
+    public init(outpoint: String, btcAmount: UInt64, colorable: Bool, exists: Bool) {
         self.outpoint = outpoint
         self.btcAmount = btcAmount
         self.colorable = colorable
+        self.exists = exists
     }
 }
 
@@ -8508,6 +8671,9 @@ extension Utxo: Equatable, Hashable {
         if lhs.colorable != rhs.colorable {
             return false
         }
+        if lhs.exists != rhs.exists {
+            return false
+        }
         return true
     }
 
@@ -8515,6 +8681,7 @@ extension Utxo: Equatable, Hashable {
         hasher.combine(outpoint)
         hasher.combine(btcAmount)
         hasher.combine(colorable)
+        hasher.combine(exists)
     }
 }
 
@@ -8527,7 +8694,8 @@ public struct FfiConverterTypeUtxo: FfiConverterRustBuffer {
             try Utxo(
                 outpoint: FfiConverterString.read(from: &buf),
                 btcAmount: FfiConverterUInt64.read(from: &buf),
-                colorable: FfiConverterBool.read(from: &buf)
+                colorable: FfiConverterBool.read(from: &buf),
+                exists: FfiConverterBool.read(from: &buf)
             )
     }
 
@@ -8535,6 +8703,7 @@ public struct FfiConverterTypeUtxo: FfiConverterRustBuffer {
         FfiConverterString.write(value.outpoint, into: &buf)
         FfiConverterUInt64.write(value.btcAmount, into: &buf)
         FfiConverterBool.write(value.colorable, into: &buf)
+        FfiConverterBool.write(value.exists, into: &buf)
     }
 }
 
@@ -9254,6 +9423,63 @@ extension RlnError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum SdkLdkChainSync {
+    case blockSync(bitcoindRpcUsername: String, bitcoindRpcPassword: String, bitcoindRpcHost: String, bitcoindRpcPort: UInt16)
+    case transactionSync(indexerUrl: String)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkLdkChainSync: FfiConverterRustBuffer {
+    typealias SwiftType = SdkLdkChainSync
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkLdkChainSync {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .blockSync(bitcoindRpcUsername: FfiConverterString.read(from: &buf), bitcoindRpcPassword: FfiConverterString.read(from: &buf), bitcoindRpcHost: FfiConverterString.read(from: &buf), bitcoindRpcPort: FfiConverterUInt16.read(from: &buf))
+
+        case 2: return try .transactionSync(indexerUrl: FfiConverterString.read(from: &buf))
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SdkLdkChainSync, into buf: inout [UInt8]) {
+        switch value {
+        case let .blockSync(bitcoindRpcUsername, bitcoindRpcPassword, bitcoindRpcHost, bitcoindRpcPort):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(bitcoindRpcUsername, into: &buf)
+            FfiConverterString.write(bitcoindRpcPassword, into: &buf)
+            FfiConverterString.write(bitcoindRpcHost, into: &buf)
+            FfiConverterUInt16.write(bitcoindRpcPort, into: &buf)
+
+        case let .transactionSync(indexerUrl):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(indexerUrl, into: &buf)
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkLdkChainSync_lift(_ buf: RustBuffer) throws -> SdkLdkChainSync {
+    return try FfiConverterTypeSdkLdkChainSync.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkLdkChainSync_lower(_ value: SdkLdkChainSync) -> RustBuffer {
+    return FfiConverterTypeSdkLdkChainSync.lower(value)
+}
+
+extension SdkLdkChainSync: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum SwapStatus {
     case waiting
     case pending
@@ -9698,6 +9924,30 @@ private struct FfiConverterOptionTypeRgbOutpoint: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeRgbOutpoint.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterOptionTypeSdkRefreshFailure: FfiConverterRustBuffer {
+    typealias SwiftType = SdkRefreshFailure?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSdkRefreshFailure.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSdkRefreshFailure.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -10613,6 +10863,32 @@ private struct FfiConverterSequenceTypeTransportEndpoint: FfiConverterRustBuffer
     }
 }
 
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterDictionaryInt32TypeSdkRefreshedTransfer: FfiConverterRustBuffer {
+    static func write(_ value: [Int32: SdkRefreshedTransfer], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterInt32.write(key, into: &buf)
+            FfiConverterTypeSdkRefreshedTransfer.write(value, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Int32: SdkRefreshedTransfer] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [Int32: SdkRefreshedTransfer]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            let key = try FfiConverterInt32.read(from: &buf)
+            let value = try FfiConverterTypeSdkRefreshedTransfer.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
+    }
+}
+
 /**
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
@@ -11107,7 +11383,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_postassetmedia() != 33970 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_refreshtransfers() != 64798 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_refreshtransfers() != 59250 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_rgbinvoice() != 62357 {
@@ -11164,10 +11440,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_init_with_native_external_signer() != 35000 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 4385 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 10895 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 24108 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 16441 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_externalsignerhost_call() != 9685 {

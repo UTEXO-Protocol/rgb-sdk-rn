@@ -176,7 +176,7 @@ export interface Spec extends TurboModule {
     username: string,
     domain: string
   ): Promise<object>;
-  rlnRefreshTransfers(nodeId: number, skipSync: boolean): Promise<void>;
+  rlnRefreshTransfers(nodeId: number, skipSync: boolean): Promise<object>;
   rlnRgbInvoice(
     nodeId: number,
     assetId: string | null,

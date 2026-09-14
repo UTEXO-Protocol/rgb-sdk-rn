@@ -151,6 +151,8 @@ export interface RlnLnInvoiceResponse {
 }
 
 export interface RlnDecodeLnInvoiceResponse {
+  description?: string | null;
+  descriptionHash?: string | null;
   amtMsat?: number;
   /** Duration in seconds from `timestamp`, not an absolute time. */
   expirySec: number;
@@ -298,6 +300,7 @@ export interface RlnRgbAllocation {
 }
 
 export interface RlnUtxo {
+  exists: boolean;
   outpoint: string;
   btcAmount: number;
   colorable: boolean;
@@ -397,4 +400,14 @@ export interface RlnInflateResponse {
 
 export interface RlnFailTransfersResponse {
   transfersChanged: boolean;
+}
+
+export interface RlnRefreshTransfersResponse {
+  transfers: Record<
+    string,
+    {
+      updatedStatus?: string | null;
+      failure?: { name: string; message: string } | null;
+    }
+  >;
 }

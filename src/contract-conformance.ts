@@ -13,6 +13,7 @@
 import type { IUTEXOProtocol } from '@utexo/rgb-sdk-core';
 import type { UTEXOWallet } from './wallet/utexo-wallet';
 import type { IRLNUnlockParams } from './binding/IRLN';
+import type { RefreshTransfersResult } from './wallet/refresh-types';
 
 declare const concrete: UTEXOWallet;
 // A consumer programming against the shared contract, not the concrete class:
@@ -23,7 +24,13 @@ void w.getBtcBalance();
 void w.listChannels();
 void w.createLightningInvoice({ amountSats: 1000 });
 void w.syncWallet();
-void w.refreshWallet();
+const sharedRefresh: Promise<void> = w.refreshWallet();
+void sharedRefresh;
+const nativeRefresh: Promise<RefreshTransfersResult> =
+  concrete.refreshTransfers();
+void nativeRefresh;
+// @ts-expect-error Detailed native refresh is an RN extension, not a shared capability.
+void w.refreshTransfers();
 void w.createBackup({ backupPath: '/tmp/b', password: 'p' });
 void w.vssClearFence('password');
 void w.backupNow();

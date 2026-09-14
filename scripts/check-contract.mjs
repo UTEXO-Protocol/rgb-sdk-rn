@@ -19,6 +19,8 @@
  * Exit 0 when every check passes, 1 otherwise.
  */
 
+import assert from 'node:assert/strict';
+import { ValidationError } from '@utexo/rgb-sdk-core';
 import { runConformanceChecks } from '@utexo/rgb-sdk-core/conformance';
 import { UTEXOWallet } from '../lib/module/wallet/utexo-wallet.js';
 
@@ -92,6 +94,123 @@ runConformanceChecks({
   describe,
   it,
   expect,
+});
+
+describe('UniFFI 0.13 response mapping', () => {
+  it('preserves WaitingBroadcast and rejects unknown transfer states', async () => {
+    const wallet = createWalletSync();
+    for (const status of [
+      'WaitingBroadcast',
+      'WAITING_BROADCAST',
+      'waitingBroadcast',
+    ]) {
+      wallet.rln.rlnListTransfers = async () => [
+        { idx: 7, status, kind: 'ReceiveWitness', assignments: [] },
+      ];
+      assert.equal(
+        (await wallet.listTransfers('asset'))[0].status,
+        'WaitingBroadcast'
+      );
+      wallet.rln.rlnListTransfersByTxid = wallet.rln.rlnListTransfers;
+      assert.equal(
+        (await wallet.listTransfersByTxid('txid'))[0].status,
+        'WaitingBroadcast'
+      );
+    }
+    wallet.rln.rlnListTransfers = async () => [
+      { idx: 7, status: 'FutureStatus' },
+    ];
+    await assert.rejects(() => wallet.listTransfers('asset'), ValidationError);
+  });
+
+  it('preserves false as well as true for utxo.exists', async () => {
+    const wallet = createWalletSync();
+    wallet.rln.rlnListUnspents = async () =>
+      [false, true].map((exists) => ({
+        utxo: {
+          outpoint: `${'a'.repeat(64)}:0`,
+          btcAmount: 1000,
+          colorable: true,
+          exists,
+        },
+        rgbAllocations: [],
+        pendingBlinded: 0,
+      }));
+    assert.deepEqual(
+      (await wallet.listUnspents()).map((u) => u.utxo.exists),
+      [false, true]
+    );
+  });
+
+  it('returns refresh statuses and individual failures, including unchanged records', async () => {
+    const wallet = createWalletSync();
+    wallet.rln.rlnRefreshTransfers = async (skipSync) => {
+      assert.equal(skipSync, false);
+      return {
+        transfers: {
+          7: { updatedStatus: 'WAITING_BROADCAST', failure: null },
+          8: {
+            updatedStatus: null,
+            failure: {
+              name: 'InvalidConsignment',
+              message: 'Invalid transfer',
+            },
+          },
+          9: { updatedStatus: null, failure: null },
+        },
+      };
+    };
+    assert.deepEqual(await wallet.refreshTransfers(), {
+      transfers: {
+        7: { updatedStatus: 'WaitingBroadcast', failure: undefined },
+        8: {
+          updatedStatus: undefined,
+          failure: { name: 'InvalidConsignment', message: 'Invalid transfer' },
+        },
+        9: { updatedStatus: undefined, failure: undefined },
+      },
+    });
+    wallet.rln.rlnRefreshTransfers = async () => ({ transfers: {} });
+    assert.deepEqual(await wallet.refreshTransfers(), { transfers: {} });
+    wallet.rln.rlnRefreshTransfers = async () => ({
+      transfers: { 7: { updatedStatus: 'FutureStatus' } },
+    });
+    await assert.rejects(() => wallet.refreshTransfers(), ValidationError);
+  });
+
+  it('keeps shared refreshWallet void and forwards skipSync on the RN-specific method', async () => {
+    const wallet = createWalletSync();
+    const calls = [];
+    wallet.rln.rlnRefreshTransfers = async (skipSync) => {
+      calls.push(skipSync);
+      return { transfers: {} };
+    };
+    assert.equal(await wallet.refreshWallet(), undefined);
+    assert.deepEqual(calls, [false]);
+    assert.deepEqual(await wallet.refreshTransfers(true), { transfers: {} });
+    assert.deepEqual(calls, [false, true]);
+  });
+
+  it('passes invoice descriptions and hashes through and normalizes nulls', async () => {
+    const wallet = createWalletSync();
+    for (const extra of [
+      { description: 'Order 123', descriptionHash: null },
+      { description: null, descriptionHash: 'a'.repeat(64) },
+      {},
+    ]) {
+      wallet.rln.rlnDecodeLnInvoice = async () => ({
+        paymentHash: 'hash',
+        expirySec: 60,
+        timestamp: 1,
+        paymentSecret: 'secret',
+        network: 'regtest',
+        ...extra,
+      });
+      const decoded = await wallet.decodeLnInvoice('invoice');
+      assert.equal(decoded.description, extra.description ?? undefined);
+      assert.equal(decoded.descriptionHash, extra.descriptionHash ?? undefined);
+    }
+  });
 });
 
 // ── Run ──────────────────────────────────────────────────────────────────────

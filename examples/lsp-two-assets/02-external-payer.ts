@@ -30,8 +30,10 @@ export async function quoteForExternalPayer() {
   // without configuring a single contract id.
   const payable = await merchant.lsp.listPayableAssets();
   console.log(
-    'payout:', payable.payoutAsset?.ticker,
-    '| convertible:', payable.convertible.map((a) => a.ticker).join(', ')
+    'payout:',
+    payable.payoutAsset?.ticker,
+    '| convertible:',
+    payable.convertible.map((a) => a.ticker).join(', ')
   );
 
   // Quote without paying. With no `asset` argument this takes the single

@@ -25,6 +25,7 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnRefreshTransfersResponse,
   RlnAssignmentKind,
   RlnSignMessageResponse,
   RlnVerifyMessageResponse,
@@ -288,7 +289,7 @@ export interface IRLN {
   rlnListTransfers(assetId: string): Promise<RlnTransfer[]>;
   rlnListTransfersByTxid(txid: string): Promise<RlnTransfer[]>;
   rlnListUnspents(skipSync: boolean): Promise<RlnUnspent[]>;
-  rlnRefreshTransfers(skipSync: boolean): Promise<void>;
+  rlnRefreshTransfers(skipSync: boolean): Promise<RlnRefreshTransfersResponse>;
   rlnFailTransfers(
     batchTransferIdx: number | null,
     noAssetOnly: boolean,

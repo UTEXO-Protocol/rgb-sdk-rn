@@ -33,7 +33,9 @@ export async function receiveOnchainInAnotherAsset() {
 
   console.log(
     `send ${rgbInvoice} —`,
-    converted ? `pay in ${onchainAssetId}, delivered as ${PAYOUT_ASSET}` : 'same asset both legs'
+    converted
+      ? `pay in ${onchainAssetId}, delivered as ${PAYOUT_ASSET}`
+      : 'same asset both legs'
   );
 
   // Give `rgbInvoice` to the sender. A converted receive pins the amount in the

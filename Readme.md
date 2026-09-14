@@ -276,7 +276,8 @@ await wallet.destroy();
 | `listTransactions()` | On-chain transaction history |
 | `listTransfers(assetId?)` | RGB transfer history |
 | `failTransfers(params)` | Mark pending transfers as failed |
-| `refreshWallet()` | Refresh RGB transfer state |
+| `refreshWallet()` | Refresh RGB transfer state (`Promise<void>`, shared with web) |
+| `refreshTransfers(skipSync?)` | RN-specific detailed refresh result, keyed by batch transfer ID |
 | `syncWallet()` | Sync blockchain state |
 
 #### Fees & Backup

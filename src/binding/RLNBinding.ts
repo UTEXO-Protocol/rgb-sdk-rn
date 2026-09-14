@@ -33,6 +33,7 @@ import type {
   RlnTransfer,
   RlnUnspent,
   RlnFailTransfersResponse,
+  RlnRefreshTransfersResponse,
   RlnAssignmentKind,
   RlnSignMessageResponse,
   RlnVerifyMessageResponse,
@@ -799,10 +800,12 @@ export class RLNBinding implements IRLN {
     ) as Promise<RlnUnspent[]>;
   }
 
-  async rlnRefreshTransfers(skipSync: boolean): Promise<void> {
-    await this.withNodeOperation((nodeId) =>
+  async rlnRefreshTransfers(
+    skipSync: boolean
+  ): Promise<RlnRefreshTransfersResponse> {
+    return this.withNodeOperation((nodeId) =>
       Rgb.rlnRefreshTransfers(nodeId, skipSync)
-    );
+    ) as Promise<RlnRefreshTransfersResponse>;
   }
 
   async rlnFailTransfers(

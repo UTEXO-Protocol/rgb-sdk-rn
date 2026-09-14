@@ -213,3 +213,9 @@ export type {
   ListLightningPaymentsResponse,
   GetFeeEstimationResponse,
 } from '@utexo/rgb-sdk-core';
+
+export type {
+  RefreshFailure,
+  RefreshedTransfer,
+  RefreshTransfersResult,
+} from './wallet/refresh-types';

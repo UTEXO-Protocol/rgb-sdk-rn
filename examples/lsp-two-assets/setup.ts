@@ -6,7 +6,11 @@
  * examples import it so each one shows only the part that is actually new.
  */
 
-import { UTEXOWallet, PasswordRLNSigner, createWallet } from '@utexo/rgb-sdk-rn';
+import {
+  UTEXOWallet,
+  PasswordRLNSigner,
+  createWallet,
+} from '@utexo/rgb-sdk-rn';
 import type { LspPeer, UtexoLsp } from '@utexo/rgb-sdk-rn';
 
 /** Where the LSP lives. On `utexo` most of this has a default — see the README. */
@@ -22,7 +26,7 @@ export const LSP_PEER: LspPeer = {
  * only because the LSP operator declared the pair in `CONVERTIBLE_PAIRS`.
  */
 export const PAYOUT_ASSET = 'rgb:...LNUSDT'; // what the LSP serves over channels
-export const BRIDGE_ASSET = 'rgb:...USDT';   // what senders hold on-chain
+export const BRIDGE_ASSET = 'rgb:...USDT'; // what senders hold on-chain
 
 export type Node = {
   wallet: UTEXOWallet;
@@ -57,7 +61,10 @@ export async function startNode(
 
   const lsp = await wallet.createLsp(LSP_PEER);
   await wallet.init();
-  await wallet.unlock({ bitcoindRpcUsername: 'user', bitcoindRpcPassword: 'pass' } as never);
+  await wallet.unlock({
+    bitcoindRpcUsername: 'user',
+    bitcoindRpcPassword: 'pass',
+  } as never);
 
   const pubkey = String((await wallet.getNodeInfo())?.pubkey ?? '');
   return { wallet, lsp, pubkey };

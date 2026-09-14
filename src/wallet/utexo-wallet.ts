@@ -1,3 +1,4 @@
+import type { RefreshTransfersResult } from './refresh-types';
 import type {
   IUTEXOProtocol,
   WalletCapabilities,
@@ -13,7 +14,6 @@ import type {
   AssignmentType,
   TransactionType,
   TransferKind,
-  TransferStatus,
   Transaction,
   Transfer,
   Outpoint,
@@ -43,7 +43,11 @@ import type {
   OnchainSendResponse,
   BitcoinNetwork,
 } from '@utexo/rgb-sdk-core';
-import { AssetSchema, normalizeRlnNetwork } from '@utexo/rgb-sdk-core';
+import {
+  AssetSchema,
+  normalizeRlnNetwork,
+  normalizeTransferStatus,
+} from '@utexo/rgb-sdk-core';
 
 import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
@@ -98,6 +102,7 @@ import {
   toLightningPayment,
   toLightningInvoice,
   toDecodedLnInvoice,
+  toRefreshTransfersResult,
   toLightningNetworkInfo,
   toLightningPeer,
   toSendPaymentResult,
@@ -180,7 +185,7 @@ function mapUtxo(u: RlnUnspent): Unspent {
       outpoint: parseOutpoint(u.utxo.outpoint),
       btcAmount: u.utxo.btcAmount,
       colorable: u.utxo.colorable,
-      exists: true,
+      exists: u.utxo.exists,
     } as Utxo,
     rgbAllocations: (u.rgbAllocations ?? []).map(
       (a): RgbAllocation => ({
@@ -214,20 +219,6 @@ function mapTransaction(t: RlnTransaction): Transaction {
   };
 }
 
-/**
- * The native layer types transfer status/kind as bare strings, so these guard the
- * boundary. Declared as exhaustive `Record`s rather than arrays: if core gains a
- * variant, these stop compiling instead of silently folding it into the fallback.
- */
-const VALID_TRANSFER_STATUSES: Record<TransferStatus, true> = {
-  WaitingCounterparty: true,
-  WaitingSafeHeight: true,
-  WaitingConfirmations: true,
-  Settled: true,
-  Failed: true,
-  Initiated: true,
-};
-
 const VALID_TRANSFER_KINDS: Record<TransferKind, true> = {
   Issuance: true,
   ReceiveBlind: true,
@@ -250,9 +241,7 @@ function mapTransfer(t: RlnTransfer): Transfer {
     batchTransferIdx: 0,
     createdAt: t.createdAt ?? 0,
     updatedAt: t.updatedAt ?? 0,
-    status: (isKnown(VALID_TRANSFER_STATUSES, t.status)
-      ? t.status
-      : 'WaitingCounterparty') as TransferStatus,
+    status: normalizeTransferStatus(t.status),
     assignments: (t.assignments ?? []).map(parseAssignment),
     kind: (isKnown(VALID_TRANSFER_KINDS, t.kind)
       ? t.kind
@@ -682,7 +671,13 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   }
 
   async refreshWallet(): Promise<void> {
-    return this.rln.rlnRefreshTransfers(false);
+    await this.refreshTransfers();
+  }
+
+  async refreshTransfers(skipSync = false): Promise<RefreshTransfersResult> {
+    return toRefreshTransfersResult(
+      await this.rln.rlnRefreshTransfers(skipSync)
+    );
   }
 
   async syncWallet(): Promise<void> {

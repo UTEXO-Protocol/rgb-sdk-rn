@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.0-beta.30
+
+__added__
+
+- **`UTEXOWallet.refreshTransfers(skipSync?)`** — refreshes RGB transfers and returns `{ transfers }`, keyed by batch transfer ID. Each entry contains an optional `updatedStatus` and optional `failure: { name, message }`. `skipSync` defaults to `false`. Keys identify batches, not individual `Transfer.idx` values.
+- RN-specific exports `RefreshTransfersResult`, `RefreshedTransfer`, and `RefreshFailure`.
+- **`decodeLnInvoice()`** now exposes optional `description` and `descriptionHash` fields on iOS and Android.
+
+__changed__
+
+- Bumped iOS and Android RLN native bindings from **`0.11.0-beta.3` to `0.13.0-beta.3`**.
+- Adapted password and external-signer unlock paths to the native `SdkLdkChainSync` API. Complete bitcoind RPC parameters select block sync; otherwise `indexerUrl` selects transaction sync. Existing JS parameter names are preserved, and bitcoind ports must be integers between 1 and 65535.
+- Low-level `rlnRefreshTransfers()` now returns the native refresh result instead of `void`. The shared **`refreshWallet(): Promise<void>`** contract remains unchanged; detailed refresh results belong to the RN-specific `refreshTransfers()` API.
+
+__fixed__
+
+- **Transfer statuses are preserved and validated** in `listTransfers()`, `listTransfersByTxid()`, and detailed refresh results. `WaitingBroadcast` is supported, platform casing is normalized, and unknown statuses throw `ValidationError` instead of silently becoming `WaitingCounterparty`.
+- **`listUnspents()` preserves native `utxo.exists`**, including `false`, instead of always reporting `true`.
+- iOS native error messages retain embedded quotes and the text after them, preserving underlying error details.
+
+__upgrade__
+
+- Rebuild the iOS or Android app after updating the native bindings; reloading Metro alone does not update the embedded RLN library. In an existing iOS SDK checkout, refresh the xcframework as described in the `1.0.0-beta.25` note below, since the download script skips an already-present framework.
+
 ## 1.0.0-beta.29
 
 __changed__

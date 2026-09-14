@@ -4,6 +4,34 @@ import Foundation
 @objc(RgbSwiftHelper)
 public class RgbSwiftHelper: NSObject {
 
+  private static func ldkChainSync(
+    bitcoindRpcUsername: String?,
+    bitcoindRpcPassword: String?,
+    bitcoindRpcHost: String?,
+    bitcoindRpcPort: NSNumber?,
+    indexerUrl: String?
+  ) throws -> SdkLdkChainSync {
+    if let username = bitcoindRpcUsername,
+       let password = bitcoindRpcPassword,
+       let host = bitcoindRpcHost,
+       let port = bitcoindRpcPort {
+      guard let portNumber = UInt16(exactly: port.doubleValue), portNumber > 0 else {
+        throw RlnError.InvalidRequest(message: "bitcoindRpcPort must be an integer between 1 and 65535")
+      }
+      return .blockSync(
+        bitcoindRpcUsername: username,
+        bitcoindRpcPassword: password,
+        bitcoindRpcHost: host,
+        bitcoindRpcPort: portNumber
+      )
+    }
+    guard let indexerUrl = indexerUrl else {
+      throw RlnError.InvalidRequest(message: "Provide indexerUrl or complete bitcoind RPC parameters")
+    }
+    return .transactionSync(indexerUrl: indexerUrl)
+  }
+
+
   private static func getErrorClassName(_ error: Error) -> String {
     // UniFFI errors are Swift enums (`RlnError.Conflict(message:)`), so
     // `type(of:)` only yields the enum name and loses the category the JS layer
@@ -36,18 +64,21 @@ public class RgbSwiftHelper: NSObject {
   }
 
   private static func parseErrorMessage(_ error: Error) -> String {
-    let errorString = String(describing: error)
-
-    for prefix in ["details: \"", "(details: \"", "message: \"", "(message: \""] {
-      if let range = errorString.range(of: prefix) {
-        let after = String(errorString[range.upperBound...])
-        if let endQuote = after.firstIndex(of: "\"") {
-          return String(after[..<endQuote])
+    // Read UniFFI associated values directly. Parsing String(describing:) loses
+    // everything after an embedded quote (e.g. the underlying VSS I/O error).
+    let reflected = Mirror(reflecting: error)
+    if reflected.displayStyle == .enum, let associated = reflected.children.first {
+      if let message = associated.value as? String {
+        return message
+      }
+      for field in Mirror(reflecting: associated.value).children {
+        if (field.label == "message" || field.label == "details"),
+           let message = field.value as? String {
+          return message
         }
       }
     }
-
-    return errorString
+    return String(describing: error)
   }
 
   // MARK: - RLN native node bridge
@@ -148,10 +179,13 @@ public class RgbSwiftHelper: NSObject {
       try node.unlock(
         request: SdkUnlockRequest(
           password: password,
-          bitcoindRpcUsername: bitcoindRpcUsername,
-          bitcoindRpcPassword: bitcoindRpcPassword,
-          bitcoindRpcHost: bitcoindRpcHost,
-          bitcoindRpcPort: bitcoindRpcPort.map { UInt16(truncating: $0) },
+          ldkChainSync: try ldkChainSync(
+            bitcoindRpcUsername: bitcoindRpcUsername,
+            bitcoindRpcPassword: bitcoindRpcPassword,
+            bitcoindRpcHost: bitcoindRpcHost,
+            bitcoindRpcPort: bitcoindRpcPort,
+            indexerUrl: indexerUrl
+          ),
           indexerUrl: indexerUrl,
           proxyEndpoint: proxyEndpoint,
           announceAddresses: announceAddresses,
@@ -531,6 +565,8 @@ public class RgbSwiftHelper: NSObject {
       if let aid = res.assetId { dict["assetId"] = aid }
       if let aa = res.assetAmount { dict["assetAmount"] = NSNumber(value: aa) }
       if let pk = res.payeePubkey { dict["payeePubkey"] = pk }
+      if let description = res.description { dict["description"] = description }
+      if let descriptionHash = res.descriptionHash { dict["descriptionHash"] = descriptionHash }
       return dict as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
@@ -881,6 +917,7 @@ public class RgbSwiftHelper: NSObject {
           "outpoint": u.utxo.outpoint,
           "btcAmount": NSNumber(value: u.utxo.btcAmount),
           "colorable": u.utxo.colorable,
+          "exists": u.utxo.exists,
         ]
         var dict: [String: Any] = [
           "utxo": utxoDict as NSDictionary,
@@ -1034,8 +1071,17 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      try node.refreshtransfers(request: SdkRefreshTransfersRequest(skipSync: skipSync))
-      return [:] as NSDictionary
+      let response = try node.refreshtransfers(request: SdkRefreshTransfersRequest(skipSync: skipSync))
+      var transfers: [String: Any] = [:]
+      for (idx, transfer) in response.transfers {
+        var result: [String: Any] = [:]
+        if let status = transfer.updatedStatus { result["updatedStatus"] = status }
+        if let failure = transfer.failure {
+          result["failure"] = ["name": failure.name, "message": failure.message]
+        }
+        transfers[String(idx)] = result
+      }
+      return ["transfers": transfers] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -1556,10 +1602,13 @@ public class RgbSwiftHelper: NSObject {
       }
       try node.unlockWithNativeExternalSigner(
         signer: signer,
-        bitcoindRpcUsername: bitcoindRpcUsername,
-        bitcoindRpcPassword: bitcoindRpcPassword,
-        bitcoindRpcHost: bitcoindRpcHost,
-        bitcoindRpcPort: bitcoindRpcPort.map { UInt16(truncating: $0) },
+        ldkChainSync: try ldkChainSync(
+          bitcoindRpcUsername: bitcoindRpcUsername,
+          bitcoindRpcPassword: bitcoindRpcPassword,
+          bitcoindRpcHost: bitcoindRpcHost,
+          bitcoindRpcPort: bitcoindRpcPort,
+          indexerUrl: indexerUrl
+        ),
         indexerUrl: indexerUrl,
         proxyEndpoint: proxyEndpoint,
         announceAddresses: announceAddresses,

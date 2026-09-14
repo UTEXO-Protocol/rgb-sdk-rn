@@ -847,7 +847,7 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_REFRESH_TRANSFERS_ERROR", errorMessage, nil);
         } else {
-            resolve(nil);
+            resolve(result);
         }
     });
 }

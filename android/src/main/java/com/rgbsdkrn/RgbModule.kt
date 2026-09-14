@@ -42,6 +42,7 @@ import org.utexo.rgblightningnode.AssetUda
 import org.utexo.rgblightningnode.RgbRecipient
 import org.utexo.rgblightningnode.SendRgbRequest
 import org.utexo.rgblightningnode.WitnessData
+import org.utexo.rgblightningnode.SdkLdkChainSync
 import org.utexo.rgblightningnode.SdkUnlockRequest
 import org.utexo.rgblightningnode.PaymentType
 import org.utexo.rgblightningnode.SdkIssueAssetCfaRequest
@@ -66,6 +67,29 @@ class RgbModule(reactContext: ReactApplicationContext) :
 
   override fun getName(): String {
     return NAME
+  }
+
+  private fun ldkChainSync(
+    bitcoindRpcUsername: String?,
+    bitcoindRpcPassword: String?,
+    bitcoindRpcHost: String?,
+    bitcoindRpcPort: Double?,
+    indexerUrl: String?
+  ): SdkLdkChainSync {
+    if (bitcoindRpcUsername != null && bitcoindRpcPassword != null &&
+        bitcoindRpcHost != null && bitcoindRpcPort != null) {
+      if (!bitcoindRpcPort.isFinite() || bitcoindRpcPort < 1 ||
+          bitcoindRpcPort > 65535 || bitcoindRpcPort % 1.0 != 0.0) {
+        throw RlnException.InvalidRequest("bitcoindRpcPort must be an integer between 1 and 65535")
+      }
+      return SdkLdkChainSync.BlockSync(
+        bitcoindRpcUsername, bitcoindRpcPassword, bitcoindRpcHost,
+        bitcoindRpcPort.toInt().toUShort()
+      )
+    }
+    return SdkLdkChainSync.TransactionSync(
+      indexerUrl ?: throw RlnException.InvalidRequest("Provide indexerUrl or complete bitcoind RPC parameters")
+    )
   }
 
   // ── RLN native node bridge ─────────────────────────────────────────────────
@@ -243,10 +267,10 @@ class RgbModule(reactContext: ReactApplicationContext) :
         node.unlock(
           SdkUnlockRequest(
             password = password,
-            bitcoindRpcUsername = bitcoindRpcUsername,
-            bitcoindRpcPassword = bitcoindRpcPassword,
-            bitcoindRpcHost = bitcoindRpcHost,
-            bitcoindRpcPort = bitcoindRpcPort?.toInt()?.toUShort(),
+            ldkChainSync = ldkChainSync(
+              bitcoindRpcUsername, bitcoindRpcPassword, bitcoindRpcHost,
+              bitcoindRpcPort, indexerUrl
+            ),
             indexerUrl = indexerUrl,
             proxyEndpoint = proxyEndpoint,
             announceAddresses = announceAddressesList,
@@ -377,10 +401,10 @@ class RgbModule(reactContext: ReactApplicationContext) :
         }
         node.unlockWithNativeExternalSigner(
           signer = signer,
-          bitcoindRpcUsername = bitcoindRpcUsername,
-          bitcoindRpcPassword = bitcoindRpcPassword,
-          bitcoindRpcHost = bitcoindRpcHost,
-          bitcoindRpcPort = bitcoindRpcPort?.toInt()?.toUShort(),
+          ldkChainSync = ldkChainSync(
+            bitcoindRpcUsername, bitcoindRpcPassword, bitcoindRpcHost,
+            bitcoindRpcPort, indexerUrl
+          ),
           indexerUrl = indexerUrl,
           proxyEndpoint = proxyEndpoint,
           announceAddresses = announceAddressesList,
@@ -883,6 +907,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putString("paymentHash", res.paymentHash)
         map.putString("paymentSecret", res.paymentSecret)
         res.payeePubkey?.let { map.putString("payeePubkey", it) }
+        res.description?.let { map.putString("description", it) }
+        res.descriptionHash?.let { map.putString("descriptionHash", it) }
         map.putString("network", res.network)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
@@ -1214,6 +1240,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
           utxoMap.putString("outpoint", unspent.utxo.outpoint)
           utxoMap.putDouble("btcAmount", unspent.utxo.btcAmount.toDouble())
           utxoMap.putBoolean("colorable", unspent.utxo.colorable)
+          utxoMap.putBoolean("exists", unspent.utxo.exists)
           map.putMap("utxo", utxoMap)
           map.putDouble("pendingBlinded", unspent.pendingBlinded.toDouble())
           val allocsArr = Arguments.createArray()
@@ -1395,8 +1422,22 @@ class RgbModule(reactContext: ReactApplicationContext) :
       try {
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        node.refreshtransfers(SdkRefreshTransfersRequest(skipSync = skipSync))
-        withContext(Dispatchers.Main) { promise.resolve(null) }
+        val response = node.refreshtransfers(SdkRefreshTransfersRequest(skipSync = skipSync))
+        val transfers = Arguments.createMap()
+        response.transfers.forEach { (idx, transfer) ->
+          val result = Arguments.createMap()
+          transfer.updatedStatus?.let { result.putString("updatedStatus", it) }
+          transfer.failure?.let { failure ->
+            val error = Arguments.createMap()
+            error.putString("name", failure.name)
+            error.putString("message", failure.message)
+            result.putMap("failure", error)
+          }
+          transfers.putMap(idx.toString(), result)
+        }
+        val result = Arguments.createMap()
+        result.putMap("transfers", transfers)
+        withContext(Dispatchers.Main) { promise.resolve(result) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)

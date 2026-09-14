@@ -25,12 +25,15 @@ import type {
 } from '@utexo/rgb-sdk-core';
 import {
   satToMsat,
+  normalizeTransferStatus,
   tryNormalizeChannelStatus,
   tryNormalizePaymentStatus,
   tryNormalizeRlnNetwork,
 } from '@utexo/rgb-sdk-core';
+import type { RefreshTransfersResult } from '../wallet/refresh-types';
 import type {
   RlnChannel,
+  RlnRefreshTransfersResponse,
   RlnNodeInfo,
   RlnNetworkInfo,
   RlnPeer,
@@ -56,7 +59,9 @@ export const toLightningChannel: WireMapper<RlnChannel, LightningChannel> = (
   ready: w.ready,
   isPublic: w.public,
   isUsable: w.isUsable,
-  status: w.status ? (tryNormalizeChannelStatus(w.status) ?? undefined) : undefined,
+  status: w.status
+    ? (tryNormalizeChannelStatus(w.status) ?? undefined)
+    : undefined,
   localBalanceMsat:
     w.localBalanceSat != null ? satToMsat(w.localBalanceSat) : undefined,
   outboundBalanceMsat: w.outboundBalanceMsat,
@@ -150,6 +155,8 @@ export const toDecodedLnInvoice: WireMapper<
   paymentHash: w.paymentHash,
   amtMsat: w.amtMsat,
   expirySeconds: w.expirySec,
+  description: w.description ?? undefined,
+  descriptionHash: w.descriptionHash ?? undefined,
   timestamp: w.timestamp,
   payee: w.payeePubkey,
   paymentSecret: w.paymentSecret,
@@ -183,3 +190,27 @@ export function toLightningInvoice(
     assetAmount: ctx.assetAmount,
   };
 }
+
+export const toRefreshTransfersResult: WireMapper<
+  RlnRefreshTransfersResponse,
+  RefreshTransfersResult
+> = (w) => ({
+  transfers: Object.fromEntries(
+    Object.entries(w.transfers).map(([idx, transfer]) => [
+      idx,
+      {
+        updatedStatus:
+          transfer.updatedStatus == null
+            ? undefined
+            : normalizeTransferStatus(transfer.updatedStatus),
+        failure:
+          transfer.failure == null
+            ? undefined
+            : {
+                name: transfer.failure.name,
+                message: transfer.failure.message,
+              },
+      },
+    ])
+  ),
+});

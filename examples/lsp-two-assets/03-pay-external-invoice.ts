@@ -22,7 +22,12 @@
 
 import { LspQuoteMismatchError } from '@utexo/rgb-sdk-rn';
 
-import { awaitLspChannel, startNode, BRIDGE_ASSET, PAYOUT_ASSET } from './setup';
+import {
+  awaitLspChannel,
+  startNode,
+  BRIDGE_ASSET,
+  PAYOUT_ASSET,
+} from './setup';
 
 export async function payAnOutsideInvoice() {
   // ── The outside node: a plain BOLT11, nothing else ─────────────────────────
@@ -78,10 +83,15 @@ export async function payAnOutsideInvoice() {
 
     if (status.status === 'cancelled' || status.status === 'failed') {
       // Terminal and refunded — the payer lost nothing.
-      throw new Error(`relay ${status.status}: ${status.reason ?? 'no reason given'}`);
+      throw new Error(
+        `relay ${status.status}: ${status.reason ?? 'no reason given'}`
+      );
     }
     if (status.status === 'settled') {
-      console.log('local:', await payer.wallet.getLightningSendStatus(quote.paymentHash));
+      console.log(
+        'local:',
+        await payer.wallet.getLightningSendStatus(quote.paymentHash)
+      );
       break;
     }
     await new Promise((r) => setTimeout(r, 3_000));

@@ -4,12 +4,18 @@
 
 __added__
 
-- **WebRGB integration** — wallet connections, RGB invoices, balances, and transfer tracking.
-- **BFA support on iOS and Android** — asset listing, burn, and consignment export.
+- **`WebRgbProvider`** (`@utexo/rgb-sdk-rn/webrgb`) — `enable()` / `revoke()` for session access; `getInfo()`, `getAddress()`, `blindReceive()`, `decodeRgbInvoice()`, `listAssets()`, `getAssetBalance()`, `listTransfers()`, and `getTransferStatus()` for dApp requests. Optional `burnAsset()` and `getConsignment()` extensions.
+- **`UTEXOWallet.getBfaCapabilities()`** — reports BFA, burn, and consignment support for the native build and signer.
+- **`UTEXOWallet.burn(params)`** — burns asset units and returns `{ txid, batchTransferIdx }`. Uses decimal-string amounts; supported by `PasswordRLNSigner` on iOS and Android.
+- **`UTEXOWallet.getConsignment(assetId, txid)` / `getConsignmentPath(assetId, txid)`** — export the saved proof as Base64 or a local file path.
+- **`BurnOperations`** — persistent burn journal with `execute()`, `records()`, `retryPersistence()`, and `reconcile()` for execution and recovery without automatically retrying burns.
+- **`IRLNUnlockParams.ethRpcUrl`** — optional Ethereum RPC for BFA validation with the password signer.
+- RN-specific types: `BurnParams`, `BurnResult`, `BfaCapabilities`, `AssetBfa`, `BurnOperationRecord`, `BurnOperationStore`, and `BurnOperationMetadata`.
 
 __changed__
 
 - Updated RLN native bindings to **`v0.15.0-beta.3`**.
+- **`UTEXOWallet.listAssets()`** now includes a `bfa` collection on iOS and Android.
 
 ## 1.0.0-beta.30
 

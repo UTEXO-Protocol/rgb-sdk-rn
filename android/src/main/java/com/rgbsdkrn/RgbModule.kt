@@ -234,8 +234,13 @@ class RgbModule(reactContext: ReactApplicationContext) :
     announceAddresses: ReadableArray,
     announceAlias: String?,
     gossipRgsServerUrl: String?,
+    ethRpcUrl: String?,
     promise: Promise
   ) {
+    if (ethRpcUrl != null) {
+      promise.reject("METHOD_NOT_SUPPORTED", "BFA requires the updated Android RLN AAR")
+      return
+    }
     coroutineScope.launch(Dispatchers.IO) {
       val intNodeId = nodeId.toInt()
       try {
@@ -1738,6 +1743,23 @@ class RgbModule(reactContext: ReactApplicationContext) :
         }
       }
     }
+  }
+
+  // RLN 0.13.0-beta.3 on Android has no BFA bindings. Keep discovery honest.
+  override fun rlnBfaCapabilities(promise: Promise) {
+    val map = Arguments.createMap()
+    map.putBoolean("burn", false); map.putBoolean("consignment", false); map.putBoolean("bfa", false)
+    promise.resolve(map)
+  }
+  override fun rlnBurn(nodeId: Double, assetId: String, amount: String, burnRecipient: String?,
+    feeRate: Double, minConfirmations: Double, promise: Promise) {
+    promise.reject("METHOD_NOT_SUPPORTED", "Burn requires the updated Android RLN AAR")
+  }
+  override fun rlnGetConsignment(nodeId: Double, assetId: String, txid: String, promise: Promise) {
+    promise.reject("METHOD_NOT_SUPPORTED", "Consignment export requires the updated Android RLN AAR")
+  }
+  override fun rlnGetConsignmentPath(nodeId: Double, assetId: String, txid: String, promise: Promise) {
+    promise.reject("METHOD_NOT_SUPPORTED", "Consignment export requires the updated Android RLN AAR")
   }
 
   override fun rlnInflate(

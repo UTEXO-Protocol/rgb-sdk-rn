@@ -261,7 +261,15 @@ export interface RlnAssetUda extends RlnAssetBase {
   token?: object;
 }
 
+export interface RlnAssetBfa extends RlnAssetBase {
+  ticker: string;
+  details?: string;
+  initialSupply: number;
+  rejectListUrl?: string;
+}
+
 export interface RlnListAssetsResponse {
+  bfa?: RlnAssetBfa[];
   nia?: RlnAssetNia[];
   cfa?: RlnAssetCfa[];
   ifa?: RlnAssetIfa[];
@@ -410,4 +418,24 @@ export interface RlnRefreshTransfersResponse {
       failure?: { name: string; message: string } | null;
     }
   >;
+}
+
+export interface RlnBfaCapabilities {
+  burn: boolean;
+  consignment: boolean;
+  bfa: boolean;
+}
+export interface RlnBurnParams {
+  assetId: string;
+  /** Decimal base units. Never convert this to a JS number. */
+  amount: string;
+  /** Exactly 32 bytes encoded as 64 hex characters, without 0x. Required for BFA. */
+  burnRecipient?: string;
+  /** Positive integer sat/vB, as required by RLN's u64 fee rate. */
+  feeRate: number;
+  minConfirmations: number;
+}
+export interface RlnBurnResult {
+  txid: string;
+  batchTransferIdx: number;
 }

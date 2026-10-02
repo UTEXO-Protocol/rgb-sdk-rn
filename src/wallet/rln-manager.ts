@@ -1,3 +1,4 @@
+import type { BurnParams } from './types';
 import { RLNBinding } from '../binding/RLNBinding';
 import type {
   IRLN,
@@ -45,6 +46,19 @@ export class RLNManager implements IRLN {
 
   constructor() {
     this.rlnBinding = new RLNBinding();
+  }
+
+  rlnBfaCapabilities() {
+    return this.rlnBinding.rlnBfaCapabilities();
+  }
+  rlnBurn(params: BurnParams) {
+    return this.rlnBinding.rlnBurn(params);
+  }
+  rlnGetConsignment(assetId: string, txid: string) {
+    return this.rlnBinding.rlnGetConsignment(assetId, txid);
+  }
+  rlnGetConsignmentPath(assetId: string, txid: string) {
+    return this.rlnBinding.rlnGetConsignmentPath(assetId, txid);
   }
 
   // ── Node lifecycle ──────────────────────────────────────────────────────────

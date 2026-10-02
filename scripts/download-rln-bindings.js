@@ -1,18 +1,21 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 // iOS xcframework is downloaded from GitHub releases,
 // or used from a local zip in src/bindings/ if present.
 // Android AAR is resolved from Maven Central by Gradle — no download needed here.
 
-const VERSION = '0.13.0-beta.3';
+// Set this to a published BFA-capable release; beta.3 is incompatible.
+const VERSION = process.env.UTEXO_RLN_IOS_VERSION;
 const BASE_URL = `https://github.com/UTEXO-Protocol/rgb-lightning-node/releases/download/v${VERSION}`;
 
 const ROOT = path.join(__dirname, '..');
 const SRC_BINDINGS = path.join(ROOT, 'src', 'bindings');
-const LOCAL_IOS_ZIP = path.join(SRC_BINDINGS, 'swift-release.zip');
+const LOCAL_IOS_ZIP =
+  process.env.UTEXO_RLN_IOS_ARCHIVE ||
+  path.join(SRC_BINDINGS, 'swift-release.zip');
 
 const IOS_DIR = path.join(ROOT, 'ios');
 const IOS_ZIP = path.join(IOS_DIR, 'rgb-lightning-node-swift.zip');
@@ -74,7 +77,30 @@ function downloadFile(url, dest) {
 }
 
 function unzip(zipPath, outDir) {
-  execSync(`unzip -q -o "${zipPath}" -d "${outDir}"`, { stdio: 'inherit' });
+  execFileSync('unzip', ['-q', '-o', zipPath, '-d', outDir], {
+    stdio: 'inherit',
+  });
+}
+
+function validateIosBindings(directory) {
+  const swiftPath = path.join(directory, 'RGBLightningNode.swift');
+  if (!fs.existsSync(swiftPath))
+    throw new Error(
+      'Missing RGBLightningNode.swift alongside the native framework'
+    );
+  const swift = fs.readFileSync(swiftPath, 'utf8');
+  const required = [
+    'func burn(',
+    'func getConsignment(',
+    'func getConsignmentPath(',
+    'struct AssetBfa',
+    'ethRpcUrl:',
+  ];
+  const missing = required.filter((symbol) => !swift.includes(symbol));
+  if (missing.length)
+    throw new Error(
+      `Incompatible RLN iOS bindings (missing ${missing.join(', ')}). Install a BFA-capable build; 0.13.0-beta.3 is unsupported.`
+    );
 }
 
 async function setupIos() {
@@ -84,10 +110,18 @@ async function setupIos() {
   }
 
   if (fs.existsSync(IOS_FRAMEWORK_DIR)) {
+    validateIosBindings(IOS_DIR);
     console.log('[rln] RGBLightningNode.xcframework already exists, skipping.');
     return;
   }
 
+  if (!fs.existsSync(LOCAL_IOS_ZIP) && !VERSION) {
+    throw new Error(
+      'A BFA-capable RLN iOS build is required. Set UTEXO_RLN_IOS_ARCHIVE to your build archive or UTEXO_RLN_IOS_VERSION to a published compatible release.'
+    );
+  }
+  if (VERSION && !/^[0-9][0-9A-Za-z.+-]*$/.test(VERSION))
+    throw new Error('Invalid UTEXO_RLN_IOS_VERSION');
   if (!fs.existsSync(IOS_DIR)) fs.mkdirSync(IOS_DIR, { recursive: true });
 
   // Extract to a temp dir — the zip contains a swift/ subdirectory
@@ -105,9 +139,13 @@ async function setupIos() {
     fs.mkdirSync(innerTmp, { recursive: true });
     unzip(LOCAL_IOS_ZIP, innerTmp);
     const innerZip = fs.readdirSync(innerTmp).find((f) => f.endsWith('.zip'));
-    if (!innerZip)
-      throw new Error('No inner zip found inside swift-release.zip');
-    fs.renameSync(path.join(innerTmp, innerZip), IOS_ZIP);
+    if (innerZip) fs.renameSync(path.join(innerTmp, innerZip), IOS_ZIP);
+    else if (
+      fs.existsSync(path.join(innerTmp, 'swift', 'RGBLightningNode.swift'))
+    )
+      fs.copyFileSync(LOCAL_IOS_ZIP, IOS_ZIP);
+    else
+      throw new Error('Archive must contain a release zip or swift/ bindings');
     fs.rmSync(innerTmp, { recursive: true, force: true });
   } else {
     const url = `${BASE_URL}/rgb-lightning-node-swift-${VERSION}.zip`;
@@ -128,6 +166,8 @@ async function setupIos() {
     );
   }
 
+  validateIosBindings(swiftDir);
+
   // Move xcframework to ios/
   fs.cpSync(srcFramework, IOS_FRAMEWORK_DIR, { recursive: true });
 
@@ -145,12 +185,15 @@ async function setupIos() {
   console.log('[rln] RGBLightningNode.xcframework ready.');
 }
 
-(async () => {
-  try {
-    await setupIos();
-    console.log('[rln] Done.');
-  } catch (err) {
-    console.error(`[rln] Error: ${err.message}`);
-    process.exit(1);
-  }
-})();
+if (require.main === module)
+  (async () => {
+    try {
+      await setupIos();
+      console.log('[rln] Done.');
+    } catch (err) {
+      console.error(`[rln] Error: ${err.message}`);
+      process.exit(1);
+    }
+  })();
+
+module.exports = { validateIosBindings };

@@ -213,6 +213,26 @@ describe('UniFFI 0.13 response mapping', () => {
   });
 });
 
+describe('BFA mapping', () => {
+  it('retains exact balances and rejects values rounded by the numeric native bridge', async () => {
+    const wallet = createWalletSync();
+    const asset = {
+      assetId: 'rgb:bfa',
+      ticker: 'BFA',
+      name: 'BFA',
+      precision: 0,
+      initialSupply: 0,
+      timestamp: 1,
+      addedAt: 1,
+      balance: { settled: 5, future: 5, spendable: 5 },
+    };
+    wallet.rln.rlnListAssets = async () => ({ bfa: [asset] });
+    assert.equal((await wallet.listAssets()).bfa[0].balance.spendable, 5);
+    asset.balance.spendable = Number.MAX_SAFE_INTEGER + 1;
+    await assert.rejects(wallet.listAssets(), /exact integer range/);
+  });
+});
+
 // ── Run ──────────────────────────────────────────────────────────────────────
 
 for (const run of pending) await run();

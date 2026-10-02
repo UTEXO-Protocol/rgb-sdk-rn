@@ -1,4 +1,9 @@
 import type {
+  RlnBfaCapabilities,
+  RlnBurnParams,
+  RlnBurnResult,
+} from './rln-types';
+import type {
   RlnNodeInfo,
   RlnNetworkInfo,
   RlnPeer,
@@ -62,6 +67,8 @@ export interface IRLNUnlockParams {
   announceAddresses?: string[];
   announceAlias?: string | null;
   gossipRgsServerUrl?: string | null;
+  /** Ethereum RPC used by the native BFA validator. */
+  ethRpcUrl?: string | null;
 }
 
 export interface IRLNExternalSignerBootstrap {
@@ -76,6 +83,11 @@ export interface IRLNExternalSignerBootstrap {
 // ── IRLN interface ────────────────────────────────────────────────────────────
 
 export interface IRLN {
+  rlnBfaCapabilities(): Promise<RlnBfaCapabilities>;
+  rlnBurn(params: RlnBurnParams): Promise<RlnBurnResult>;
+  rlnGetConsignment(assetId: string, txid: string): Promise<string>;
+  rlnGetConsignmentPath(assetId: string, txid: string): Promise<string>;
+
   // ── Node lifecycle ──────────────────────────────────────────────────────────
 
   rlnCreateNode(params: IRLNNodeCreateParams): Promise<number>;

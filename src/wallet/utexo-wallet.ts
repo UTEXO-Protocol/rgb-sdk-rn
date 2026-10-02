@@ -1,3 +1,8 @@
+import {
+  validateBurnParams,
+  validateConsignmentLookup,
+} from './operations/validation';
+import type { BurnParams, BurnResult, ListAssets } from './types';
 import type { RefreshTransfersResult } from './refresh-types';
 import type {
   IUTEXOProtocol,
@@ -17,7 +22,6 @@ import type {
   Transaction,
   Transfer,
   Outpoint,
-  ListAssets,
   AssetNIA,
   AssetIfa,
   AssetUDA,
@@ -63,6 +67,7 @@ import type {
   RlnBtcBalance,
   RlnAssetBalance,
   RlnAssetNia,
+  RlnAssetBfa,
   RlnAssetCfa,
   RlnAssetIfa,
   RlnAssetUda,
@@ -326,8 +331,25 @@ function mapAssetUda(a: RlnAssetUda): AssetUDA {
   };
 }
 
+function mapAssetBfa(asset: RlnAssetBfa): RlnAssetBfa {
+  // The current shared SDK exposes numeric balances. Do not return rounded u64s.
+  for (const value of [
+    asset.initialSupply,
+    asset.balance.settled,
+    asset.balance.future,
+    asset.balance.spendable,
+  ]) {
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new Error(
+        'BFA supply or balance exceeds the supported exact integer range'
+      );
+  }
+  return { ...asset, balance: mapBalance(asset.balance) };
+}
+
 function mapListAssets(r: RlnListAssetsResponse): ListAssets {
   return {
+    bfa: (r.bfa ?? []).map(mapAssetBfa),
     nia: (r.nia ?? []).map(mapAssetNia),
     cfa: (r.cfa ?? []).map(mapAssetCfa),
     ifa: (r.ifa ?? []).map(mapAssetIfa),
@@ -524,6 +546,31 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       false
     );
     return params.num ?? 0;
+  }
+
+  async getBfaCapabilities() {
+    const native = await this.rln.rlnBfaCapabilities();
+    return {
+      ...native,
+      burn: native.burn && this.signer.supportsBurn === true,
+    };
+  }
+  /** Irreversible. This low-level method does not retry or deduplicate burns. */
+  async burn(params: BurnParams): Promise<BurnResult> {
+    validateBurnParams(params);
+    if (!(await this.getBfaCapabilities()).burn)
+      throw new Error('Burn is unsupported by this native build or signer');
+    return this.rln.rlnBurn(params);
+  }
+  /** Standard Base64 of the saved consignment bytes. No regeneration. */
+  async getConsignment(assetId: string, txid: string): Promise<string> {
+    validateConsignmentLookup(assetId, txid);
+    return this.rln.rlnGetConsignment(assetId, txid);
+  }
+  /** Local sandbox path. Never expose it to a dApp. */
+  async getConsignmentPath(assetId: string, txid: string): Promise<string> {
+    validateConsignmentLookup(assetId, txid);
+    return this.rln.rlnGetConsignmentPath(assetId, txid);
   }
 
   // ── Asset Operations ────────────────────────────────────

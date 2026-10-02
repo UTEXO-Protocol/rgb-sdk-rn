@@ -53,6 +53,7 @@ ios/RGBLightningNode.xcframework/
 ios/RGBLightningNode.swift
 ios/RGBLightningNodeFFI.h
 ios/RGBLightningNodeFFI.modulemap
+ios/.rln-ios-version
 
 # graphify knowledge graph (generated, local-only)
 graphify-out/

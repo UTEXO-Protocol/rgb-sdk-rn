@@ -1,4 +1,47 @@
 /* eslint no-unused-vars: "off", "@typescript-eslint/no-unused-vars": "error" -- TypeScript signatures. */
+/**
+ * Optional WebRGB burn/proof extension. Receiving and read methods work without it.
+ * Use an unlocked BFA wallet with ethRpcUrl and a burn-capable signer
+ * (PasswordRLNSigner; NativeExternalRLNSigner does not support burn).
+ *
+ * Setup: share one BurnOperations service and durable BurnOperationStore per
+ * wallet across sessions. The store implements readAll() and write(record),
+ * which resolves only after an upsert by record.id is durably saved.
+ *
+ * import { BurnOperations } from '@utexo/rgb-sdk-rn';
+ * import { WebRgbProvider } from '@utexo/rgb-sdk-rn/webrgb';
+ *
+ * const operations = new BurnOperations(wallet, store);
+ * const provider = new WebRgbProvider(wallet, {
+ *   ...approvedSessionOptions, // origin, authorization checks, confirmation UI
+ *   burn: { operations, allowedPayoutChainIds: ['eip155:42161'] },
+ * });
+ * await provider.enable();
+ * const burn = await provider.burnAsset({
+ *   network: wallet.getNetwork(),
+ *   assetId,
+ *   amount: '100', // decimal base units; never convert u64 amounts to JS numbers
+ *   burnRecipient: { chainId: 'eip155:42161', address: evmAddress },
+ * });
+ * const proof = await provider.getConsignment({ assetId, txid: burn.txid });
+ * provider.revoke(); // on session expiry/disconnect
+ *
+ * Flow: check getInfo().methods, validate the asset/network/payout allowlist,
+ * then confirm the asset, amount, payout chain/address, BTC fee, confirmations,
+ * and proof sharing. The host serializes approval dialogs. The operation service
+ * serializes burns, persists prepared -> pending before invoking native burn,
+ * and saves the result as complete. Failure before invocation cancels the record.
+ * The EVM address is encoded as 12 zero bytes followed by its 20 address bytes;
+ * the payout chain remains wallet policy, not part of the native recipient.
+ *
+ * Proof export returns Base64, byte length, and a Keccak-256 digest (16 MiB limit).
+ * Local paths stay inside the wallet; another origin's proof needs fresh consent.
+ *
+ * Recovery: never retry a pending burn. retryPersistence() saves a known result
+ * without reburning. After restart, reconcile() requires an independent verifier
+ * of the saved proof's asset, amount, recipient, and native result. Current RLN
+ * bindings do not provide that decoder; keep ambiguous outcomes pending.
+ */
 import { base64 } from '@scure/base';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';

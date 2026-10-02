@@ -54,7 +54,7 @@
     "dev": "tsc -w",
     "clean": "del-cli android/build ios/build lib",
     "prepare": "bob build",
-    "postinstall": "node scripts/download-rln-bindings.js && node scripts/setup-rln-bindings.js",
+    "postinstall": "node scripts/download-rln-bindings.js",
     "typecheck": "tsc",
     "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/binding/NativeRgb.ts && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgbsdkrn",
     "build": "bob build",
@@ -66,7 +66,7 @@
     "version:major": "npm version major && git push && git push --tags && npm publish --access public",
     "check:contract": "bob build && node --experimental-loader ./scripts/rn-stub-loader.mjs scripts/check-contract.mjs",
     "test": "npm run typecheck && npm run check:contract",
-    "test:webrgb": "bob build && node --test scripts/webrgb.test.mjs scripts/webrgb-burn.test.mjs scripts/rln-install.test.mjs"
+    "test:webrgb": "bob build && node --test scripts/webrgb.test.mjs scripts/webrgb-burn.test.mjs"
   },
   "repository": {
     "type": "git",

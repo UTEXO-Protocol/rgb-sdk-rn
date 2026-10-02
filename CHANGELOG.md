@@ -2,9 +2,14 @@
 
 ## Unreleased
 
-- Added WebRGB integration for wallet connections, RGB invoices, balances, and transfers.
-- Added BFA asset support, burn, and consignment export on iOS and Android.
-- Updated RLN to `0.15.0-beta.3`.
+__added__
+
+- **WebRGB integration** — wallet connections, RGB invoices, balances, and transfer tracking.
+- **BFA support on iOS and Android** — asset listing, burn, and consignment export.
+
+__changed__
+
+- Updated RLN native bindings to **`v0.15.0-beta.3`**.
 
 ## 1.0.0-beta.30
 

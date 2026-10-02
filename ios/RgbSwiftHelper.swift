@@ -158,7 +158,7 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnUnlockNode:password:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:gossipRgsServerUrl:)
+  @objc(_rlnUnlockNode:password:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:gossipRgsServerUrl:ethRpcUrl:)
   public static func _rlnUnlockNode(
     _ nodeId: NSNumber,
     password: String,
@@ -170,7 +170,8 @@ public class RgbSwiftHelper: NSObject {
     proxyEndpoint: String?,
     announceAddresses: [String],
     announceAlias: String?,
-    gossipRgsServerUrl: String?
+    gossipRgsServerUrl: String?,
+    ethRpcUrl: String?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -190,7 +191,8 @@ public class RgbSwiftHelper: NSObject {
           proxyEndpoint: proxyEndpoint,
           announceAddresses: announceAddresses,
           announceAlias: announceAlias,
-          gossipRgsServerUrl: gossipRgsServerUrl
+          gossipRgsServerUrl: gossipRgsServerUrl,
+          ethRpcUrl: ethRpcUrl
         )
       )
       return [:] as NSDictionary
@@ -808,7 +810,20 @@ public class RgbSwiftHelper: NSObject {
         return d as NSDictionary
       }
 
-      return ["nia": niaArr, "cfa": cfaArr, "ifa": ifaArr, "uda": udaArr] as NSDictionary
+      let bfaArr: [NSDictionary] = (res.bfa ?? []).map { a in
+        var d: [String: Any] = [
+          "assetId": a.assetId, "ticker": a.ticker, "name": a.name,
+          "precision": NSNumber(value: a.precision), "initialSupply": NSNumber(value: a.initialSupply),
+          "timestamp": NSNumber(value: a.timestamp), "addedAt": NSNumber(value: a.addedAt),
+          "balance": ["settled": NSNumber(value: a.balance.settled), "future": NSNumber(value: a.balance.future),
+                      "spendable": NSNumber(value: a.balance.spendable)] as NSDictionary,
+        ]
+        if let v = a.details { d["details"] = v }
+        if let v = a.rejectListUrl { d["rejectListUrl"] = v }
+        if let m = a.media { d["media"] = ["filePath": m.filePath, "mime": m.mime, "digest": m.digest] as NSDictionary }
+        return d as NSDictionary
+      }
+      return ["nia": niaArr, "cfa": cfaArr, "ifa": ifaArr, "uda": udaArr, "bfa": bfaArr] as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -1371,6 +1386,51 @@ public class RgbSwiftHelper: NSObject {
   /// `feeRate` arrives as an NSNumber for bridge symmetry with `_rlnSendRgb`,
   /// but `InflateRequest.feeRate` is a `UInt64` — fractional rates truncate,
   /// exactly as they do in `_rlnSendRgb`.
+  @objc(_rlnBurn:assetId:amount:burnRecipient:feeRate:minConfirmations:)
+  public static func _rlnBurn(_ nodeId: NSNumber, assetId: String, amount: String,
+    burnRecipient: String?, feeRate: NSNumber, minConfirmations: NSNumber) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node not found"]
+      }
+      guard !amount.isEmpty, amount.allSatisfy({ $0 >= "0" && $0 <= "9" }),
+        let units = UInt64(amount), units > 0,
+        let rate = UInt64(exactly: feeRate.doubleValue), rate > 0,
+        let confirmations = UInt8(exactly: minConfirmations.doubleValue) else {
+        return ["error": "Invalid burn amount, fee rate or confirmations", "errorCode": "INVALID_PARAMS"]
+      }
+      var recipient: Data? = nil
+      if let hex = burnRecipient {
+        guard hex.count == 64, hex.allSatisfy({ $0.isASCII && $0.isHexDigit }) else {
+          return ["error": "burnRecipient must be 32-byte hex without 0x", "errorCode": "INVALID_PARAMS"]
+        }
+        let chars = Array(hex)
+        recipient = Data(stride(from: 0, to: chars.count, by: 2).map { UInt8(String(chars[$0...$0+1]), radix: 16)! })
+      }
+      let result = try node.burn(request: BurnRequest(assetId: assetId, amount: units,
+        burnRecipient: recipient, feeRate: rate, minConfirmations: confirmations))
+      return ["txid": result.txid, "batchTransferIdx": NSNumber(value: result.batchTransferIdx)]
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)]
+    }
+  }
+
+  @objc(_rlnGetConsignment:assetId:txid:)
+  public static func _rlnGetConsignment(_ nodeId: NSNumber, assetId: String, txid: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else { return ["error": "RLN node not found"] }
+      return ["value": try node.getConsignment(assetId: assetId, txid: txid).base64EncodedString()]
+    } catch { return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] }
+  }
+
+  @objc(_rlnGetConsignmentPath:assetId:txid:)
+  public static func _rlnGetConsignmentPath(_ nodeId: NSNumber, assetId: String, txid: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else { return ["error": "RLN node not found"] }
+      return ["value": try node.getConsignmentPath(assetId: assetId, txid: txid)]
+    } catch { return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] }
+  }
+
   @objc(_rlnInflate:assetId:inflationAmounts:feeRate:minConfirmations:)
   public static func _rlnInflate(
     _ nodeId: NSNumber,

@@ -1,3 +1,8 @@
+import type {
+  RlnBfaCapabilities,
+  RlnBurnParams,
+  RlnBurnResult,
+} from './rln-types';
 import { WalletError } from '@utexo/rgb-sdk-core';
 import Rgb from './NativeRgb';
 import type {
@@ -90,6 +95,34 @@ export class RLNBinding implements IRLN {
   private lifecycleState: 'idle' | 'active' | 'shutting_down' | 'destroying' =
     'idle';
 
+  async rlnBfaCapabilities(): Promise<RlnBfaCapabilities> {
+    if (typeof Rgb.rlnBfaCapabilities !== 'function')
+      return { burn: false, consignment: false, bfa: false };
+    return Rgb.rlnBfaCapabilities();
+  }
+  async rlnBurn(params: RlnBurnParams): Promise<RlnBurnResult> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnBurn(
+        nodeId,
+        params.assetId,
+        params.amount,
+        params.burnRecipient ?? null,
+        params.feeRate,
+        params.minConfirmations
+      )
+    ) as Promise<RlnBurnResult>;
+  }
+  async rlnGetConsignment(assetId: string, txid: string): Promise<string> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnGetConsignment(nodeId, assetId, txid)
+    );
+  }
+  async rlnGetConsignmentPath(assetId: string, txid: string): Promise<string> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnGetConsignmentPath(nodeId, assetId, txid)
+    );
+  }
+
   // ── Node lifecycle ──────────────────────────────────────────────────────────
 
   async rlnCreateNode(params: IRLNNodeCreateParams): Promise<number> {
@@ -149,7 +182,8 @@ export class RLNBinding implements IRLN {
           request.proxyEndpoint ?? null,
           request.announceAddresses ?? [],
           request.announceAlias ?? null,
-          request.gossipRgsServerUrl ?? null
+          request.gossipRgsServerUrl ?? null,
+          request.ethRpcUrl ?? null
         );
 
       const maxConflictRetries = 4;

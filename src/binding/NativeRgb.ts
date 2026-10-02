@@ -1,6 +1,30 @@
 import { TurboModuleRegistry, type TurboModule } from 'react-native';
 
 export interface Spec extends TurboModule {
+  rlnBfaCapabilities(): Promise<{
+    burn: boolean;
+    consignment: boolean;
+    bfa: boolean;
+  }>;
+  rlnBurn(
+    nodeId: number,
+    assetId: string,
+    amount: string,
+    burnRecipient: string | null,
+    feeRate: number,
+    minConfirmations: number
+  ): Promise<object>;
+  rlnGetConsignment(
+    nodeId: number,
+    assetId: string,
+    txid: string
+  ): Promise<string>;
+  rlnGetConsignmentPath(
+    nodeId: number,
+    assetId: string,
+    txid: string
+  ): Promise<string>;
+
   // ── RLN native node methods (rgb_lightning_node) ───────────────────────────
   rlnCreateNode(
     storageDirPath: string,
@@ -74,7 +98,8 @@ export interface Spec extends TurboModule {
     proxyEndpoint: string | null,
     announceAddresses: string[],
     announceAlias: string | null,
-    gossipRgsServerUrl: string | null
+    gossipRgsServerUrl: string | null,
+    ethRpcUrl: string | null
   ): Promise<void>;
   rlnDestroyNode(nodeId: number): Promise<void>;
   rlnNodeInfo(nodeId: number): Promise<object>;

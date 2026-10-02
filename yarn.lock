@@ -1646,6 +1646,11 @@
     "@scure/bip32" "^2.0.1"
     "@scure/bip39" "^2.0.1"
 
+"@utexo/webrgb@^0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@utexo/webrgb/-/webrgb-0.1.0.tgz#2cefe9075b45eacd75cfd5b8b8526dbba5baaf76"
+  integrity sha512-uM+HQ2gFEe/VOoQLA/+CJTSoumnKqNNgatOJvh3NwVNigvD6fXhHCEJBEZv802wNZkRJUhCp9mdtVMekwXD9+g==
+
 abort-controller@^3.0.0:
   version "3.0.0"
   resolved "https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz"

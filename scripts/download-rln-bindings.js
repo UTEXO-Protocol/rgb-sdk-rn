@@ -1,22 +1,19 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
-// iOS xcframework is downloaded from GitHub releases,
-// or used from a local zip in src/bindings/ if present.
+// iOS xcframework is downloaded from the pinned GitHub release.
 // Android AAR is resolved from Maven Central by Gradle — no download needed here.
 
-const VERSION = '0.13.0-beta.3';
+const VERSION = '0.15.0-beta.3';
 const BASE_URL = `https://github.com/UTEXO-Protocol/rgb-lightning-node/releases/download/v${VERSION}`;
 
 const ROOT = path.join(__dirname, '..');
-const SRC_BINDINGS = path.join(ROOT, 'src', 'bindings');
-const LOCAL_IOS_ZIP = path.join(SRC_BINDINGS, 'swift-release.zip');
-
 const IOS_DIR = path.join(ROOT, 'ios');
 const IOS_ZIP = path.join(IOS_DIR, 'rgb-lightning-node-swift.zip');
 const IOS_FRAMEWORK_DIR = path.join(IOS_DIR, 'RGBLightningNode.xcframework');
+const IOS_VERSION_FILE = path.join(IOS_DIR, '.rln-ios-version');
 
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
@@ -74,7 +71,9 @@ function downloadFile(url, dest) {
 }
 
 function unzip(zipPath, outDir) {
-  execSync(`unzip -q -o "${zipPath}" -d "${outDir}"`, { stdio: 'inherit' });
+  execFileSync('unzip', ['-q', '-o', zipPath, '-d', outDir], {
+    stdio: 'inherit',
+  });
 }
 
 async function setupIos() {
@@ -83,8 +82,14 @@ async function setupIos() {
     return;
   }
 
-  if (fs.existsSync(IOS_FRAMEWORK_DIR)) {
-    console.log('[rln] RGBLightningNode.xcframework already exists, skipping.');
+  if (
+    fs.existsSync(IOS_FRAMEWORK_DIR) &&
+    fs.existsSync(IOS_VERSION_FILE) &&
+    fs.readFileSync(IOS_VERSION_FILE, 'utf8').trim() === VERSION
+  ) {
+    console.log(
+      `[rln] RGBLightningNode.xcframework (${VERSION}) already installed, skipping.`
+    );
     return;
   }
 
@@ -96,24 +101,9 @@ async function setupIos() {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   fs.mkdirSync(tmpDir, { recursive: true });
 
-  if (fs.existsSync(LOCAL_IOS_ZIP)) {
-    // Local wrapper zip found — extract the inner release zip from it
-    console.log(`[rln] Using local iOS zip: ${LOCAL_IOS_ZIP}`);
-    const innerTmp = path.join(IOS_DIR, '.tmp-rln-swift-inner');
-    if (fs.existsSync(innerTmp))
-      fs.rmSync(innerTmp, { recursive: true, force: true });
-    fs.mkdirSync(innerTmp, { recursive: true });
-    unzip(LOCAL_IOS_ZIP, innerTmp);
-    const innerZip = fs.readdirSync(innerTmp).find((f) => f.endsWith('.zip'));
-    if (!innerZip)
-      throw new Error('No inner zip found inside swift-release.zip');
-    fs.renameSync(path.join(innerTmp, innerZip), IOS_ZIP);
-    fs.rmSync(innerTmp, { recursive: true, force: true });
-  } else {
-    const url = `${BASE_URL}/rgb-lightning-node-swift-${VERSION}.zip`;
-    console.log(`[rln] Downloading iOS xcframework (${VERSION})...`);
-    await downloadFile(url, IOS_ZIP);
-  }
+  const url = `${BASE_URL}/rgb-lightning-node-swift-${VERSION}.zip`;
+  console.log(`[rln] Downloading iOS xcframework (${VERSION})...`);
+  await downloadFile(url, IOS_ZIP);
 
   console.log('[rln] Extracting...');
   unzip(IOS_ZIP, tmpDir);
@@ -128,7 +118,9 @@ async function setupIos() {
     );
   }
 
-  // Move xcframework to ios/
+  // Replace the previous framework after extracting the release.
+  fs.rmSync(IOS_VERSION_FILE, { force: true });
+  fs.rmSync(IOS_FRAMEWORK_DIR, { recursive: true, force: true });
   fs.cpSync(srcFramework, IOS_FRAMEWORK_DIR, { recursive: true });
 
   // Update generated binding files (Swift wrapper + FFI header + modulemap)
@@ -142,6 +134,7 @@ async function setupIos() {
   }
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.writeFileSync(IOS_VERSION_FILE, `${VERSION}\n`);
   console.log('[rln] RGBLightningNode.xcframework ready.');
 }
 

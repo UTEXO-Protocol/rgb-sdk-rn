@@ -10,7 +10,12 @@
       "types": "./lib/typescript/src/index.d.ts",
       "default": "./lib/module/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./webrgb": {
+      "source": "./src/integrations/webrgb/index.ts",
+      "types": "./lib/typescript/src/integrations/webrgb/index.d.ts",
+      "default": "./lib/module/integrations/webrgb/index.js"
+    }
   },
   "files": [
     "src",
@@ -40,13 +45,16 @@
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
-    "!**/.*"
+    "!**/.*",
+    "!src/bindings/**/*.zip",
+    "!ios/*.zip",
+    "!scripts/*.test.mjs"
   ],
   "scripts": {
     "dev": "tsc -w",
     "clean": "del-cli android/build ios/build lib",
     "prepare": "bob build",
-    "postinstall": "node scripts/download-rln-bindings.js && node scripts/setup-rln-bindings.js",
+    "postinstall": "node scripts/download-rln-bindings.js",
     "typecheck": "tsc",
     "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/binding/NativeRgb.ts && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgbsdkrn",
     "build": "bob build",
@@ -57,7 +65,8 @@
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public",
     "check:contract": "bob build && node --experimental-loader ./scripts/rn-stub-loader.mjs scripts/check-contract.mjs",
-    "test": "npm run typecheck && npm run check:contract"
+    "test": "npm run typecheck && npm run check:contract",
+    "test:webrgb": "bob build && node --test scripts/webrgb.test.mjs scripts/webrgb-burn.test.mjs"
   },
   "repository": {
     "type": "git",
@@ -78,7 +87,8 @@
   "license": "MIT",
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "@utexo/webrgb": "^0.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
@@ -93,7 +103,8 @@
     "prettier": "^3.0.0",
     "react-native": "*",
     "react-native-builder-bob": "^0.40.17",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "@utexo/webrgb": "^0.1.0"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
@@ -136,5 +147,10 @@
     "tabWidth": 2,
     "trailingComma": "es5",
     "useTabs": false
+  },
+  "peerDependenciesMeta": {
+    "@utexo/webrgb": {
+      "optional": true
+    }
   }
 }

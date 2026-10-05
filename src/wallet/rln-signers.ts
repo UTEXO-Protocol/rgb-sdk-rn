@@ -17,6 +17,8 @@ function toSeedHex(input: RLNKeyMaterial): string {
  * no state may ignore it.
  */
 export interface IRLNSigner {
+  /** Opt in only when this signer supports native RLN burn. */
+  readonly supportsBurn?: boolean;
   /** Called once on first-time node creation. Sets up keys on disk. */
   initNode(rln: RLNManager, storageDirPath?: string): Promise<void>;
   /** Called on every start (first time and restarts). */
@@ -32,6 +34,7 @@ export interface IRLNSigner {
 // ── Password-based signer ─────────────────────────────────────────────────────
 
 export class PasswordRLNSigner implements IRLNSigner {
+  readonly supportsBurn = true;
   private readonly password: string;
   private mnemonic: string | undefined;
 

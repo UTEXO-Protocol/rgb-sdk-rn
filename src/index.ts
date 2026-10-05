@@ -174,7 +174,6 @@ export type {
   // All model types
   BtcBalance,
   Unspent,
-  ListAssets,
   AssetBalance,
   AssetNIA,
   CreateUtxosBeginRequestModel,
@@ -219,3 +218,18 @@ export type {
   RefreshedTransfer,
   RefreshTransfersResult,
 } from './wallet/refresh-types';
+
+export type {
+  BurnParams,
+  BurnResult,
+  BfaCapabilities,
+  AssetBfa,
+  ListAssets,
+} from './wallet/types';
+
+export { BurnOperations, normalizeBurnRecord } from './wallet/operations/burn';
+export type {
+  BurnOperationRecord,
+  BurnOperationStore,
+  BurnOperationMetadata,
+} from './wallet/operations/burn';

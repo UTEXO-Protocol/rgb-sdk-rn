@@ -136,6 +136,7 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
      announceAddresses:(NSArray<NSString *> *)announceAddresses
          announceAlias:(NSString *)announceAlias
     gossipRgsServerUrl:(NSString * _Nullable)gossipRgsServerUrl
+            ethRpcUrl:(NSString * _Nullable)ethRpcUrl
                resolve:(RCTPromiseResolveBlock)resolve
                 reject:(RCTPromiseRejectBlock)reject
 {
@@ -150,7 +151,8 @@ enableVirtualChannelsV0:(NSNumber *)enableVirtualChannelsV0
                                                   proxyEndpoint:proxyEndpoint
                                               announceAddresses:announceAddresses
                                                   announceAlias:announceAlias
-                                             gossipRgsServerUrl:gossipRgsServerUrl];
+                                             gossipRgsServerUrl:gossipRgsServerUrl
+                                                     ethRpcUrl:ethRpcUrl];
         NSString *errorMessage = result[@"error"];
         if (errorMessage != nil) {
             reject(result[@"errorCode"] ?: @"RLN_UNLOCK_NODE_ERROR", errorMessage, nil);
@@ -1201,6 +1203,43 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
         } else {
             resolve(result);
         }
+    });
+}
+
+- (void)rlnBfaCapabilities:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+    resolve(@{@"burn": @YES, @"consignment": @YES, @"bfa": @YES});
+}
+
+- (void)rlnBurn:(double)nodeId assetId:(NSString *)assetId amount:(NSString *)amount
+  burnRecipient:(NSString * _Nullable)burnRecipient feeRate:(double)feeRate
+  minConfirmations:(double)minConfirmations resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnBurn:@(nodeId) assetId:assetId amount:amount
+            burnRecipient:burnRecipient feeRate:@(feeRate) minConfirmations:@(minConfirmations)];
+        if (result[@"error"]) reject(result[@"errorCode"] ?: @"RLN_BURN_ERROR", result[@"error"], nil);
+        else resolve(result);
+    });
+}
+
+- (void)rlnGetConsignment:(double)nodeId assetId:(NSString *)assetId txid:(NSString *)txid
+  resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnGetConsignment:@(nodeId) assetId:assetId txid:txid];
+        if (result[@"error"]) reject(result[@"errorCode"] ?: @"RLN_CONSIGNMENT_ERROR", result[@"error"], nil);
+        else resolve(result[@"value"]);
+    });
+}
+
+- (void)rlnGetConsignmentPath:(double)nodeId assetId:(NSString *)assetId txid:(NSString *)txid
+  resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+    EXEC_ASYNC({
+        NSDictionary *result = [RgbSwiftHelper _rlnGetConsignmentPath:@(nodeId) assetId:assetId txid:txid];
+        if (result[@"error"]) reject(result[@"errorCode"] ?: @"RLN_CONSIGNMENT_ERROR", result[@"error"], nil);
+        else resolve(result[@"value"]);
     });
 }
 

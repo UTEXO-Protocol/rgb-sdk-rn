@@ -76,13 +76,14 @@ const expect = (actual) => ({
  * made until a method runs. Carriers and `capabilities` are set at
  * construction, so this is all the capability block needs.
  */
-const createWalletSync = () =>
+const createWalletSync = (params = {}) =>
   new UTEXOWallet(
     {
       storageDirPath: '/tmp/rgb-sdk-rn-conformance',
       daemonListeningPort: 3001,
       ldkPeerListeningPort: 9735,
       network: 'regtest',
+      ...params,
     },
     { initNode: async () => {}, unlockNode: async () => {} }
   );
@@ -210,6 +211,157 @@ describe('UniFFI 0.13 response mapping', () => {
       assert.equal(decoded.description, extra.description ?? undefined);
       assert.equal(decoded.descriptionHash, extra.descriptionHash ?? undefined);
     }
+  });
+});
+
+describe('Mainnet Lightning gate', () => {
+  const lightningCalls = [
+    ['createLightningInvoice', [{}]],
+    ['createHodlInvoice', [{ paymentHash: 'hash', expirySec: 3600 }]],
+    ['claimHodlInvoice', ['hash', 'preimage']],
+    ['cancelHodlInvoice', ['hash']],
+    ['listPayments', []],
+    ['apayNew', ['host']],
+    ['apayNewWithAddress', ['host', 'user', 'example.com']],
+    ['getLightningReceiveStatus', ['invoice']],
+    ['getLightningSendStatus', ['hash']],
+    ['payLightningInvoice', [{ lnInvoice: 'invoice' }]],
+    ['listLightningPayments', []],
+    ['connectPeer', ['peer@host:9735']],
+    ['listPeers', []],
+    ['disconnectPeer', ['peer']],
+    ['listChannels', []],
+    [
+      'openChannel',
+      [{ peerPubkey: 'peer', capacitySat: 10000, isPublic: false }],
+    ],
+    ['closeChannel', ['channel', 'peer', false]],
+    ['getChannelId', ['temporary-channel']],
+    ['keysend', ['peer', 1000]],
+    ['decodeLnInvoice', ['invoice']],
+    ['invoiceStatus', ['invoice']],
+  ];
+  const peer = {
+    baseUrl: 'https://lsp.example.com',
+    peerPubkey: 'peer',
+    peerHost: 'lsp.example.com',
+    peerPort: 9735,
+  };
+
+  it('rejects every LN/LSP call before accessing the manager or HTTP', async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      throw new Error('Unexpected HTTP request');
+    };
+    try {
+      for (const network of ['mainnet', 'bitcoin', ' MAINNET ']) {
+        const wallet = createWalletSync({ network, lspBaseUrl: peer.baseUrl });
+        let managerCalls = 0;
+        wallet.rln = new Proxy(
+          {},
+          {
+            get: () => () => {
+              managerCalls += 1;
+              throw new Error('Unexpected manager call');
+            },
+          }
+        );
+        for (const [method, args] of [
+          ...lightningCalls,
+          ['createLsp', []],
+          ['createLsp', [peer]],
+        ]) {
+          await assert.rejects(
+            wallet[method](...args),
+            {
+              code: 'LIGHTNING_DISABLED_ON_MAINNET',
+            },
+            method
+          );
+        }
+        assert.equal(managerCalls, 0);
+      }
+      assert.equal(fetchCalls, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('keeps Lightning methods available on the other supported networks', async () => {
+    for (const network of [
+      'regtest',
+      'testnet',
+      'testnet4',
+      'signet',
+      'utexo',
+    ]) {
+      const wallet = createWalletSync({ network });
+      const reachedManager = new Error('Reached manager');
+      wallet.rln = new Proxy(
+        {},
+        {
+          get: () => async () => {
+            throw reachedManager;
+          },
+        }
+      );
+      for (const [method, args] of lightningCalls) {
+        await assert.rejects(
+          wallet[method](...args),
+          (error) => error === reachedManager,
+          method
+        );
+      }
+      assert.ok(await wallet.createLsp(peer));
+    }
+  });
+
+  it('keeps on-chain calls available and snapshots the configured network', async () => {
+    const params = { network: 'mainnet' };
+    const wallet = new UTEXOWallet(params, {
+      initNode: async () => {},
+      unlockNode: async () => {},
+    });
+    params.network = 'regtest';
+    assert.equal(wallet.getNetwork(), 'mainnet');
+    await assert.rejects(wallet.connectPeer('peer'), {
+      code: 'LIGHTNING_DISABLED_ON_MAINNET',
+    });
+    wallet.rln.rlnAddress = async () => ({ address: 'bc1qexample' });
+    wallet.rln.rlnSendBtc = async () => ({ txid: 'txid' });
+    wallet.rln.rlnRgbInvoice = async () => ({ invoice: 'rgb:invoice' });
+    assert.equal(await wallet.getAddress(), 'bc1qexample');
+    assert.equal(
+      await wallet.sendBtc({
+        amount: 1000,
+        address: 'bc1qrecipient',
+        feeRate: 1,
+      }),
+      'txid'
+    );
+    assert.equal((await wallet.onchainReceive({})).invoice, 'rgb:invoice');
+  });
+});
+
+describe('BFA mapping', () => {
+  it('retains exact balances and rejects values rounded by the numeric native bridge', async () => {
+    const wallet = createWalletSync();
+    const asset = {
+      assetId: 'rgb:bfa',
+      ticker: 'BFA',
+      name: 'BFA',
+      precision: 0,
+      initialSupply: 0,
+      timestamp: 1,
+      addedAt: 1,
+      balance: { settled: 5, future: 5, spendable: 5 },
+    };
+    wallet.rln.rlnListAssets = async () => ({ bfa: [asset] });
+    assert.equal((await wallet.listAssets()).bfa[0].balance.spendable, 5);
+    asset.balance.spendable = Number.MAX_SAFE_INTEGER + 1;
+    await assert.rejects(wallet.listAssets(), /exact integer range/);
   });
 });
 

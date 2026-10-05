@@ -35,7 +35,6 @@ cd ios && pod install
 
 # Download/refresh iOS xcframework (runs automatically on postinstall; Android AAR comes from Maven Central via Gradle)
 node scripts/download-rln-bindings.js
-node scripts/setup-rln-bindings.js
 ```
 
 There is no JavaScript test runner. Android instrumentation tests live in `android/src/androidTest/`.
@@ -92,9 +91,9 @@ The signer is created with a disk-backed VLS store (`NativeExternalSigner.newWit
 
 **iOS**: `Rgb.mm` (ObjC++ bridge) dispatches to `RgbSwiftHelper.swift` synchronous static methods, returning NSDictionary results. The `.mm` file bridges async Promise calls into those sync helpers via Grand Central Dispatch.
 
-**Android**: `RgbModule.kt` extends the codegen-generated `NativeRgbSpec`, dispatches each bridge call via Kotlin coroutines (`Dispatchers.IO`). The Android binding (`com.utexo:rgb-lightning-node-android:0.11.0-beta.3`) is resolved from Maven Central. JNA (`net.java.dev.jna:jna:5.17.0@aar`) is required for UniFFI.
+**Android**: `RgbModule.kt` extends the codegen-generated `NativeRgbSpec`, dispatches each bridge call via Kotlin coroutines (`Dispatchers.IO`). The Android binding (`com.utexo:rgb-lightning-node-android:0.15.0-beta.3`) is resolved from Maven Central. JNA (`net.java.dev.jna:jna:5.17.0@aar`) is required for UniFFI.
 
-**iOS native framework**: `RGBLightningNode.xcframework` is downloaded from GitHub releases during `postinstall` (`scripts/download-rln-bindings.js`). It is not committed. Version is pinned at `0.11.0-beta.3`. For local development with a custom build, place `swift-release.zip` at `src/bindings/swift-release.zip` — the script will use it instead.
+**iOS native framework**: `RGBLightningNode.xcframework` is downloaded from GitHub releases during `postinstall` (`scripts/download-rln-bindings.js`). It is not committed. Version is pinned at `0.15.0-beta.3`; `ios/.rln-ios-version` tracks the installed release so older or unversioned frameworks are replaced. Only the pinned release is used; local archives and environment overrides are not supported.
 
 ### Type mapping
 
@@ -147,7 +146,6 @@ src/
     rln-signers.ts              PasswordRLNSigner, NativeExternalRLNSigner (IRLNSigner)
   scripts/
     download-rln-bindings.js    Downloads iOS xcframework from GitHub releases
-    setup-rln-bindings.js       Installs xcframework into ios/
 android/
   src/main/java/com/rgbsdkrn/
     RgbModule.kt                NativeRgbSpec impl, dispatches via Dispatchers.IO

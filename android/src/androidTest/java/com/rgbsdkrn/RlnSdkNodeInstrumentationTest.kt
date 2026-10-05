@@ -7,6 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.utexo.rgblightningnode.SdkInitRequest
+import org.utexo.rgblightningnode.SdkLdkChainSync
 import org.utexo.rgblightningnode.SdkNode
 import org.utexo.rgblightningnode.SdkUnlockRequest
 import java.io.File
@@ -59,14 +60,17 @@ class RlnSdkNodeInstrumentationTest {
 
       val unlockRequest = SdkUnlockRequest(
         password = nodePassword,
-        bitcoindRpcUsername = rpcUser,
-        bitcoindRpcPassword = rpcPassword,
-        bitcoindRpcHost = rpcHost,
-        bitcoindRpcPort = rpcPort.toUShort(),
+        ldkChainSync = SdkLdkChainSync.BlockSync(
+          bitcoindRpcUsername = rpcUser,
+          bitcoindRpcPassword = rpcPassword,
+          bitcoindRpcHost = rpcHost,
+          bitcoindRpcPort = rpcPort.toUShort()
+        ),
         indexerUrl = indexerUrl,
         proxyEndpoint = proxyEndpoint,
         announceAddresses = emptyList(),
-        announceAlias = null
+        announceAlias = null,
+        ethRpcUrl = args.getString("rlnEthRpcUrl")
       )
 
       // Match android-e2e PaymentTest sequence strictly: init once, then unlock once.

@@ -909,6 +909,8 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func btcBalance(skipSync: Bool) throws -> BtcBalanceInfo
 
+    func burn(request: BurnRequest) throws -> BurnResponse
+
     func cancelhodlinvoice(request: CancelHodlInvoiceRequest) throws
 
     func checkIndexerUrl(indexerUrl: String) throws -> CheckIndexerUrlResponse
@@ -937,9 +939,17 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func getChannelId(temporaryChannelId: ChannelId) throws -> ChannelId
 
+    func getConsignment(assetId: ContractId, txid: Txid) throws -> Data
+
+    func getConsignmentPath(assetId: ContractId, txid: Txid) throws -> String
+
     func getPayment(paymentHash: PaymentHash, paymentType: PaymentType) throws -> Payment
 
     func getSwap(paymentHash: PaymentHash, taker: Bool) throws -> Swap
+
+    func importrgbcontract(request: ImportRgbContractRequest) throws -> ImportRgbContractResponse
+
+    func importrgbtransferconsignment(request: ImportRgbTransferConsignmentRequest) throws -> ImportRgbTransferConsignmentResponse
 
     func inflate(request: InflateRequest) throws -> InflateResponse
 
@@ -1139,6 +1149,13 @@ open class SdkNode:
         })
     }
 
+    open func burn(request: BurnRequest) throws -> BurnResponse {
+        return try FfiConverterTypeBurnResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_burn(self.uniffiClonePointer(),
+                                                             FfiConverterTypeBurnRequest.lower(request), $0)
+        })
+    }
+
     open func cancelhodlinvoice(request: CancelHodlInvoiceRequest) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_cancelhodlinvoice(self.uniffiClonePointer(),
@@ -1237,6 +1254,22 @@ open class SdkNode:
         })
     }
 
+    open func getConsignment(assetId: ContractId, txid: Txid) throws -> Data {
+        return try FfiConverterData.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_get_consignment(self.uniffiClonePointer(),
+                                                                        FfiConverterTypeContractId.lower(assetId),
+                                                                        FfiConverterTypeTxid.lower(txid), $0)
+        })
+    }
+
+    open func getConsignmentPath(assetId: ContractId, txid: Txid) throws -> String {
+        return try FfiConverterString.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_get_consignment_path(self.uniffiClonePointer(),
+                                                                             FfiConverterTypeContractId.lower(assetId),
+                                                                             FfiConverterTypeTxid.lower(txid), $0)
+        })
+    }
+
     open func getPayment(paymentHash: PaymentHash, paymentType: PaymentType) throws -> Payment {
         return try FfiConverterTypePayment.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_get_payment(self.uniffiClonePointer(),
@@ -1250,6 +1283,20 @@ open class SdkNode:
             uniffi_rgb_lightning_node_fn_method_sdknode_get_swap(self.uniffiClonePointer(),
                                                                  FfiConverterTypePaymentHash.lower(paymentHash),
                                                                  FfiConverterBool.lower(taker), $0)
+        })
+    }
+
+    open func importrgbcontract(request: ImportRgbContractRequest) throws -> ImportRgbContractResponse {
+        return try FfiConverterTypeImportRgbContractResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_importrgbcontract(self.uniffiClonePointer(),
+                                                                          FfiConverterTypeImportRgbContractRequest.lower(request), $0)
+        })
+    }
+
+    open func importrgbtransferconsignment(request: ImportRgbTransferConsignmentRequest) throws -> ImportRgbTransferConsignmentResponse {
+        return try FfiConverterTypeImportRgbTransferConsignmentResponse.lift(rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_importrgbtransferconsignment(self.uniffiClonePointer(),
+                                                                                     FfiConverterTypeImportRgbTransferConsignmentRequest.lower(request), $0)
         })
     }
 
@@ -1755,6 +1802,139 @@ public func FfiConverterTypeAssetBalanceInfo_lift(_ buf: RustBuffer) throws -> A
 #endif
 public func FfiConverterTypeAssetBalanceInfo_lower(_ value: AssetBalanceInfo) -> RustBuffer {
     return FfiConverterTypeAssetBalanceInfo.lower(value)
+}
+
+public struct AssetBfa {
+    public var assetId: ContractId
+    public var ticker: String
+    public var name: String
+    public var details: String?
+    public var precision: UInt8
+    public var initialSupply: UInt64
+    public var timestamp: Int64
+    public var addedAt: Int64
+    public var balance: AssetBalanceInfo
+    public var media: Media?
+    public var rejectListUrl: String?
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(assetId: ContractId, ticker: String, name: String, details: String?, precision: UInt8, initialSupply: UInt64, timestamp: Int64, addedAt: Int64, balance: AssetBalanceInfo, media: Media?, rejectListUrl: String?) {
+        self.assetId = assetId
+        self.ticker = ticker
+        self.name = name
+        self.details = details
+        self.precision = precision
+        self.initialSupply = initialSupply
+        self.timestamp = timestamp
+        self.addedAt = addedAt
+        self.balance = balance
+        self.media = media
+        self.rejectListUrl = rejectListUrl
+    }
+}
+
+extension AssetBfa: Equatable, Hashable {
+    public static func == (lhs: AssetBfa, rhs: AssetBfa) -> Bool {
+        if lhs.assetId != rhs.assetId {
+            return false
+        }
+        if lhs.ticker != rhs.ticker {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.details != rhs.details {
+            return false
+        }
+        if lhs.precision != rhs.precision {
+            return false
+        }
+        if lhs.initialSupply != rhs.initialSupply {
+            return false
+        }
+        if lhs.timestamp != rhs.timestamp {
+            return false
+        }
+        if lhs.addedAt != rhs.addedAt {
+            return false
+        }
+        if lhs.balance != rhs.balance {
+            return false
+        }
+        if lhs.media != rhs.media {
+            return false
+        }
+        if lhs.rejectListUrl != rhs.rejectListUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(assetId)
+        hasher.combine(ticker)
+        hasher.combine(name)
+        hasher.combine(details)
+        hasher.combine(precision)
+        hasher.combine(initialSupply)
+        hasher.combine(timestamp)
+        hasher.combine(addedAt)
+        hasher.combine(balance)
+        hasher.combine(media)
+        hasher.combine(rejectListUrl)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAssetBfa: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AssetBfa {
+        return
+            try AssetBfa(
+                assetId: FfiConverterTypeContractId.read(from: &buf),
+                ticker: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                details: FfiConverterOptionString.read(from: &buf),
+                precision: FfiConverterUInt8.read(from: &buf),
+                initialSupply: FfiConverterUInt64.read(from: &buf),
+                timestamp: FfiConverterInt64.read(from: &buf),
+                addedAt: FfiConverterInt64.read(from: &buf),
+                balance: FfiConverterTypeAssetBalanceInfo.read(from: &buf),
+                media: FfiConverterOptionTypeMedia.read(from: &buf),
+                rejectListUrl: FfiConverterOptionString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: AssetBfa, into buf: inout [UInt8]) {
+        FfiConverterTypeContractId.write(value.assetId, into: &buf)
+        FfiConverterString.write(value.ticker, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.details, into: &buf)
+        FfiConverterUInt8.write(value.precision, into: &buf)
+        FfiConverterUInt64.write(value.initialSupply, into: &buf)
+        FfiConverterInt64.write(value.timestamp, into: &buf)
+        FfiConverterInt64.write(value.addedAt, into: &buf)
+        FfiConverterTypeAssetBalanceInfo.write(value.balance, into: &buf)
+        FfiConverterOptionTypeMedia.write(value.media, into: &buf)
+        FfiConverterOptionString.write(value.rejectListUrl, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAssetBfa_lift(_ buf: RustBuffer) throws -> AssetBfa {
+    return try FfiConverterTypeAssetBfa.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAssetBfa_lower(_ value: AssetBfa) -> RustBuffer {
+    return FfiConverterTypeAssetBfa.lower(value)
 }
 
 public struct AssetCfa {
@@ -3022,6 +3202,152 @@ public func FfiConverterTypeBtcBalanceInfo_lower(_ value: BtcBalanceInfo) -> Rus
     return FfiConverterTypeBtcBalanceInfo.lower(value)
 }
 
+public struct BurnRequest {
+    public var assetId: ContractId
+    public var amount: UInt64
+    public var burnRecipient: Data?
+    public var feeRate: UInt64
+    public var minConfirmations: UInt8
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(assetId: ContractId, amount: UInt64, burnRecipient: Data?, feeRate: UInt64, minConfirmations: UInt8) {
+        self.assetId = assetId
+        self.amount = amount
+        self.burnRecipient = burnRecipient
+        self.feeRate = feeRate
+        self.minConfirmations = minConfirmations
+    }
+}
+
+extension BurnRequest: Equatable, Hashable {
+    public static func == (lhs: BurnRequest, rhs: BurnRequest) -> Bool {
+        if lhs.assetId != rhs.assetId {
+            return false
+        }
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        if lhs.burnRecipient != rhs.burnRecipient {
+            return false
+        }
+        if lhs.feeRate != rhs.feeRate {
+            return false
+        }
+        if lhs.minConfirmations != rhs.minConfirmations {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(assetId)
+        hasher.combine(amount)
+        hasher.combine(burnRecipient)
+        hasher.combine(feeRate)
+        hasher.combine(minConfirmations)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBurnRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BurnRequest {
+        return
+            try BurnRequest(
+                assetId: FfiConverterTypeContractId.read(from: &buf),
+                amount: FfiConverterUInt64.read(from: &buf),
+                burnRecipient: FfiConverterOptionData.read(from: &buf),
+                feeRate: FfiConverterUInt64.read(from: &buf),
+                minConfirmations: FfiConverterUInt8.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: BurnRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeContractId.write(value.assetId, into: &buf)
+        FfiConverterUInt64.write(value.amount, into: &buf)
+        FfiConverterOptionData.write(value.burnRecipient, into: &buf)
+        FfiConverterUInt64.write(value.feeRate, into: &buf)
+        FfiConverterUInt8.write(value.minConfirmations, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBurnRequest_lift(_ buf: RustBuffer) throws -> BurnRequest {
+    return try FfiConverterTypeBurnRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBurnRequest_lower(_ value: BurnRequest) -> RustBuffer {
+    return FfiConverterTypeBurnRequest.lower(value)
+}
+
+public struct BurnResponse {
+    public var txid: Txid
+    public var batchTransferIdx: Int32
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(txid: Txid, batchTransferIdx: Int32) {
+        self.txid = txid
+        self.batchTransferIdx = batchTransferIdx
+    }
+}
+
+extension BurnResponse: Equatable, Hashable {
+    public static func == (lhs: BurnResponse, rhs: BurnResponse) -> Bool {
+        if lhs.txid != rhs.txid {
+            return false
+        }
+        if lhs.batchTransferIdx != rhs.batchTransferIdx {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(txid)
+        hasher.combine(batchTransferIdx)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBurnResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BurnResponse {
+        return
+            try BurnResponse(
+                txid: FfiConverterTypeTxid.read(from: &buf),
+                batchTransferIdx: FfiConverterInt32.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: BurnResponse, into buf: inout [UInt8]) {
+        FfiConverterTypeTxid.write(value.txid, into: &buf)
+        FfiConverterInt32.write(value.batchTransferIdx, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBurnResponse_lift(_ buf: RustBuffer) throws -> BurnResponse {
+    return try FfiConverterTypeBurnResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBurnResponse_lower(_ value: BurnResponse) -> RustBuffer {
+    return FfiConverterTypeBurnResponse.lower(value)
+}
+
 public struct CancelHodlInvoiceRequest {
     public var paymentHash: PaymentHash
 
@@ -3811,6 +4137,274 @@ public func FfiConverterTypeEstimateFeeResponse_lower(_ value: EstimateFeeRespon
     return FfiConverterTypeEstimateFeeResponse.lower(value)
 }
 
+public struct ImportRgbContractRequest {
+    public var contractBase64: String
+    public var expectedAssetId: ContractId
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(contractBase64: String, expectedAssetId: ContractId) {
+        self.contractBase64 = contractBase64
+        self.expectedAssetId = expectedAssetId
+    }
+}
+
+extension ImportRgbContractRequest: Equatable, Hashable {
+    public static func == (lhs: ImportRgbContractRequest, rhs: ImportRgbContractRequest) -> Bool {
+        if lhs.contractBase64 != rhs.contractBase64 {
+            return false
+        }
+        if lhs.expectedAssetId != rhs.expectedAssetId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(contractBase64)
+        hasher.combine(expectedAssetId)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRgbContractRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRgbContractRequest {
+        return
+            try ImportRgbContractRequest(
+                contractBase64: FfiConverterString.read(from: &buf),
+                expectedAssetId: FfiConverterTypeContractId.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: ImportRgbContractRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.contractBase64, into: &buf)
+        FfiConverterTypeContractId.write(value.expectedAssetId, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRgbContractRequest_lift(_ buf: RustBuffer) throws -> ImportRgbContractRequest {
+    return try FfiConverterTypeImportRgbContractRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRgbContractRequest_lower(_ value: ImportRgbContractRequest) -> RustBuffer {
+    return FfiConverterTypeImportRgbContractRequest.lower(value)
+}
+
+public struct ImportRgbContractResponse {
+    public var assetId: ContractId
+    public var alreadyImported: Bool
+    public var metadata: AssetMetadataInfo
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(assetId: ContractId, alreadyImported: Bool, metadata: AssetMetadataInfo) {
+        self.assetId = assetId
+        self.alreadyImported = alreadyImported
+        self.metadata = metadata
+    }
+}
+
+extension ImportRgbContractResponse: Equatable, Hashable {
+    public static func == (lhs: ImportRgbContractResponse, rhs: ImportRgbContractResponse) -> Bool {
+        if lhs.assetId != rhs.assetId {
+            return false
+        }
+        if lhs.alreadyImported != rhs.alreadyImported {
+            return false
+        }
+        if lhs.metadata != rhs.metadata {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(assetId)
+        hasher.combine(alreadyImported)
+        hasher.combine(metadata)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRgbContractResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRgbContractResponse {
+        return
+            try ImportRgbContractResponse(
+                assetId: FfiConverterTypeContractId.read(from: &buf),
+                alreadyImported: FfiConverterBool.read(from: &buf),
+                metadata: FfiConverterTypeAssetMetadataInfo.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: ImportRgbContractResponse, into buf: inout [UInt8]) {
+        FfiConverterTypeContractId.write(value.assetId, into: &buf)
+        FfiConverterBool.write(value.alreadyImported, into: &buf)
+        FfiConverterTypeAssetMetadataInfo.write(value.metadata, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRgbContractResponse_lift(_ buf: RustBuffer) throws -> ImportRgbContractResponse {
+    return try FfiConverterTypeImportRgbContractResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRgbContractResponse_lower(_ value: ImportRgbContractResponse) -> RustBuffer {
+    return FfiConverterTypeImportRgbContractResponse.lower(value)
+}
+
+public struct ImportRgbTransferConsignmentRequest {
+    public var consignmentBase64: String
+    public var offchainTxid: String
+    public var expectedAssetId: ContractId?
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(consignmentBase64: String, offchainTxid: String, expectedAssetId: ContractId?) {
+        self.consignmentBase64 = consignmentBase64
+        self.offchainTxid = offchainTxid
+        self.expectedAssetId = expectedAssetId
+    }
+}
+
+extension ImportRgbTransferConsignmentRequest: Equatable, Hashable {
+    public static func == (lhs: ImportRgbTransferConsignmentRequest, rhs: ImportRgbTransferConsignmentRequest) -> Bool {
+        if lhs.consignmentBase64 != rhs.consignmentBase64 {
+            return false
+        }
+        if lhs.offchainTxid != rhs.offchainTxid {
+            return false
+        }
+        if lhs.expectedAssetId != rhs.expectedAssetId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(consignmentBase64)
+        hasher.combine(offchainTxid)
+        hasher.combine(expectedAssetId)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRgbTransferConsignmentRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRgbTransferConsignmentRequest {
+        return
+            try ImportRgbTransferConsignmentRequest(
+                consignmentBase64: FfiConverterString.read(from: &buf),
+                offchainTxid: FfiConverterString.read(from: &buf),
+                expectedAssetId: FfiConverterOptionTypeContractId.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: ImportRgbTransferConsignmentRequest, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.consignmentBase64, into: &buf)
+        FfiConverterString.write(value.offchainTxid, into: &buf)
+        FfiConverterOptionTypeContractId.write(value.expectedAssetId, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRgbTransferConsignmentRequest_lift(_ buf: RustBuffer) throws -> ImportRgbTransferConsignmentRequest {
+    return try FfiConverterTypeImportRgbTransferConsignmentRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRgbTransferConsignmentRequest_lower(_ value: ImportRgbTransferConsignmentRequest) -> RustBuffer {
+    return FfiConverterTypeImportRgbTransferConsignmentRequest.lower(value)
+}
+
+public struct ImportRgbTransferConsignmentResponse {
+    public var assetId: ContractId
+    public var alreadyImported: Bool
+    public var metadata: AssetMetadataInfo
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(assetId: ContractId, alreadyImported: Bool, metadata: AssetMetadataInfo) {
+        self.assetId = assetId
+        self.alreadyImported = alreadyImported
+        self.metadata = metadata
+    }
+}
+
+extension ImportRgbTransferConsignmentResponse: Equatable, Hashable {
+    public static func == (lhs: ImportRgbTransferConsignmentResponse, rhs: ImportRgbTransferConsignmentResponse) -> Bool {
+        if lhs.assetId != rhs.assetId {
+            return false
+        }
+        if lhs.alreadyImported != rhs.alreadyImported {
+            return false
+        }
+        if lhs.metadata != rhs.metadata {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(assetId)
+        hasher.combine(alreadyImported)
+        hasher.combine(metadata)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRgbTransferConsignmentResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRgbTransferConsignmentResponse {
+        return
+            try ImportRgbTransferConsignmentResponse(
+                assetId: FfiConverterTypeContractId.read(from: &buf),
+                alreadyImported: FfiConverterBool.read(from: &buf),
+                metadata: FfiConverterTypeAssetMetadataInfo.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: ImportRgbTransferConsignmentResponse, into buf: inout [UInt8]) {
+        FfiConverterTypeContractId.write(value.assetId, into: &buf)
+        FfiConverterBool.write(value.alreadyImported, into: &buf)
+        FfiConverterTypeAssetMetadataInfo.write(value.metadata, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRgbTransferConsignmentResponse_lift(_ buf: RustBuffer) throws -> ImportRgbTransferConsignmentResponse {
+    return try FfiConverterTypeImportRgbTransferConsignmentResponse.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRgbTransferConsignmentResponse_lower(_ value: ImportRgbTransferConsignmentResponse) -> RustBuffer {
+    return FfiConverterTypeImportRgbTransferConsignmentResponse.lower(value)
+}
+
 public struct InflateRequest {
     public var assetId: ContractId
     public var inflationAmounts: [UInt64]
@@ -3946,14 +4540,16 @@ public struct ListAssetsResponse {
     public var uda: [AssetUda]?
     public var cfa: [AssetCfa]?
     public var ifa: [AssetIfa]?
+    public var bfa: [AssetBfa]?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(nia: [AssetNia]?, uda: [AssetUda]?, cfa: [AssetCfa]?, ifa: [AssetIfa]?) {
+    public init(nia: [AssetNia]?, uda: [AssetUda]?, cfa: [AssetCfa]?, ifa: [AssetIfa]?, bfa: [AssetBfa]? = nil) {
         self.nia = nia
         self.uda = uda
         self.cfa = cfa
         self.ifa = ifa
+        self.bfa = bfa
     }
 }
 
@@ -3971,6 +4567,9 @@ extension ListAssetsResponse: Equatable, Hashable {
         if lhs.ifa != rhs.ifa {
             return false
         }
+        if lhs.bfa != rhs.bfa {
+            return false
+        }
         return true
     }
 
@@ -3979,6 +4578,7 @@ extension ListAssetsResponse: Equatable, Hashable {
         hasher.combine(uda)
         hasher.combine(cfa)
         hasher.combine(ifa)
+        hasher.combine(bfa)
     }
 }
 
@@ -3992,7 +4592,8 @@ public struct FfiConverterTypeListAssetsResponse: FfiConverterRustBuffer {
                 nia: FfiConverterOptionSequenceTypeAssetNia.read(from: &buf),
                 uda: FfiConverterOptionSequenceTypeAssetUda.read(from: &buf),
                 cfa: FfiConverterOptionSequenceTypeAssetCfa.read(from: &buf),
-                ifa: FfiConverterOptionSequenceTypeAssetIfa.read(from: &buf)
+                ifa: FfiConverterOptionSequenceTypeAssetIfa.read(from: &buf),
+                bfa: FfiConverterOptionSequenceTypeAssetBfa.read(from: &buf)
             )
     }
 
@@ -4001,6 +4602,7 @@ public struct FfiConverterTypeListAssetsResponse: FfiConverterRustBuffer {
         FfiConverterOptionSequenceTypeAssetUda.write(value.uda, into: &buf)
         FfiConverterOptionSequenceTypeAssetCfa.write(value.cfa, into: &buf)
         FfiConverterOptionSequenceTypeAssetIfa.write(value.ifa, into: &buf)
+        FfiConverterOptionSequenceTypeAssetBfa.write(value.bfa, into: &buf)
     }
 }
 
@@ -7515,10 +8117,11 @@ public struct SdkUnlockRequest {
     public var announceAddresses: [String]
     public var announceAlias: String?
     public var gossipRgsServerUrl: String?
+    public var ethRpcUrl: String?
 
     /// Default memberwise initializers are never public by default, so we
     /// declare one manually.
-    public init(password: String, ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?, gossipRgsServerUrl: String? = nil) {
+    public init(password: String, ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?, gossipRgsServerUrl: String? = nil, ethRpcUrl: String? = nil) {
         self.password = password
         self.ldkChainSync = ldkChainSync
         self.indexerUrl = indexerUrl
@@ -7526,6 +8129,7 @@ public struct SdkUnlockRequest {
         self.announceAddresses = announceAddresses
         self.announceAlias = announceAlias
         self.gossipRgsServerUrl = gossipRgsServerUrl
+        self.ethRpcUrl = ethRpcUrl
     }
 }
 
@@ -7552,6 +8156,9 @@ extension SdkUnlockRequest: Equatable, Hashable {
         if lhs.gossipRgsServerUrl != rhs.gossipRgsServerUrl {
             return false
         }
+        if lhs.ethRpcUrl != rhs.ethRpcUrl {
+            return false
+        }
         return true
     }
 
@@ -7563,6 +8170,7 @@ extension SdkUnlockRequest: Equatable, Hashable {
         hasher.combine(announceAddresses)
         hasher.combine(announceAlias)
         hasher.combine(gossipRgsServerUrl)
+        hasher.combine(ethRpcUrl)
     }
 }
 
@@ -7579,7 +8187,8 @@ public struct FfiConverterTypeSdkUnlockRequest: FfiConverterRustBuffer {
                 proxyEndpoint: FfiConverterOptionString.read(from: &buf),
                 announceAddresses: FfiConverterSequenceString.read(from: &buf),
                 announceAlias: FfiConverterOptionString.read(from: &buf),
-                gossipRgsServerUrl: FfiConverterOptionString.read(from: &buf)
+                gossipRgsServerUrl: FfiConverterOptionString.read(from: &buf),
+                ethRpcUrl: FfiConverterOptionString.read(from: &buf)
             )
     }
 
@@ -7591,6 +8200,7 @@ public struct FfiConverterTypeSdkUnlockRequest: FfiConverterRustBuffer {
         FfiConverterSequenceString.write(value.announceAddresses, into: &buf)
         FfiConverterOptionString.write(value.announceAlias, into: &buf)
         FfiConverterOptionString.write(value.gossipRgsServerUrl, into: &buf)
+        FfiConverterOptionString.write(value.ethRpcUrl, into: &buf)
     }
 }
 
@@ -9277,6 +9887,8 @@ public enum RlnError {
     case FailedVssInit(message: String)
 
     case Internal(message: String)
+
+    case LightningUnsupportedOnMainnet(message: String)
 }
 
 #if swift(>=5.8)
@@ -9364,6 +9976,10 @@ public struct FfiConverterTypeRlnError: FfiConverterRustBuffer {
                 message: FfiConverterString.read(from: &buf)
             )
 
+        case 20: return try .LightningUnsupportedOnMainnet(
+                message: FfiConverterString.read(from: &buf)
+            )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -9408,6 +10024,8 @@ public struct FfiConverterTypeRlnError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(18))
         case .Internal(_ /* message is ignored*/ ):
             writeInt(&buf, Int32(19))
+        case .LightningUnsupportedOnMainnet(_ /* message is ignored*/ ):
+            writeInt(&buf, Int32(20))
         }
     }
 }
@@ -9812,6 +10430,30 @@ private struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
+private struct FfiConverterOptionData: FfiConverterRustBuffer {
+    typealias SwiftType = Data?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterData.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
 private struct FfiConverterOptionTypeBlockTime: FfiConverterRustBuffer {
     typealias SwiftType = BlockTime?
 
@@ -10068,6 +10710,30 @@ private struct FfiConverterOptionTypeIfaIssuanceType: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeIfaIssuanceType.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterOptionSequenceTypeAssetBfa: FfiConverterRustBuffer {
+    typealias SwiftType = [AssetBfa]?
+
+    static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeAssetBfa.write(value, into: &buf)
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeAssetBfa.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -10383,6 +11049,31 @@ private struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             try seq.append(FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+private struct FfiConverterSequenceTypeAssetBfa: FfiConverterRustBuffer {
+    typealias SwiftType = [AssetBfa]
+
+    static func write(_ value: [AssetBfa], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeAssetBfa.write(item, into: &buf)
+        }
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [AssetBfa] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [AssetBfa]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeAssetBfa.read(from: &buf))
         }
         return seq
     }
@@ -11263,6 +11954,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_btc_balance() != 50253 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_burn() != 19857 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_cancelhodlinvoice() != 61694 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11305,10 +11999,22 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_get_channel_id() != 4729 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_get_consignment() != 25520 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_get_consignment_path() != 41564 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_get_payment() != 29999 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_get_swap() != 13160 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_importrgbcontract() != 51995 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_importrgbtransferconsignment() != 20493 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_inflate() != 24954 {

@@ -89,6 +89,8 @@ After shutdown, restart on the same instance with `await wallet.reinit(unlockPar
 - Async payments (APay): hash pool + Lightning Address via utexo-lsp — see [docs/async-payments.md](./docs/async-payments.md)
 - Virtual channels: instant-usable channels with no on-chain footprint via trusted `no-broadcast` mode — see [docs/virtual-channels.md](./docs/virtual-channels.md)
 - Issue, transfer, and manage RGB assets (NIA, CFA, IFA, UDA)
+- Receive and burn BFA assets; export consignment proofs on iOS and Android
+- Connect dApps through [WebRGB integration](#webrgb-integration)
 - Manage UTXOs and BTC on-chain sends
 - Use a hardware-wallet–style **external signer** or a simple **password signer**
 - Restart the node on the same `UTEXOWallet` instance without recreating anything
@@ -98,6 +100,8 @@ After shutdown, restart on the same instance with `await wallet.reinit(unlockPar
 ## Primary Class: `UTEXOWallet`
 
 `UTEXOWallet` implements the shared `IUTEXOProtocol` contract and is backed by an on-device RLN node. It owns the node lifecycle, abstracts signer authentication, and exposes the full RGB Lightning API surface.
+
+On **mainnet**, Lightning and LSP methods on `UTEXOWallet` reject with a `WalletError` whose `code` is `LIGHTNING_DISABLED_ON_MAINNET`. On-chain BTC/RGB operations remain available. This check applies only to `UTEXOWallet`; the lower-level manager, binding, and native node are unchanged.
 
 ### Construction
 
@@ -134,6 +138,7 @@ const wallet = new UTEXOWallet(
 | `ldkPeerListeningPort` | `number` | LDK peer-to-peer port |
 | `network` | `string` | Bitcoin network (`'utexo'`, `'regtest'`, `'testnet'`, `'mainnet'`, …) |
 | `maxMediaUploadSizeMb` | `number?` | Max media upload size in MB (default 20) |
+| `reuseAddresses` | `boolean?` | Reuse on-chain addresses (default `false`) |
 | `enableVirtualChannelsV0` | `boolean?` | Enable virtual channel support (required on both host and client) |
 | `virtualPeerPubkeys` | `string[]?` | Host pubkeys allowed to open inbound virtual channels. `null`/`[]` = accept from anyone |
 | `vssUrl` | `string?` | VSS server URL for encrypted remote backup |
@@ -227,6 +232,7 @@ await wallet.destroy();
 | `bitcoindRpcPort` | `number?` | Bitcoin RPC port |
 | `indexerUrl` | `string?` | Electrum indexer URL (e.g. `'127.0.0.1:50001'`) |
 | `proxyEndpoint` | `string?` | RGB proxy endpoint (e.g. `'rpc://host:3000/json-rpc'`) |
+| `ethRpcUrl` | `string \| null?` | Ethereum RPC for native BFA validation; configure when unlocking a BFA wallet |
 | `announceAddresses` | `string[]?` | Public addresses to announce to the network |
 | `announceAlias` | `string \| null?` | Node alias |
 | `gossipRgsServerUrl` | `string \| null?` | RGS server URL for rapid gossip sync |
@@ -255,13 +261,29 @@ await wallet.destroy();
 
 | Method | Description |
 |--------|-------------|
-| `listAssets()` | All RGB assets (NIA, CFA, IFA, UDA) |
+| `listAssets()` | All RGB assets (NIA, CFA, IFA, UDA, plus the RN-specific `bfa` collection) |
 | `getAssetBalance(assetId)` | Balance for one asset |
 | `issueAssetNia({ ticker, name, precision, amounts })` | Issue a Non-Inflationary Asset |
 | `issueAssetIfa({ ticker, name, precision, amounts, inflationAmounts, rejectListUrl })` | Issue an Inflatable Asset |
+| `inflate({ assetId, inflationAmounts, feeRate?, minConfirmations? })` | Inflate an IFA; returns `{ txid }` |
 | `blindReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a blinded RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
 | `witnessReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a witness RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
 | `decodeRGBInvoice({ invoice })` | Decode an RGB invoice |
+
+#### BFA & Consignments
+
+| Method | Description |
+|--------|-------------|
+| `getBfaCapabilities()` | Available `{ bfa, burn, consignment }` support for the native build and signer |
+| `burn({ assetId, amount, burnRecipient?, feeRate, minConfirmations })` | Burn asset units; returns `{ txid, batchTransferIdx }` |
+| `getConsignment(assetId, txid)` | Saved consignment as Base64 |
+| `getConsignmentPath(assetId, txid)` | Local proof path for wallet-internal use |
+
+Burn requires `PasswordRLNSigner`; `NativeExternalRLNSigner` does not support it.
+Use a positive decimal u64 string for `amount`, a positive integer sat/vB `feeRate`, and
+0–255 `minConfirmations`. BFA requires a 32-byte hex `burnRecipient` without `0x`.
+`burn()` is irreversible and does not retry or deduplicate; use `BurnOperations`
+for a persistent journal. Invoice and balance APIs still require safe JS integers.
 
 #### BTC Sends
 
@@ -274,7 +296,9 @@ await wallet.destroy();
 | Method | Description |
 |--------|-------------|
 | `listTransactions()` | On-chain transaction history |
+| `listTransactionsByTxid(txid, skipSync?)` | Transactions matching a txid |
 | `listTransfers(assetId?)` | RGB transfer history |
+| `listTransfersByTxid(txid)` | RGB transfers matching a txid |
 | `failTransfers(params)` | Mark pending transfers as failed |
 | `refreshWallet()` | Refresh RGB transfer state (`Promise<void>`, shared with web) |
 | `refreshTransfers(skipSync?)` | RN-specific detailed refresh result, keyed by batch transfer ID |
@@ -360,6 +384,7 @@ See **[docs/lsp.md](./docs/lsp.md)** for `UtexoLsp` composed flows and full exam
 |--------|-------------|
 | `checkIndexerUrl(url)` | Validate an electrum URL |
 | `checkProxyEndpoint(endpoint)` | Validate a proxy endpoint |
+| `signMessage(message)` / `verifyMessage(message, signature)` | Sign or verify with the node's own key |
 
 ---
 
@@ -858,13 +883,14 @@ await lsp.waitForChannel(ASSET_ID, {
 });
 
 // 2. Create invoices — expiry synchronized automatically
-const { lnInvoice, rgbInvoice } = await lsp.receiveAsset({
+const { lnInvoice, rgbInvoice, onchainAssetId } = await lsp.receiveAsset({
   assetId:    ASSET_ID,
   amountSats: 3_000,
   amountRgb:  1,
 });
 
-// 3. Share rgbInvoice with the on-chain sender
+// 3. Share rgbInvoice and onchainAssetId with the on-chain sender.
+// The LSP resolves the convertible on-chain asset by default.
 // 4. Wait for settlement ('settled' | 'timed_out')
 const outcome = await lsp.awaitReceiveSettlement(lnInvoice, {
   onProgress: (s) => console.log('status:', s),
@@ -921,13 +947,15 @@ const { assetSelection } = await lsp.payAddress({
 
 Where an LSP serves one asset over Lightning (say `LNUSDT`) but accepts a
 canonical on-chain one (`USDT`), it can convert 1:1 between the two legs of a
-single payment. Three methods build on that, and none of them require the other
+single payment. These methods build on that, and none of them require the other
 side to know anything about this SDK:
 
 | Method | Flow |
 |--------|------|
 | `requestExternalInvoice()` | Quote a hosted BOLT11 for someone else to pay. Any RGB Lightning node with the right channel settles it with a bare `POST /sendpayment`. |
 | `payExternalInvoice()` | Pay a plain third-party BOLT11 out of an asset you do not hold. The LSP quotes a HODL invoice carrying that invoice's own payment hash; the SDK verifies the two legs bind before paying. |
+| `quoteAddress()` / `quoteExternalPayment()` | Preview the payment without paying. |
+| `discoverAddress()` / `externalPaymentStatus()` | Read LNURL discovery or an external payment's status. |
 | `receiveAsset({ onchainAsset: 'convertible' })` | Be paid on-chain in the canonical asset and delivered the Lightning one. The LSP resolves the on-chain asset, so its contract id is never configured client-side. |
 
 `listPayableAssets()` returns what an address can be paid in — payout asset plus
@@ -1140,6 +1168,41 @@ for (const p of await wallet.listPayments()) {
 // Or: await lsp.claimPendingPayments();
 ```
 
+## WebRGB integration
+
+Install [@utexo/webrgb](https://github.com/UTEXO-Protocol/webrgb/tree/dev) to expose an unlocked wallet to dApps through
+`@utexo/rgb-sdk-rn/webrgb`. Create one provider per dApp session. It handles wallet
+calls and approvals; WalletConnect sessions and RPC routing are provided
+separately by [@utexo/webrgb-walletconnect](https://github.com/UTEXO-Protocol/webrgb-walletconnect/tree/dev).
+
+```typescript
+import { WebRgbProvider } from '@utexo/rgb-sdk-rn/webrgb';
+
+const provider = new WebRgbProvider(wallet, {
+  origin: approvedOrigin, // from the transport session
+  assertAuthorized: () => session.assertAuthorized(),
+  confirm: request => showApprovalDialog(request),
+});
+
+await provider.enable(); // request connection approval
+const { network, methods } = await provider.getInfo();
+const assets = await provider.listAssets();
+const { invoice } = await provider.blindReceive(); // request invoice approval
+const transfers = await provider.listTransfers();
+
+provider.revoke(); // on session expiry/disconnect
+```
+
+The app supplies permission checks and the confirmation UI (`Promise<boolean>`).
+Set `sessionApproved: true` only for an already approved transport session to skip
+the connection prompt. `methods` lists supported calls, including
+`getAddress()`, `getAssetBalance(assetId)`, `getTransferStatus(transferId, assetId?)`,
+and `decodeRgbInvoice(invoice)`.
+
+Optional burn/proof export: [setup and flow](./src/integrations/webrgb/burn.ts).
+
+---
+
 ## Further reading
 
 | Doc | Description |
@@ -1160,6 +1223,7 @@ A full working demo is available at **[rgb-sdk-rn-demo](https://github.com/UTEXO
 - Node restart on the same `UTEXOWallet` instance via `reinit()`
 - Raw `RLNManager` flows for comparison
 - **Async Payment** tab: full six-step APay flow — see [docs/async-payments.md](./docs/async-payments.md)
+- **Wallet** tab: WebRGB/WalletConnect pairing and mock BFA mint/burn
 
 ### Running the Demo
 

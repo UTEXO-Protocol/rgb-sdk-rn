@@ -1,6 +1,7 @@
 package com.rgbsdkrn
 
 import android.util.Log
+import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReadableArray
@@ -35,6 +36,7 @@ import org.utexo.rgblightningnode.Transfer
 import org.utexo.rgblightningnode.AssignmentKind
 import org.utexo.rgblightningnode.AssetRecipients
 import org.utexo.rgblightningnode.AssetBalanceInfo
+import org.utexo.rgblightningnode.AssetBfa
 import org.utexo.rgblightningnode.AssetNia
 import org.utexo.rgblightningnode.AssetCfa
 import org.utexo.rgblightningnode.AssetIfa
@@ -234,6 +236,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     announceAddresses: ReadableArray,
     announceAlias: String?,
     gossipRgsServerUrl: String?,
+    ethRpcUrl: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -275,7 +278,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
             proxyEndpoint = proxyEndpoint,
             announceAddresses = announceAddressesList,
             announceAlias = announceAlias,
-            gossipRgsServerUrl = gossipRgsServerUrl
+            gossipRgsServerUrl = gossipRgsServerUrl,
+            ethRpcUrl = ethRpcUrl
           )
         )
         android.util.Log.d("RgbModule", "[rlnUnlockNode] succeeded")
@@ -1105,6 +1109,9 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val udaArr = Arguments.createArray()
         res.uda?.forEach { udaArr.pushMap(serializeAssetUda(it)) }
         map.putArray("uda", udaArr)
+        val bfaArr = Arguments.createArray()
+        res.bfa?.forEach { bfaArr.pushMap(serializeAssetBfa(it)) }
+        map.putArray("bfa", bfaArr)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1740,6 +1747,77 @@ class RgbModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun rlnBfaCapabilities(promise: Promise) {
+    val map = Arguments.createMap()
+    map.putBoolean("burn", true)
+    map.putBoolean("consignment", true)
+    map.putBoolean("bfa", true)
+    promise.resolve(map)
+  }
+
+  override fun rlnBurn(
+    nodeId: Double,
+    assetId: String,
+    amount: String,
+    burnRecipient: String?,
+    feeRate: Double,
+    minConfirmations: Double,
+    promise: Promise
+  ) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val request = try {
+          createRlnBurnRequest(assetId, amount, burnRecipient, feeRate, minConfirmations)
+        } catch (e: IllegalArgumentException) {
+          withContext(Dispatchers.Main) { promise.reject("INVALID_PARAMS", e.message, e) }
+          return@launch
+        }
+        val result = node.burn(request)
+        val map = Arguments.createMap()
+        map.putString("txid", result.txid)
+        map.putInt("batchTransferIdx", result.batchTransferIdx)
+        withContext(Dispatchers.Main) { promise.resolve(map) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnGetConsignment(nodeId: Double, assetId: String, txid: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val proof = node.getConsignment(assetId, txid)
+        val encoded = Base64.encodeToString(proof, Base64.NO_WRAP)
+        withContext(Dispatchers.Main) { promise.resolve(encoded) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnGetConsignmentPath(nodeId: Double, assetId: String, txid: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val path = node.getConsignmentPath(assetId, txid)
+        withContext(Dispatchers.Main) { promise.resolve(path) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
   override fun rlnInflate(
     nodeId: Double,
     assetId: String,
@@ -1856,6 +1934,26 @@ class RgbModule(reactContext: ReactApplicationContext) :
     m.putDouble("spendable", b.spendable.toDouble())
     m.putDouble("offchainOutbound", b.offchainOutbound.toDouble())
     m.putDouble("offchainInbound", b.offchainInbound.toDouble())
+    return m
+  }
+
+  private fun serializeAssetBfa(a: AssetBfa): WritableMap {
+    val m = Arguments.createMap()
+    m.putString("assetId", a.assetId)
+    m.putString("ticker", a.ticker)
+    m.putString("name", a.name)
+    m.putDouble("precision", a.precision.toDouble())
+    m.putDouble("initialSupply", a.initialSupply.toDouble())
+    m.putDouble("timestamp", a.timestamp.toDouble())
+    m.putDouble("addedAt", a.addedAt.toDouble())
+    val balance = Arguments.createMap()
+    balance.putDouble("settled", a.balance.settled.toDouble())
+    balance.putDouble("future", a.balance.future.toDouble())
+    balance.putDouble("spendable", a.balance.spendable.toDouble())
+    m.putMap("balance", balance)
+    a.details?.let { m.putString("details", it) }
+    a.rejectListUrl?.let { m.putString("rejectListUrl", it) }
+    a.media?.let { m.putMap("media", rlnMediaToMap(it)) }
     return m
   }
 

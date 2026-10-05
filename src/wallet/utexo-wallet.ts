@@ -49,6 +49,7 @@ import type {
 } from '@utexo/rgb-sdk-core';
 import {
   AssetSchema,
+  WalletError,
   normalizeRlnNetwork,
   normalizeTransferStatus,
 } from '@utexo/rgb-sdk-core';
@@ -421,7 +422,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   private nodeCreated = false;
 
   constructor(params: UTEXOWalletNodeParams, signer: IRLNSigner) {
-    this.params = params;
+    this.params = { ...params };
     this.signer = signer;
     this.rln = createRLNManager();
   }
@@ -806,6 +807,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       descriptionHash?: string | null;
     }
   ): Promise<LightningReceiveRequest> {
+    this.assertLightningEnabled();
     const amtMsat = params.amountSats != null ? params.amountSats * 1000 : null;
     const assetId = params.asset?.assetId || null;
     const assetAmount = assetId ? (params.asset?.amount ?? null) : null;
@@ -827,6 +829,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       descriptionHash?: string | null;
     }
   ): Promise<LightningInvoice> {
+    this.assertLightningEnabled();
     const resp = await this.rln.rlnLnInvoice(
       params.amtMsat != null ? Number(params.amtMsat) : null,
       params.expirySec,
@@ -849,21 +852,25 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     paymentHash: string,
     preimage: string
   ): Promise<HodlInvoiceResult> {
+    this.assertLightningEnabled();
     const resp = await this.rln.rlnClaimHodlInvoice(paymentHash, preimage);
     return { changed: resp.changed };
   }
 
   async cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult> {
+    this.assertLightningEnabled();
     await this.rln.rlnCancelHodlInvoice(paymentHash);
     return { changed: true };
   }
 
   /** Payments in the canonical domain shape (part of the shared contract). */
   async listPayments(): Promise<LightningPayment[]> {
+    this.assertLightningEnabled();
     return (await this.rln.rlnListPayments()).map(toLightningPayment);
   }
 
   async apayNew(hostNodeId: string): Promise<ApayNewResponse> {
+    this.assertLightningEnabled();
     const raw = await this.rln.rlnApayNew(hostNodeId);
     return {
       requestId: raw.requestId,
@@ -893,6 +900,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     username: string,
     domain: string
   ): Promise<ApayNewResponse> {
+    this.assertLightningEnabled();
     const raw = await this.rln.rlnApayNewWithAddress(
       hostNodeId,
       username,
@@ -930,6 +938,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
    *   const lsp = await wallet.createLsp({ baseUrl, peerPubkey, peerHost, peerPort });
    */
   async createLsp(peer?: LspPeer, peerPort = 9735): Promise<UtexoLsp> {
+    this.assertLightningEnabled();
     if (peer) return new UtexoLsp(this, peer);
 
     const baseUrl = resolveLspBaseUrl(
@@ -995,6 +1004,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
    * these in their own UI layer.
    */
   async getLightningReceiveStatus(id: string): Promise<RlnInvoiceStatus> {
+    this.assertLightningEnabled();
     return normalizeInvoiceStatus(await this.rln.rlnInvoiceStatus(id));
   }
 
@@ -1003,6 +1013,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
    * the node.
    */
   async getLightningSendStatus(id: string): Promise<RlnPaymentStatus | null> {
+    this.assertLightningEnabled();
     const payment = await this.rln.rlnGetPayment(id);
     if (!payment?.status) return null;
     return tryNormalizePaymentStatus(payment.status);
@@ -1015,6 +1026,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   async payLightningInvoice(
     params: PayLightningInvoiceRequestModel
   ): Promise<LightningSendRequest> {
+    this.assertLightningEnabled();
     const amtMsat = params.amount != null ? params.amount * 1000 : null;
     const resp = await this.rln.rlnSendPayment(
       params.lnInvoice,
@@ -1026,6 +1038,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   }
 
   async listLightningPayments(): Promise<ListLightningPaymentsResponse> {
+    this.assertLightningEnabled();
     const payments = await this.rln.rlnListPayments();
     return {
       payments: payments.map((p) => ({
@@ -1095,19 +1108,23 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     return toLightningNetworkInfo(await this.rln.rlnNetworkInfo());
   }
 
-  connectPeer(peerPubkeyAndAddr: string): Promise<void> {
+  async connectPeer(peerPubkeyAndAddr: string): Promise<void> {
+    this.assertLightningEnabled();
     return this.rln.rlnConnectPeer(peerPubkeyAndAddr);
   }
 
   async listPeers(): Promise<LightningPeer[]> {
+    this.assertLightningEnabled();
     return (await this.rln.rlnListPeers()).map(toLightningPeer);
   }
 
-  disconnectPeer(peerPubkey: string): Promise<void> {
+  async disconnectPeer(peerPubkey: string): Promise<void> {
+    this.assertLightningEnabled();
     return this.rln.rlnDisconnectPeer(peerPubkey);
   }
 
   async listChannels(): Promise<LightningChannel[]> {
+    this.assertLightningEnabled();
     return (await this.rln.rlnListChannels()).map(toLightningChannel);
   }
 
@@ -1132,6 +1149,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       virtualOpenMode?: string | null;
     }
   ): Promise<OpenChannelResult> {
+    this.assertLightningEnabled();
     const resp = await this.rln.rlnOpenChannel({
       peerPubkeyAndOptAddr: params.peerPubkey,
       capacitySat: Number(params.capacitySat),
@@ -1153,15 +1171,17 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     return { temporaryChannelId: resp.temporaryChannelId };
   }
 
-  closeChannel(
+  async closeChannel(
     channelId: string,
     peerPubkey: string,
     force: boolean
   ): Promise<void> {
+    this.assertLightningEnabled();
     return this.rln.rlnCloseChannel(channelId, peerPubkey, force);
   }
 
-  getChannelId(temporaryChannelId: string): Promise<string> {
+  async getChannelId(temporaryChannelId: string): Promise<string> {
+    this.assertLightningEnabled();
     return this.rln.rlnGetChannelId(temporaryChannelId);
   }
 
@@ -1171,6 +1191,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     assetId?: string,
     assetAmount?: number
   ): Promise<SendPaymentResult> {
+    this.assertLightningEnabled();
     return toSendPaymentResult(
       await this.rln.rlnKeysend(
         destPubkey,
@@ -1182,11 +1203,13 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   }
 
   async decodeLnInvoice(invoice: string): Promise<DecodedLnInvoice> {
+    this.assertLightningEnabled();
     return toDecodedLnInvoice(await this.rln.rlnDecodeLnInvoice(invoice));
   }
 
   /** Canonical invoice status (PascalCase) — normalized from the wire enum. */
   async invoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
+    this.assertLightningEnabled();
     return normalizeInvoiceStatus(await this.rln.rlnInvoiceStatus(invoice));
   }
 
@@ -1228,6 +1251,15 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
+
+  private assertLightningEnabled(): void {
+    if (normalizeRlnNetwork(this.params.network) === 'mainnet') {
+      throw new WalletError(
+        'Lightning is disabled on mainnet. Only on-chain operations are supported.',
+        'LIGHTNING_DISABLED_ON_MAINNET'
+      );
+    }
+  }
 
   private buildNodeParams(): IRLNNodeCreateParams {
     return {

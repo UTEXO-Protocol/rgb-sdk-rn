@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.34
 
 __added__
 
+- Added a mainnet gate in `UTEXOWallet` that rejects Lightning/LSP calls with `LIGHTNING_DISABLED_ON_MAINNET` while keeping on-chain operations available.
 - **`WebRgbProvider`** (`@utexo/rgb-sdk-rn/webrgb`) — `enable()` / `revoke()` for session access; `getInfo()`, `getAddress()`, `blindReceive()`, `decodeRgbInvoice()`, `listAssets()`, `getAssetBalance()`, `listTransfers()`, and `getTransferStatus()` for dApp requests. Optional `burnAsset()` and `getConsignment()` extensions.
 - **`UTEXOWallet.getBfaCapabilities()`** — reports BFA, burn, and consignment support for the native build and signer.
 - **`UTEXOWallet.burn(params)`** — burns asset units and returns `{ txid, batchTransferIdx }`. Uses decimal-string amounts; supported by `PasswordRLNSigner` on iOS and Android.

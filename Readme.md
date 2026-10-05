@@ -101,6 +101,8 @@ After shutdown, restart on the same instance with `await wallet.reinit(unlockPar
 
 `UTEXOWallet` implements the shared `IUTEXOProtocol` contract and is backed by an on-device RLN node. It owns the node lifecycle, abstracts signer authentication, and exposes the full RGB Lightning API surface.
 
+On **mainnet**, Lightning and LSP methods on `UTEXOWallet` reject with a `WalletError` whose `code` is `LIGHTNING_DISABLED_ON_MAINNET`. On-chain BTC/RGB operations remain available. This check applies only to `UTEXOWallet`; the lower-level manager, binding, and native node are unchanged.
+
 ### Construction
 
 ```typescript

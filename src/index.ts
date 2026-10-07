@@ -192,7 +192,6 @@ export type {
   InflateEndRequestModel,
   OperationResult,
   Transaction,
-  Transfer,
   FailTransfersRequest,
   VssBackupConfig,
   VssBackupInfo,
@@ -225,6 +224,9 @@ export type {
   BfaCapabilities,
   AssetBfa,
   ListAssets,
+  Transfer,
+  TransferAssignment,
+  TransferAmount,
 } from './wallet/types';
 
 export { BurnOperations, normalizeBurnRecord } from './wallet/operations/burn';

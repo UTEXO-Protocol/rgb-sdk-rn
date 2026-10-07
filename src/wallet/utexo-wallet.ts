@@ -2,7 +2,8 @@ import {
   validateBurnParams,
   validateConsignmentLookup,
 } from './operations/validation';
-import type { BurnParams, BurnResult, ListAssets } from './types';
+import type { BurnParams, BurnResult, ListAssets, Transfer } from './types';
+import { getTransferAmount, parseTransferAssignment } from './transfer-amounts';
 import type { RefreshTransfersResult } from './refresh-types';
 import type {
   IUTEXOProtocol,
@@ -20,7 +21,6 @@ import type {
   TransactionType,
   TransferKind,
   Transaction,
-  Transfer,
   Outpoint,
   AssetNIA,
   AssetIfa,
@@ -242,13 +242,17 @@ function isKnown(
 }
 
 function mapTransfer(t: RlnTransfer): Transfer {
-  return {
+  const transfer: Transfer = {
     idx: t.idx,
     batchTransferIdx: 0,
     createdAt: t.createdAt ?? 0,
     updatedAt: t.updatedAt ?? 0,
     status: normalizeTransferStatus(t.status),
-    assignments: (t.assignments ?? []).map(parseAssignment),
+    requestedAssignment:
+      t.requestedAssignment == null
+        ? undefined
+        : parseTransferAssignment(t.requestedAssignment),
+    assignments: (t.assignments ?? []).map(parseTransferAssignment),
     kind: (isKnown(VALID_TRANSFER_KINDS, t.kind)
       ? t.kind
       : 'Send') as TransferKind,
@@ -263,6 +267,7 @@ function mapTransfer(t: RlnTransfer): Transfer {
       used: e.used,
     })),
   };
+  return { ...transfer, ...getTransferAmount(transfer) };
 }
 
 function mapAssetNia(a: RlnAssetNia): AssetNIA {

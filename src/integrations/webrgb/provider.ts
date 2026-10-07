@@ -292,23 +292,13 @@ export class WebRgbProvider implements SupportedProvider {
       this.wallet.listTransfers(assetId)
     );
     return transfers.map((transfer) => {
-      const fungible = transfer.assignments.filter(
-        (assignment) => assignment.type === 'Fungible'
-      );
-      const amount = fungible.length
-        ? fungible.reduce(
-            (sum, assignment) =>
-              sum + integer(assignment.amount, 'transfer amount', 0),
-            0
-          )
-        : undefined;
-      if (amount !== undefined) integer(amount, 'transfer amount', 0);
       return {
         assetId,
         transferId: transfer.idx,
         status: transfer.status,
         kind: transfer.kind,
-        amount,
+        amount: transfer.amount,
+        amountBaseUnits: transfer.amountBaseUnits,
         recipientId: transfer.recipientId,
         txid: transfer.txid,
       };

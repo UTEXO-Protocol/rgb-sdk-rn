@@ -14,7 +14,7 @@
  * const operations = new BurnOperations(wallet, store);
  * const provider = new WebRgbProvider(wallet, {
  *   ...approvedSessionOptions, // origin, authorization checks, confirmation UI
- *   burn: { operations, allowedPayoutChainIds: ['eip155:42161'] },
+ *   burn: { operations },
  * });
  * await provider.enable();
  * const burn = await provider.burnAsset({
@@ -26,13 +26,13 @@
  * const proof = await provider.getConsignment({ assetId, txid: burn.txid });
  * provider.revoke(); // on session expiry/disconnect
  *
- * Flow: check getInfo().methods, validate the asset/network/payout allowlist,
+ * Flow: check getInfo().methods, validate the asset/network/payout parameters,
  * then confirm the asset, amount, payout chain/address, BTC fee, confirmations,
  * and proof sharing. The host serializes approval dialogs. The operation service
  * serializes burns, persists prepared -> pending before invoking native burn,
  * and saves the result as complete. Failure before invocation cancels the record.
  * The EVM address is encoded as 12 zero bytes followed by its 20 address bytes;
- * the payout chain remains wallet policy, not part of the native recipient.
+ * the requested payout chain is confirmed and saved in operation metadata.
  *
  * Proof export returns Base64, byte length, and a Keccak-256 digest (16 MiB limit).
  * Local paths stay inside the wallet; another origin's proof needs fresh consent.
@@ -64,8 +64,6 @@ import type { UTEXOWallet } from '../../wallet/utexo-wallet';
 const MAX_CONSIGNMENT_BYTES = 16 * 1024 * 1024;
 export interface WebRgbBurnOptions {
   operations: BurnOperations;
-  /** Wallet policy; never supplied by a dApp. */
-  allowedPayoutChainIds: readonly string[];
 }
 type Wallet = Pick<
   UTEXOWallet,
@@ -122,7 +120,8 @@ export class WebRgbBurnController {
       args.network !== this.wallet.getNetwork() ||
       !args.burnRecipient ||
       typeof args.burnRecipient.address !== 'string' ||
-      !this.options.allowedPayoutChainIds.includes(args.burnRecipient.chainId)
+      typeof args.burnRecipient.chainId !== 'string' ||
+      !/^eip155:[1-9][0-9]*$/.test(args.burnRecipient.chainId)
     )
       throw new WebRgbError(
         'INVALID_PARAMS',

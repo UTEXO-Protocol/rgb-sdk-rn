@@ -304,15 +304,6 @@ for a persistent journal. Invoice and balance APIs still require safe JS integer
 | `refreshTransfers(skipSync?)` | RN-specific detailed refresh result, keyed by batch transfer ID |
 | `syncWallet()` | Sync blockchain state |
 
-RGB transfer history preserves both `requestedAssignment` and `assignments`.
-Use `transfer.amountBaseUnits` (an exact decimal string) to display the transfer
-amount. Burn, send and inflation use the requested allocation for that transfer;
-receive and issuance use actual allocations. Outgoing `assignments` can contain
-change or allocations for multiple recipients and must not be used as the sent
-or burned amount. Unknown amounts remain `undefined`. Numeric `amount` is
-provided only within `Number.MAX_SAFE_INTEGER`; the assignment objects also
-expose exact `amountBaseUnits`. WebRGB forwards the SDK-computed transfer amounts.
-
 #### Fees & Backup
 
 | Method | Description |

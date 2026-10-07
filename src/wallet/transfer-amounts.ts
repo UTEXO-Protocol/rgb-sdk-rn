@@ -61,27 +61,13 @@ export function getTransferAmount(
       return {};
   }
   const fungible = assignments.filter((item) => item.type === 'Fungible');
-  if (!fungible.length) return {};
-  let total = 0n;
-  for (const assignment of fungible) {
-    let amount: bigint;
-    if (assignment.amountBaseUnits !== undefined) {
-      amount = baseUnits(assignment.amountBaseUnits);
-      if (
-        assignment.amount !== undefined &&
-        (!Number.isSafeInteger(assignment.amount) ||
-          BigInt(assignment.amount) !== amount)
-      )
-        throw new ValidationError('Inconsistent transfer amount');
-    } else {
-      if (assignment.amount === undefined) return {};
-      if (!Number.isSafeInteger(assignment.amount) || assignment.amount < 0)
-        throw new ValidationError('Unsafe numeric transfer amount');
-      amount = BigInt(assignment.amount);
-    }
-    total += amount;
-    if (total > MAX_U64)
-      throw new ValidationError('Transfer amount exceeds u64');
-  }
+  if (!fungible.length || fungible.some((a) => a.amountBaseUnits === undefined))
+    return {};
+  // Allocations have already been validated by parseTransferAssignment.
+  const total = fungible.reduce(
+    (sum, a) => sum + BigInt(a.amountBaseUnits!),
+    0n
+  );
+  if (total > MAX_U64) throw new ValidationError('Transfer amount exceeds u64');
   return exactAmount(total);
 }

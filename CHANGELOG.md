@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+__fixed__
+
+- Transfer history preserves `requestedAssignment`. Burn, send and inflation amounts use the requested allocation for that transfer; receive and issuance amounts use actual allocations. Change and amounts for other recipients are never substituted for an outgoing transfer's amount.
+- `listTransfers()`, `listTransfersByTxid()`, `listOnchainTransfers()` and WebRGB history expose exact decimal `amountBaseUnits`. Numeric `amount` is omitted above `Number.MAX_SAFE_INTEGER`; native assignments remain separate and also preserve exact base units.
+
 ## 1.0.0-beta.34
 
 __added__

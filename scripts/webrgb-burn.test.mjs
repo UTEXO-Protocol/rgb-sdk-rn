@@ -75,7 +75,7 @@ function fixture() {
           return approve;
         },
       },
-      { operations, allowedPayoutChainIds: ['eip155:42161'] }
+      { operations }
     );
   return {
     wallet,
@@ -110,8 +110,15 @@ test('u64 burn precision and EVM recipient padding never use JS numbers', () => 
 });
 test('SDK generates a private journal ID before native burn and returns no ID', async () => {
   const f = fixture();
-  const result = await f.controller().burnAsset(args());
+  const request = {
+    ...args(),
+    burnRecipient: { ...args().burnRecipient, chainId: 'eip155:1' },
+  };
+  const result = await f.controller().burnAsset(request);
   const [record] = await f.store.readAll();
+  assert.deepEqual(result.burnRecipient, request.burnRecipient);
+  assert.deepEqual(record.metadata.payout, request.burnRecipient);
+  assert.deepEqual(f.prompts[0].params.burnRecipient, request.burnRecipient);
   assert.match(record.id, /^[0-9a-f]{32}$/);
   assert.equal(record.state, 'complete');
   assert.equal(result.requestId, undefined);
@@ -190,7 +197,7 @@ test('journal write failures never cause an automatic native retry', async () =>
   );
   assert.equal(after.calls.length, 1);
 });
-test('refusal, wrong chain and revoked session do not burn', async () => {
+test('refusal, malformed chain and revoked session do not burn', async () => {
   const f = fixture();
   f.approve(false);
   await assert.rejects(f.controller().burnAsset(args()), {
@@ -199,7 +206,7 @@ test('refusal, wrong chain and revoked session do not burn', async () => {
   await assert.rejects(
     f.controller().burnAsset({
       ...args(),
-      burnRecipient: { ...args().burnRecipient, chainId: 'eip155:1' },
+      burnRecipient: { ...args().burnRecipient, chainId: 'eip155:0' },
     }),
     { code: 'INVALID_PARAMS' }
   );
@@ -264,7 +271,7 @@ test('provider advertises and dispatches getConsignment with complete Base64 dat
     origin: 'https://mint.example',
     sessionApproved: true,
     confirm: async () => true,
-    burn: { operations: f.operations, allowedPayoutChainIds: ['eip155:42161'] },
+    burn: { operations: f.operations },
   });
   const methods = (await provider.getInfo()).methods;
   assert.ok(methods.includes('getConsignment'));

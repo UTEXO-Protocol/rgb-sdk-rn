@@ -35,6 +35,8 @@ function fixture(options = {}) {
         txid: 'tx',
         recipientId: 'utxob:receiver',
         assignments: [{ type: 'Fungible', amount: 10 }],
+        amount: 10,
+        amountBaseUnits: '10',
       },
     ],
     decodeRGBInvoice: async () => ({

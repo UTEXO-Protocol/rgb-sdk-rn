@@ -1037,9 +1037,16 @@ public protocol SdkNodeProtocol: AnyObject {
 
     func initWithNativeExternalSigner(signer: NativeExternalSigner) throws
 
+    /**
+     * Compatibility entrypoint. Use the request-based variant to configure BFA validation.
+     */
     func unlockWithAttachedExternalSigner(ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
 
+    func unlockWithAttachedExternalSignerRequest(request: SdkExternalUnlockRequest) throws
+
     func unlockWithNativeExternalSigner(signer: NativeExternalSigner, ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws
+
+    func unlockWithNativeExternalSignerRequest(signer: NativeExternalSigner, request: SdkExternalUnlockRequest) throws
 }
 
 open class SdkNode:
@@ -1595,6 +1602,9 @@ open class SdkNode:
         }
     }
 
+    /**
+     * Compatibility entrypoint. Use the request-based variant to configure BFA validation.
+     */
     open func unlockWithAttachedExternalSigner(ldkChainSync: SdkLdkChainSync, indexerUrl: String?, proxyEndpoint: String?, announceAddresses: [String], announceAlias: String?) throws {
         try rustCallWithError(FfiConverterTypeRlnError.lift) {
             uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_attached_external_signer(self.uniffiClonePointer(),
@@ -1603,6 +1613,13 @@ open class SdkNode:
                                                                                              FfiConverterOptionString.lower(proxyEndpoint),
                                                                                              FfiConverterSequenceString.lower(announceAddresses),
                                                                                              FfiConverterOptionString.lower(announceAlias), $0)
+        }
+    }
+
+    open func unlockWithAttachedExternalSignerRequest(request: SdkExternalUnlockRequest) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_attached_external_signer_request(self.uniffiClonePointer(),
+                                                                                                     FfiConverterTypeSdkExternalUnlockRequest.lower(request), $0)
         }
     }
 
@@ -1615,6 +1632,14 @@ open class SdkNode:
                                                                                            FfiConverterOptionString.lower(proxyEndpoint),
                                                                                            FfiConverterSequenceString.lower(announceAddresses),
                                                                                            FfiConverterOptionString.lower(announceAlias), $0)
+        }
+    }
+
+    open func unlockWithNativeExternalSignerRequest(signer: NativeExternalSigner, request: SdkExternalUnlockRequest) throws {
+        try rustCallWithError(FfiConverterTypeRlnError.lift) {
+            uniffi_rgb_lightning_node_fn_method_sdknode_unlock_with_native_external_signer_request(self.uniffiClonePointer(),
+                                                                                                   FfiConverterTypeNativeExternalSigner.lower(signer),
+                                                                                                   FfiConverterTypeSdkExternalUnlockRequest.lower(request), $0)
         }
     }
 }
@@ -6007,6 +6032,99 @@ public func FfiConverterTypeSdkExternalSignerBootstrap_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeSdkExternalSignerBootstrap_lower(_ value: SdkExternalSignerBootstrap) -> RustBuffer {
     return FfiConverterTypeSdkExternalSignerBootstrap.lower(value)
+}
+
+public struct SdkExternalUnlockRequest {
+    public var ldkChainSync: SdkLdkChainSync
+    public var indexerUrl: String?
+    public var proxyEndpoint: String?
+    public var announceAddresses: [String]
+    public var announceAlias: String?
+    public var ethRpcUrl: String?
+
+    /// Default memberwise initializers are never public by default, so we
+    /// declare one manually.
+    public init(ldkChainSync: SdkLdkChainSync, indexerUrl: String? = nil, proxyEndpoint: String? = nil, announceAddresses: [String] = [], announceAlias: String? = nil, ethRpcUrl: String? = nil) {
+        self.ldkChainSync = ldkChainSync
+        self.indexerUrl = indexerUrl
+        self.proxyEndpoint = proxyEndpoint
+        self.announceAddresses = announceAddresses
+        self.announceAlias = announceAlias
+        self.ethRpcUrl = ethRpcUrl
+    }
+}
+
+extension SdkExternalUnlockRequest: Equatable, Hashable {
+    public static func == (lhs: SdkExternalUnlockRequest, rhs: SdkExternalUnlockRequest) -> Bool {
+        if lhs.ldkChainSync != rhs.ldkChainSync {
+            return false
+        }
+        if lhs.indexerUrl != rhs.indexerUrl {
+            return false
+        }
+        if lhs.proxyEndpoint != rhs.proxyEndpoint {
+            return false
+        }
+        if lhs.announceAddresses != rhs.announceAddresses {
+            return false
+        }
+        if lhs.announceAlias != rhs.announceAlias {
+            return false
+        }
+        if lhs.ethRpcUrl != rhs.ethRpcUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(ldkChainSync)
+        hasher.combine(indexerUrl)
+        hasher.combine(proxyEndpoint)
+        hasher.combine(announceAddresses)
+        hasher.combine(announceAlias)
+        hasher.combine(ethRpcUrl)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSdkExternalUnlockRequest: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SdkExternalUnlockRequest {
+        return
+            try SdkExternalUnlockRequest(
+                ldkChainSync: FfiConverterTypeSdkLdkChainSync.read(from: &buf),
+                indexerUrl: FfiConverterOptionString.read(from: &buf),
+                proxyEndpoint: FfiConverterOptionString.read(from: &buf),
+                announceAddresses: FfiConverterSequenceString.read(from: &buf),
+                announceAlias: FfiConverterOptionString.read(from: &buf),
+                ethRpcUrl: FfiConverterOptionString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: SdkExternalUnlockRequest, into buf: inout [UInt8]) {
+        FfiConverterTypeSdkLdkChainSync.write(value.ldkChainSync, into: &buf)
+        FfiConverterOptionString.write(value.indexerUrl, into: &buf)
+        FfiConverterOptionString.write(value.proxyEndpoint, into: &buf)
+        FfiConverterSequenceString.write(value.announceAddresses, into: &buf)
+        FfiConverterOptionString.write(value.announceAlias, into: &buf)
+        FfiConverterOptionString.write(value.ethRpcUrl, into: &buf)
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkExternalUnlockRequest_lift(_ buf: RustBuffer) throws -> SdkExternalUnlockRequest {
+    return try FfiConverterTypeSdkExternalUnlockRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSdkExternalUnlockRequest_lower(_ value: SdkExternalUnlockRequest) -> RustBuffer {
+    return FfiConverterTypeSdkExternalUnlockRequest.lower(value)
 }
 
 public struct SdkFailTransfersRequest {
@@ -12146,10 +12264,16 @@ private var initializationResult: InitializationResult = {
     if uniffi_rgb_lightning_node_checksum_method_sdknode_init_with_native_external_signer() != 35000 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 10895 {
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer() != 21946 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_attached_external_signer_request() != 52883 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer() != 16441 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_rgb_lightning_node_checksum_method_sdknode_unlock_with_native_external_signer_request() != 30716 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_rgb_lightning_node_checksum_method_externalsignerhost_call() != 9685 {

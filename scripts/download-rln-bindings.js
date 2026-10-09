@@ -6,7 +6,7 @@ const { execFileSync } = require('child_process');
 // iOS xcframework is downloaded from the pinned GitHub release.
 // Android AAR is resolved from Maven Central by Gradle — no download needed here.
 
-const VERSION = '0.15.0-beta.3';
+const VERSION = '0.16.0-beta.3';
 const BASE_URL = `https://github.com/UTEXO-Protocol/rgb-lightning-node/releases/download/v${VERSION}`;
 
 const ROOT = path.join(__dirname, '..');

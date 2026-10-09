@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.37
+
+__added__
+
+- `WebRgbProvider.witnessReceive()` creates witness invoices with the same validation, confirmation floor and per-call approval as `blindReceive()`.
+- `WebRgbProvider.signMessage()` requests approval for the exact message and returns `{ signature }`. Both methods are advertised by `getInfo()` and recheck session authorization before calling the wallet.
+
+__changed__
+
+- Updated iOS and Android RLN native bindings from **`v0.15.0-beta.3` to `v0.16.0-beta.3`**.
+- Updated `@utexo/webrgb` to **`0.1.2`** and added `@utexo/webrgb-walletconnect` **`0.1.2`**.
 
 __fixed__
 

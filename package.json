@@ -86,9 +86,9 @@
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@utexo/webrgb": "^0.1.2",
     "react": "*",
-    "react-native": "*",
-    "@utexo/webrgb": "^0.1.0"
+    "react-native": "*"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
@@ -96,6 +96,7 @@
     "@types/react": "^19.2.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "@utexo/webrgb": "0.1.2",
     "del-cli": "^6.0.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
@@ -103,8 +104,7 @@
     "prettier": "^3.0.0",
     "react-native": "*",
     "react-native-builder-bob": "^0.40.17",
-    "typescript": "^5.9.2",
-    "@utexo/webrgb": "^0.1.0"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
@@ -113,7 +113,8 @@
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
-    "@utexo/rgb-sdk-core": "1.0.0-beta.9"
+    "@utexo/rgb-sdk-core": "1.0.0-beta.9",
+    "@utexo/webrgb-walletconnect": "0.1.2"
   },
   "react-native-builder-bob": {
     "source": "src",

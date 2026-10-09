@@ -5,6 +5,10 @@ import type {
   RgbAssetBalance,
   RgbTransferStatusResult,
   RgbBlindReceiveArgs,
+  RgbBlindReceiveResult,
+  RgbWitnessReceiveArgs,
+  RgbWitnessReceiveResult,
+  RgbSignMessageResult,
   RgbBurnAssetArgs,
   RgbGetConsignmentArgs,
 } from '@utexo/webrgb';
@@ -17,6 +21,7 @@ export const WEBRGB_READ_METHODS = [
   'getInfo',
   'getAddress',
   'blindReceive',
+  'witnessReceive',
   'listAssets',
   'getAssetBalance',
   'listTransfers',
@@ -27,13 +32,20 @@ type SupportedProvider = Pick<
   RgbProvider,
   | (typeof WEBRGB_READ_METHODS)[number]
   | 'enabled'
+  | 'signMessage'
   | 'burnAsset'
   | 'getConsignment'
 >;
 
 export interface WebRgbApproval {
   origin: string;
-  method: 'enable' | 'blindReceive' | 'burnAsset' | 'getConsignment';
+  method:
+    | 'enable'
+    | 'blindReceive'
+    | 'witnessReceive'
+    | 'signMessage'
+    | 'burnAsset'
+    | 'getConsignment';
   params: Readonly<Record<string, unknown>>;
 }
 export interface WebRgbOptions {
@@ -58,6 +70,8 @@ type Wallet = Pick<
   | 'isDisposed'
   | 'getAddress'
   | 'blindReceive'
+  | 'witnessReceive'
+  | 'signMessage'
   | 'listAssets'
   | 'getAssetBalance'
   | 'listTransfers'
@@ -103,7 +117,7 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 /**
- * WebRGB receiving/read API for an individual dApp session. No React Native or
+ * WebRGB receiving, signing and read API for an individual dApp session. No React Native or
  * WalletConnect runtime dependency. Burn is advertised only when the host
  * supplies a durable operation store and the native build/signer support it.
  */
@@ -211,6 +225,7 @@ export class WebRgbProvider implements SupportedProvider {
       protocol: 'RGB_LN',
       methods: [
         ...WEBRGB_READ_METHODS,
+        'signMessage',
         ...((await this.burnController?.methods()) ?? []),
       ],
     };
@@ -219,7 +234,44 @@ export class WebRgbProvider implements SupportedProvider {
     this.requireEnabled();
     return { address: await walletCall(() => this.wallet.getAddress()) };
   }
-  async blindReceive(args: RgbBlindReceiveArgs = {}) {
+  async signMessage(message: string): Promise<RgbSignMessageResult> {
+    this.requireEnabled();
+    if (typeof message !== 'string' || /[\uD800-\uDFFF]/u.test(message))
+      throw new WebRgbError(
+        'INVALID_PARAMS',
+        'Expected a well-formed Unicode message string'
+      );
+    const revision = this.revision;
+    if (
+      !(await this.options.confirm({
+        origin: this.options.origin,
+        method: 'signMessage',
+        params: Object.freeze({ message }),
+      }))
+    ) {
+      throw new WebRgbError('USER_REJECTED', 'Message signing declined');
+    }
+    this.requireEnabled();
+    if (revision !== this.revision)
+      throw new WebRgbError('NOT_ENABLED', 'Session changed');
+    return {
+      signature: await walletCall(() => this.wallet.signMessage(message)),
+    };
+  }
+  async blindReceive(
+    args: RgbBlindReceiveArgs = {}
+  ): Promise<RgbBlindReceiveResult> {
+    return this.receive('blindReceive', args);
+  }
+  async witnessReceive(
+    args: RgbWitnessReceiveArgs = {}
+  ): Promise<RgbWitnessReceiveResult> {
+    return this.receive('witnessReceive', args);
+  }
+  private async receive(
+    method: 'blindReceive' | 'witnessReceive',
+    args: RgbBlindReceiveArgs
+  ): Promise<RgbBlindReceiveResult> {
     this.requireEnabled();
     const raw = object(args);
     const params = {
@@ -241,7 +293,7 @@ export class WebRgbProvider implements SupportedProvider {
     if (
       !(await this.options.confirm({
         origin: this.options.origin,
-        method: 'blindReceive',
+        method,
         params: Object.freeze({ ...params }),
       }))
     ) {
@@ -250,7 +302,7 @@ export class WebRgbProvider implements SupportedProvider {
     this.requireEnabled();
     if (revision !== this.revision)
       throw new WebRgbError('NOT_ENABLED', 'Session changed');
-    const result = await walletCall(() => this.wallet.blindReceive(params));
+    const result = await walletCall(() => this.wallet[method](params));
     return {
       invoice: result.invoice,
       recipientId: result.recipientId,

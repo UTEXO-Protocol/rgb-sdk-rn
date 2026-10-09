@@ -17,6 +17,7 @@ export interface BurnOperationRecord {
   /** Journal states, never RGB transfer statuses. */
   state: 'prepared' | 'pending' | 'complete' | 'cancelled';
   result?: BurnResult;
+  error?: string;
 }
 export interface BurnOperationStore {
   /** May return v1 records; normalizeBurnRecord preserves their internal IDs. */
@@ -65,6 +66,7 @@ export function normalizeBurnRecord(value: unknown): BurnOperationRecord {
   if (
     !record.id ||
     typeof record.id !== 'string' ||
+    (record.error !== undefined && typeof record.error !== 'string') ||
     !['prepared', 'pending', 'complete', 'cancelled'].includes(record.state) ||
     typeof record.metadata?.origin !== 'string' ||
     typeof record.metadata.network !== 'string' ||
@@ -163,6 +165,7 @@ export class BurnOperations {
         state: 'prepared',
       };
       let invoked = false;
+      let nativeReturned = false;
       try {
         await this.save(record);
         assertAuthorized();
@@ -171,16 +174,30 @@ export class BurnOperations {
         assertAuthorized();
         invoked = true;
         const result = await this.wallet.burn(request);
+        nativeReturned = true;
         validateResult(result);
         record = { ...record, state: 'complete', result: { ...result } };
         await this.save(record);
         return record;
       } catch (error) {
-        if (!invoked) {
-          // Even a write failure is safe to cancel while native was never invoked.
-          await this.save({ ...record, state: 'cancelled' }).catch(
-            () => undefined
-          );
+        // Preserve a successful native result if its journal write failed.
+        if (record.state !== 'complete') {
+          const failure = error as { code?: unknown; message?: unknown } | null;
+          // These native errors occur while funding the PSBT, before broadcast.
+          const unfunded =
+            !nativeReturned &&
+            (failure?.code === 'InsufficientFunds' ||
+              failure?.code === 'NoAvailableUtxos');
+          await this.save({
+            ...record,
+            state: !invoked || unfunded ? 'cancelled' : 'pending',
+            ...(invoked && {
+              error:
+                typeof failure?.message === 'string'
+                  ? failure.message
+                  : String(error),
+            }),
+          }).catch(() => undefined);
         }
         throw error;
       }

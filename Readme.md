@@ -1175,6 +1175,10 @@ Install [@utexo/webrgb](https://github.com/UTEXO-Protocol/webrgb/tree/dev) to ex
 calls and approvals; WalletConnect sessions and RPC routing are provided
 separately by [@utexo/webrgb-walletconnect](https://github.com/UTEXO-Protocol/webrgb-walletconnect/tree/dev).
 
+```bash
+npm install @utexo/webrgb@0.1.2 @utexo/webrgb-walletconnect@0.1.2
+```
+
 ```typescript
 import { WebRgbProvider } from '@utexo/rgb-sdk-rn/webrgb';
 
@@ -1188,6 +1192,8 @@ await provider.enable(); // request connection approval
 const { network, methods } = await provider.getInfo();
 const assets = await provider.listAssets();
 const { invoice } = await provider.blindReceive(); // request invoice approval
+const witness = await provider.witnessReceive({ amount: 5 }); // request witness invoice approval
+const { signature } = await provider.signMessage('Sign in to mint.example'); // display and approve the exact message
 const transfers = await provider.listTransfers();
 
 provider.revoke(); // on session expiry/disconnect
@@ -1196,8 +1202,14 @@ provider.revoke(); // on session expiry/disconnect
 The app supplies permission checks and the confirmation UI (`Promise<boolean>`).
 Set `sessionApproved: true` only for an already approved transport session to skip
 the connection prompt. `methods` lists supported calls, including
-`getAddress()`, `getAssetBalance(assetId)`, `getTransferStatus(transferId, assetId?)`,
-and `decodeRgbInvoice(invoice)`.
+`getAddress()`, `witnessReceive()`, `signMessage(message)`, `getAssetBalance(assetId)`,
+`getTransferStatus(transferId, assetId?)`, and `decodeRgbInvoice(invoice)`.
+
+Handle `witnessReceive` and `signMessage` in the confirmation UI. Witness invoices
+use the same parameters and confirmation floor as blinded invoices; message
+signing requires showing the requesting origin and exact message. For WalletConnect,
+include these method names in the wallet's supported methods and the dApp's requested
+session permissions (`optionalMethods` can be used for `signMessage`).
 
 Optional burn/proof export: [setup and flow](./src/integrations/webrgb/burn.ts).
 

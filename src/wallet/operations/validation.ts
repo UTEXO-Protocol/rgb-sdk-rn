@@ -1,3 +1,4 @@
+import { ValidationError } from '@utexo/rgb-sdk-core';
 import type { BurnParams } from '../types';
 
 export function validateConsignmentLookup(assetId: string, txid: string): void {
@@ -37,4 +38,31 @@ export function validateBurnParams(params: BurnParams): void {
     params.minConfirmations > 255
   )
     throw new Error('minConfirmations must be between 1 and 255');
+}
+
+/**
+ * Convert a `number | bigint` amount to the double the TurboModule bridge
+ * carries. The shared contract invites bigint inputs (RGB amounts are u64
+ * base units, realistically above 2^53 for high-precision tokens), but
+ * `Number()` silently rounds those — the node would then fund, push or
+ * invoice a different amount than requested. Fail closed instead, the same
+ * way transfer amounts and BFA balances already do.
+ */
+export function toSafeBridgeNumber(
+  value: number | bigint | null | undefined,
+  field: string
+): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'bigint') {
+    if (value > BigInt(Number.MAX_SAFE_INTEGER))
+      throw new ValidationError(
+        `${field} exceeds the exact integer range of the native bridge`
+      );
+    return Number(value);
+  }
+  if (!Number.isSafeInteger(value))
+    throw new ValidationError(
+      `${field} must be a safe integer for the native bridge`
+    );
+  return value;
 }

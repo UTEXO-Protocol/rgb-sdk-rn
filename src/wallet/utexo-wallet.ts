@@ -1,4 +1,5 @@
 import {
+  toSafeBridgeNumber,
   validateBurnParams,
   validateConsignmentLookup,
 } from './operations/validation';
@@ -813,7 +814,10 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     }
   ): Promise<LightningReceiveRequest> {
     this.assertLightningEnabled();
-    const amtMsat = params.amountSats != null ? params.amountSats * 1000 : null;
+    const amtMsat =
+      params.amountSats != null
+        ? toSafeBridgeNumber(params.amountSats * 1000, 'amountSats')
+        : null;
     const assetId = params.asset?.assetId || null;
     const assetAmount = assetId ? (params.asset?.amount ?? null) : null;
     const resp = await this.rln.rlnLnInvoice(
@@ -836,10 +840,14 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   ): Promise<LightningInvoice> {
     this.assertLightningEnabled();
     const resp = await this.rln.rlnLnInvoice(
-      params.amtMsat != null ? Number(params.amtMsat) : null,
+      params.amtMsat != null
+        ? toSafeBridgeNumber(params.amtMsat, 'amtMsat')
+        : null,
       params.expirySec,
       params.assetId ?? null,
-      params.assetAmount != null ? Number(params.assetAmount) : null,
+      params.assetAmount != null
+        ? toSafeBridgeNumber(params.assetAmount, 'assetAmount')
+        : null,
       params.paymentHash,
       params.minFinalCltvExpiryDelta ?? null,
       params.descriptionHash ?? null
@@ -1157,20 +1165,22 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     this.assertLightningEnabled();
     const resp = await this.rln.rlnOpenChannel({
       peerPubkeyAndOptAddr: params.peerPubkey,
-      capacitySat: Number(params.capacitySat),
-      pushMsat: Number(params.pushMsat ?? 0),
+      capacitySat: toSafeBridgeNumber(params.capacitySat, 'capacitySat')!,
+      pushMsat: toSafeBridgeNumber(params.pushMsat ?? 0, 'pushMsat')!,
       public: params.isPublic,
       withAnchors: params.withAnchors ?? true,
       feeBaseMsat: params.feeBaseMsat ?? null,
       feeProportionalMillionths: params.feeProportionalMillionths ?? null,
       temporaryChannelId: params.temporaryChannelId ?? null,
       assetId: params.assetId ?? null,
-      assetAmount:
-        params.assetLocalAmount != null
-          ? Number(params.assetLocalAmount)
-          : null,
-      pushAssetAmount:
-        params.pushAssetAmount != null ? Number(params.pushAssetAmount) : null,
+      assetAmount: toSafeBridgeNumber(
+        params.assetLocalAmount,
+        'assetLocalAmount'
+      ),
+      pushAssetAmount: toSafeBridgeNumber(
+        params.pushAssetAmount,
+        'pushAssetAmount'
+      ),
       virtualOpenMode: params.virtualOpenMode ?? null,
     });
     return { temporaryChannelId: resp.temporaryChannelId };

@@ -1213,6 +1213,25 @@ session permissions (`optionalMethods` can be used for `signMessage`).
 
 Optional burn/proof export: [setup and flow](./src/integrations/webrgb/burn.ts).
 
+Tron payouts use `burnRecipient: { chainId: 'tron:728126428', address: 'T…' }`
+(mainnet; Shasta `2494104990` and Nile `3448148188` are also accepted). Use a
+nonzero Base58Check address with its original casing. The wallet validates its
+checksum before prompting or invoking native burn. `getInfo().burnRecipientNamespaces`
+advertises `tron` only when native burn and the durable operation store are available;
+a dApp must check this field before requesting a Tron burn from an older wallet.
+EVM requests retain the `eip155:<chainId>` and `0x…` format.
+
+The native proof contains the 20 account bytes padded to 32 bytes. Tron's `41`
+version byte and checksum are not included; the destination chain is retained in
+approved journal metadata. This does not configure or verify bridge contracts.
+The bridge payout route and its contracts must be configured independently.
+
+Local Tron development requires the matching WebRGB declarations from the
+`webrgb` Tron change. Install its local package before building this SDK, then
+install both packages in the demo wallet. A released SDK must depend on the
+WebRGB release containing that change; stock `@utexo/webrgb@0.1.2` does not include
+these declarations. Rebuild the wallet app to include the SDK changes.
+
 ---
 
 ## Further reading

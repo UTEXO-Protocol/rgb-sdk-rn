@@ -368,7 +368,13 @@ test('revocation during either journal write cancels before native invocation', 
     assert.equal((await f.operations.records())[0].state, 'cancelled');
     // Reconnect with a new authorization context on the same wallet/store.
     await f.operations.execute(
-      { assetId: 'rgb:asset', amount: '1', feeRate: 2, minConfirmations: 3 },
+      {
+        assetId: 'rgb:asset',
+        amount: '1',
+        burnRecipient: encodeEvmBurnRecipient(args().burnRecipient.address),
+        feeRate: 2,
+        minConfirmations: 3,
+      },
       {
         origin: 'https://mint.example',
         network: 'utexo',
@@ -412,4 +418,148 @@ test('reconciliation requires a matching burn and independently verified proof',
 test('invalid journal records fail closed instead of losing unresolved burns', () => {
   for (const record of [null, {}, { version: 2, id: 'x', state: 'complete' }])
     assert.throws(() => normalizeBurnRecord(record));
+});
+
+const tronAddress = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+const tronAccount = 'a614f803b6fd780986a42c78ec9c7f77e6ded13c';
+const tronArgs = () => ({
+  ...args(),
+  burnRecipient: { chainId: 'tron:728126428', address: tronAddress },
+});
+test('Tron burn preserves native address in approval/result/journal and encodes only account bytes', async () => {
+  const f = fixture();
+  const result = await f.controller().burnAsset(tronArgs());
+  assert.deepEqual(result.burnRecipient, tronArgs().burnRecipient);
+  assert.deepEqual(f.prompts[0].params.burnRecipient, tronArgs().burnRecipient);
+  assert.equal(f.calls[0].burnRecipient, '0'.repeat(24) + tronAccount);
+  const [record] = await f.operations.records();
+  assert.deepEqual(record.metadata.payout, tronArgs().burnRecipient);
+  assert.equal(record.state, 'complete');
+  // A new operation service/provider can read the same durable journal without reburning.
+  const restarted = new BurnOperations(f.wallet, f.store);
+  assert.deepEqual(await restarted.records(), [record]);
+  const status = await f.controller().getTransferStatus(txid);
+  assert.deepEqual(status.transfer.burnRecipient, tronArgs().burnRecipient);
+  assert.equal(
+    (await f.controller().getConsignment({ assetId: 'rgb:asset', txid }))
+      .encoding,
+    'base64'
+  );
+  assert.equal(f.calls.length, 1);
+});
+test('Tron validates checksum, case, version, nonzero account and chain before prompting or burning', async () => {
+  const { base58check } = await import('@scure/base');
+  const { sha256 } = await import('@noble/hashes/sha2.js');
+  const codec = base58check(sha256);
+  const zero = codec.encode(new Uint8Array([0x41, ...new Uint8Array(20)]));
+  const wrongVersion = codec.encode(
+    new Uint8Array([0x42, ...new Uint8Array(20).fill(1)])
+  );
+  const recipients = [
+    { chainId: 'tron:728126428', address: tronAddress.toLowerCase() },
+    { chainId: 'tron:728126428', address: tronAddress.slice(0, -1) + 'a' },
+    { chainId: 'tron:728126428', address: zero },
+    { chainId: 'tron:728126428', address: wrongVersion },
+    { chainId: 'tron:728126428', address: '0x' + tronAccount },
+    { chainId: 'tron:728126428', address: '41' + tronAccount },
+    { chainId: 'tron:1', address: tronAddress },
+    { chainId: 'tron:0728126428', address: tronAddress },
+    { chainId: 'tron:0x2b6653dc', address: tronAddress },
+    { chainId: 'eip155:1', address: tronAddress },
+  ];
+  for (const burnRecipient of recipients) {
+    const f = fixture();
+    await assert.rejects(
+      f.controller().burnAsset({ ...args(), burnRecipient }),
+      { code: 'INVALID_PARAMS' }
+    );
+    assert.equal(f.prompts.length, 0);
+    assert.equal(f.calls.length, 0);
+    assert.equal((await f.store.readAll()).length, 0);
+  }
+});
+test('Tron testnets preserve their approved chain identity', async () => {
+  for (const chainId of ['tron:2494104990', 'tron:3448148188']) {
+    const f = fixture();
+    const result = await f
+      .controller()
+      .burnAsset({
+        ...tronArgs(),
+        burnRecipient: { chainId, address: tronAddress },
+      });
+    assert.equal(result.burnRecipient.chainId, chainId);
+    assert.equal(f.calls[0].burnRecipient, '0'.repeat(24) + tronAccount);
+  }
+});
+test('Tron journal rejects mismatched or corrupted recipient metadata', async () => {
+  const f = fixture();
+  await f.controller().burnAsset(tronArgs());
+  const [record] = await f.operations.records();
+  assert.throws(
+    () =>
+      normalizeBurnRecord({
+        ...record,
+        params: { ...record.params, burnRecipient: '1'.repeat(64) },
+      }),
+    /does not match/
+  );
+  assert.throws(() =>
+    normalizeBurnRecord({
+      ...record,
+      metadata: {
+        ...record.metadata,
+        payout: {
+          ...record.metadata.payout,
+          address: tronAddress.toLowerCase(),
+        },
+      },
+    })
+  );
+});
+test('ambiguous Tron burn remains pending after restart and cannot burn again', async () => {
+  const f = fixture();
+  let calls = 0;
+  f.wallet.burn = async () => {
+    calls++;
+    throw new Error('Lost native response');
+  };
+  await assert.rejects(
+    f.controller().burnAsset(tronArgs()),
+    /Lost native response/
+  );
+  await assert.rejects(
+    f.controller().burnAsset(tronArgs()),
+    /unresolved outcome/
+  );
+  assert.equal(
+    (await new BurnOperations(f.wallet, f.store).records())[0].state,
+    'pending'
+  );
+  assert.equal(calls, 1);
+});
+test('provider advertises Tron only with a working burn controller', async () => {
+  const f = fixture();
+  const options = {
+    origin: 'https://mint.example',
+    sessionApproved: true,
+    confirm: async () => true,
+  };
+  const provider = new WebRgbProvider(f.wallet, {
+    ...options,
+    burn: { operations: f.operations },
+  });
+  assert.deepEqual((await provider.getInfo()).burnRecipientNamespaces, [
+    'eip155',
+    'tron',
+  ]);
+  assert.equal(
+    (await new WebRgbProvider(f.wallet, options).getInfo())
+      .burnRecipientNamespaces,
+    undefined
+  );
+  f.wallet.getBfaCapabilities = async () => ({
+    burn: false,
+    consignment: true,
+  });
+  assert.equal((await provider.getInfo()).burnRecipientNamespaces, undefined);
 });

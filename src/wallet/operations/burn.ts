@@ -2,6 +2,7 @@
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import type { BurnParams, BurnResult } from '../types';
 import { validateBurnParams } from './validation';
+import { encodeBurnRecipient } from './recipient';
 
 /** Wallet-owned context, retained across transport sessions and app restarts. */
 export interface BurnOperationMetadata {
@@ -70,10 +71,14 @@ export function normalizeBurnRecord(value: unknown): BurnOperationRecord {
     !['prepared', 'pending', 'complete', 'cancelled'].includes(record.state) ||
     typeof record.metadata?.origin !== 'string' ||
     typeof record.metadata.network !== 'string' ||
-    typeof record.metadata.payout?.chainId !== 'string' ||
-    !/^0x[0-9a-fA-F]{40}$/.test(record.metadata.payout.address)
+    typeof record.metadata.payout?.chainId !== 'string'
   )
     throw new Error('Invalid burn journal record');
+  if (
+    encodeBurnRecipient(record.metadata.payout) !==
+    record.params.burnRecipient?.toLowerCase()
+  )
+    throw new Error('Burn journal recipient does not match payout metadata');
   if (record.state === 'complete') validateResult(record.result);
   return record;
 }
@@ -164,6 +169,7 @@ export class BurnOperations {
         metadata: context,
         state: 'prepared',
       };
+      normalizeBurnRecord(record);
       let invoked = false;
       let nativeReturned = false;
       try {

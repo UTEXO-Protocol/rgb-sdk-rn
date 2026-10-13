@@ -96,7 +96,7 @@
     "@types/react": "^19.2.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "@utexo/webrgb": "0.1.2",
+    "@utexo/webrgb": "github:UTEXO-Protocol/webrgb#3a453f01f6eacde507dc2eefe83cef727da86e23",
     "del-cli": "^6.0.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",

@@ -33,10 +33,9 @@ export function encodeTronBurnRecipient(address: string): string {
   return bytesToHex(payload.subarray(1)).padStart(64, '0');
 }
 
-export function normalizeBurnRecipient(recipient: {
-  chainId: string;
-  address: string;
-}): RgbBurnRecipient {
+export function normalizeBurnRecipient(
+  recipient: RgbBurnRecipient
+): RgbBurnRecipient {
   if (
     typeof recipient?.chainId !== 'string' ||
     typeof recipient.address !== 'string'
@@ -45,21 +44,18 @@ export function normalizeBurnRecipient(recipient: {
   if (/^eip155:[1-9][0-9]*$/.test(recipient.chainId)) {
     encodeEvmBurnRecipient(recipient.address);
     return {
-      chainId: recipient.chainId as `eip155:${number}`,
-      address: recipient.address.toLowerCase() as `0x${string}`,
+      chainId: recipient.chainId,
+      address: recipient.address.toLowerCase(),
     };
   }
   if (tronChains.has(recipient.chainId)) {
     encodeTronBurnRecipient(recipient.address);
-    return { ...recipient } as RgbBurnRecipient;
+    return { ...recipient };
   }
   throw new Error('Unsupported payout chain');
 }
 
-export function encodeBurnRecipient(recipient: {
-  chainId: string;
-  address: string;
-}): string {
+export function encodeBurnRecipient(recipient: RgbBurnRecipient): string {
   const normalized = normalizeBurnRecipient(recipient);
   return normalized.chainId.startsWith('tron:')
     ? encodeTronBurnRecipient(normalized.address)

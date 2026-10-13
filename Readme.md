@@ -1176,7 +1176,7 @@ calls and approvals; WalletConnect sessions and RPC routing are provided
 separately by [@utexo/webrgb-walletconnect](https://github.com/UTEXO-Protocol/webrgb-walletconnect/tree/dev).
 
 ```bash
-npm install @utexo/webrgb@0.1.2 @utexo/webrgb-walletconnect@0.1.2
+npm install @utexo/webrgb@0.1.3 @utexo/webrgb-walletconnect@0.1.3
 ```
 
 ```typescript
@@ -1226,11 +1226,11 @@ version byte and checksum are not included; the destination chain is retained in
 approved journal metadata. This does not configure or verify bridge contracts.
 The bridge payout route and its contracts must be configured independently.
 
-Local Tron development requires the matching WebRGB declarations from the
-`webrgb` Tron change. Install its local package before building this SDK, then
-install both packages in the demo wallet. A released SDK must depend on the
-WebRGB release containing that change; stock `@utexo/webrgb@0.1.2` does not include
-these declarations. Rebuild the wallet app to include the SDK changes.
+Use WebRGB and its WalletConnect adapter version `0.1.3` or newer. Payout chains
+are burn arguments; the WalletConnect session stays on `rgb:<network>`.
+If a request returns `NOT_ENABLED` after a wallet restart, call `enable()` again
+on the existing provider while the session remains valid. Burns are not retried
+automatically.
 
 ---
 

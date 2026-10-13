@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { createWalletConnectProvider } from '@utexo/webrgb-walletconnect';
 import { base64 } from '@scure/base';
 import { WebRgbBurnController } from '../lib/module/integrations/webrgb/burn.js';
 import { WebRgbProvider } from '../lib/module/integrations/webrgb/index.js';
@@ -466,6 +468,7 @@ test('Tron validates checksum, case, version, nonzero account and chain before p
     { chainId: 'tron:0728126428', address: tronAddress },
     { chainId: 'tron:0x2b6653dc', address: tronAddress },
     { chainId: 'eip155:1', address: tronAddress },
+    { chainId: 'cosmos:cosmoshub-4', address: tronAddress },
   ];
   for (const burnRecipient of recipients) {
     const f = fixture();
@@ -481,12 +484,10 @@ test('Tron validates checksum, case, version, nonzero account and chain before p
 test('Tron testnets preserve their approved chain identity', async () => {
   for (const chainId of ['tron:2494104990', 'tron:3448148188']) {
     const f = fixture();
-    const result = await f
-      .controller()
-      .burnAsset({
-        ...tronArgs(),
-        burnRecipient: { chainId, address: tronAddress },
-      });
+    const result = await f.controller().burnAsset({
+      ...tronArgs(),
+      burnRecipient: { chainId, address: tronAddress },
+    });
     assert.equal(result.burnRecipient.chainId, chainId);
     assert.equal(f.calls[0].burnRecipient, '0'.repeat(24) + tronAccount);
   }
@@ -562,4 +563,49 @@ test('provider advertises Tron only with a working burn controller', async () =>
     consignment: true,
   });
   assert.equal((await provider.getInfo()).burnRecipientNamespaces, undefined);
+});
+
+test('WalletConnect exposes recipient namespaces and preserves Tron recipients on the RGB session', async (t) => {
+  const f = fixture();
+  const provider = new WebRgbProvider(f.wallet, {
+    origin: 'https://mint.example',
+    sessionApproved: true,
+    confirm: async () => true,
+    burn: { operations: f.operations },
+  });
+  const session = {
+    topic: 'burn-session',
+    expiry: Math.floor(Date.now() / 1000) + 3600,
+    sessionProperties: { webrgb: 'webrgb:1' },
+    namespaces: {
+      rgb: {
+        accounts: ['rgb:utexo:test-wallet'],
+        methods: ['rgb_enable', 'rgb_getInfo', 'rgb_burnAsset'],
+        events: [],
+      },
+    },
+  };
+  const client = Object.assign(new EventEmitter(), {
+    session: { get: () => session },
+    request: async ({ topic, chainId, request }) => {
+      assert.equal(topic, session.topic);
+      assert.equal(chainId, 'rgb:utexo');
+      return provider[request.method.slice(4)](...request.params);
+    },
+  });
+  const remote = createWalletConnectProvider({
+    client,
+    topic: session.topic,
+    network: 'utexo',
+  });
+  t.after(() => remote.dispose());
+  await remote.enable();
+  assert.deepEqual((await remote.getInfo()).burnRecipientNamespaces, [
+    'eip155',
+    'tron',
+  ]);
+  const result = await remote.burnAsset(tronArgs());
+  assert.deepEqual(result.burnRecipient, tronArgs().burnRecipient);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].burnRecipient, '0'.repeat(24) + tronAccount);
 });

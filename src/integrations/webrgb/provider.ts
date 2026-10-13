@@ -225,7 +225,7 @@ export class WebRgbProvider implements SupportedProvider {
       network: this.wallet.getNetwork(),
       protocol: 'RGB_LN',
       ...(burnMethods.includes('burnAsset') && {
-        burnRecipientNamespaces: ['eip155', 'tron'] as ('eip155' | 'tron')[],
+        burnRecipientNamespaces: ['eip155', 'tron'],
       }),
       methods: [...WEBRGB_READ_METHODS, 'signMessage', ...burnMethods],
     };

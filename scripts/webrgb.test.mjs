@@ -185,7 +185,7 @@ for (const method of ['blindReceive', 'witnessReceive']) {
 
 test('signMessage asks for consent on every call and signs the exact Unicode message', async () => {
   const { provider, calls, prompts } = fixture({ sessionApproved: true });
-  const message = '  Вхід до mint.example 🔑\nnonce: 123\r\n';
+  const message = '  Sign in to mint.example e\u0301\nnonce: 123\r\n';
   for (let i = 0; i < 2; i += 1) {
     assert.deepEqual(await provider.signMessage(message), {
       signature: 'zbase32-signature',
@@ -277,7 +277,7 @@ for (const [method, args] of [
   });
 }
 
-test('WalletConnect 0.1.2 forwards witnessReceive and signMessage to the RN provider', async () => {
+test('WalletConnect forwards witnessReceive and signMessage and recovers after lost authorization', async () => {
   const { provider, calls, prompts } = fixture({ sessionApproved: true });
   const methods = ['enable', 'getInfo', 'witnessReceive', 'signMessage'];
   const session = {
@@ -324,6 +324,18 @@ test('WalletConnect 0.1.2 forwards witnessReceive and signMessage to the RN prov
       prompts.map((prompt) => prompt.method),
       ['witnessReceive', 'signMessage']
     );
+    provider.revoke();
+    await assert.rejects(remote.getInfo(), { code: 'NOT_ENABLED' });
+    assert.equal(remote.enabled, false);
+    await remote.enable();
+    assert.equal(remote.enabled, true);
+    assert.deepEqual((await remote.getInfo()).methods, methods);
+    assert.equal(
+      requests.filter((request) => request.method === 'rgb_enable').length,
+      2
+    );
+    assert.equal(prompts.at(-1).method, 'enable');
+    assert.equal(calls.length, 2);
   } finally {
     remote.dispose();
   }

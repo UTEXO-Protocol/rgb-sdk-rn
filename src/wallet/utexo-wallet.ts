@@ -819,7 +819,9 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
         ? toSafeBridgeNumber(params.amountSats * 1000, 'amountSats')
         : null;
     const assetId = params.asset?.assetId || null;
-    const assetAmount = assetId ? (params.asset?.amount ?? null) : null;
+    const assetAmount = assetId
+      ? toSafeBridgeNumber(params.asset?.amount, 'asset.amount')
+      : null;
     const resp = await this.rln.rlnLnInvoice(
       amtMsat,
       params.expirySeconds ?? 3600,

@@ -1719,18 +1719,18 @@
     "@scure/bip32" "^2.0.1"
     "@scure/bip39" "^2.0.1"
 
-"@utexo/webrgb-walletconnect@0.1.2":
-  version "0.1.2"
-  resolved "https://registry.npmjs.org/@utexo/webrgb-walletconnect/-/webrgb-walletconnect-0.1.2.tgz"
-  integrity sha512-AAR54/xZ+nL96qnbhmmnqeQJvO9NvLL34P6P9HoY9T9EVP/w05x/5/YbcgGvwZvbbRHkSmbmm1wRVY9+1qMfGQ==
+"@utexo/webrgb-walletconnect@0.1.3":
+  version "0.1.3"
+  resolved "https://registry.yarnpkg.com/@utexo/webrgb-walletconnect/-/webrgb-walletconnect-0.1.3.tgz#e94c68766cb4d9636042455e3abe66eebccfe4c9"
+  integrity sha512-jry9KjMgZM4lHFVU6M5hLFgPZphvey8dac23hzudEqSwPyTRIgokLE4GJhvDg+hqIFt8BwkTh99Uyg8kbg8aWg==
   dependencies:
     "@noble/hashes" "^1.8.0"
     "@walletconnect/utils" "^2.25.0"
 
-"@utexo/webrgb@^0.1.2", "@utexo/webrgb@0.1.2":
-  version "0.1.2"
-  resolved "https://registry.npmjs.org/@utexo/webrgb/-/webrgb-0.1.2.tgz"
-  integrity sha512-nL3NuPn9/Z7OS/r1D4bU0+iWlfgTM/UsFVt5/FIm2bScoWUgCOfmWiojln7YdoPhVVCRKod0r/wQ2lyDAvT8qg==
+"@utexo/webrgb@0.1.3":
+  version "0.1.3"
+  resolved "https://registry.yarnpkg.com/@utexo/webrgb/-/webrgb-0.1.3.tgz#0140358d09e5deb0185039893d5e68cb5b91c7aa"
+  integrity sha512-8eL38yVP9HLMkJuJ+RYCnDdGuc2lmQLYNNAuXnIkxfg0VXAC92Llw1NNhPcvxUQedFhYQulm41oqbSgAk5Xqyg==
 
 "@walletconnect/environment@^1.0.1":
   version "1.0.1"

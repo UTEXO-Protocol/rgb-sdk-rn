@@ -1176,7 +1176,7 @@ calls and approvals; WalletConnect sessions and RPC routing are provided
 separately by [@utexo/webrgb-walletconnect](https://github.com/UTEXO-Protocol/webrgb-walletconnect/tree/dev).
 
 ```bash
-npm install @utexo/webrgb@0.1.2 @utexo/webrgb-walletconnect@0.1.2
+npm install @utexo/webrgb@0.1.3 @utexo/webrgb-walletconnect@0.1.3
 ```
 
 ```typescript
@@ -1212,6 +1212,25 @@ include these method names in the wallet's supported methods and the dApp's requ
 session permissions (`optionalMethods` can be used for `signMessage`).
 
 Optional burn/proof export: [setup and flow](./src/integrations/webrgb/burn.ts).
+
+Tron payouts use `burnRecipient: { chainId: 'tron:728126428', address: 'T…' }`
+(mainnet; Shasta `2494104990` and Nile `3448148188` are also accepted). Use a
+nonzero Base58Check address with its original casing. The wallet validates its
+checksum before prompting or invoking native burn. `getInfo().burnRecipientNamespaces`
+advertises `tron` only when native burn and the durable operation store are available;
+a dApp must check this field before requesting a Tron burn from an older wallet.
+EVM requests retain the `eip155:<chainId>` and `0x…` format.
+
+The native proof contains the 20 account bytes padded to 32 bytes. Tron's `41`
+version byte and checksum are not included; the destination chain is retained in
+approved journal metadata. This does not configure or verify bridge contracts.
+The bridge payout route and its contracts must be configured independently.
+
+Use WebRGB and its WalletConnect adapter version `0.1.3` or newer. Payout chains
+are burn arguments; the WalletConnect session stays on `rgb:<network>`.
+If a request returns `NOT_ENABLED` after a wallet restart, call `enable()` again
+on the existing provider while the session remains valid. Burns are not retried
+automatically.
 
 ---
 

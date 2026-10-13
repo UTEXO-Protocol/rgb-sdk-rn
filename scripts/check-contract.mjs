@@ -23,6 +23,7 @@ import assert from 'node:assert/strict';
 import { ValidationError } from '@utexo/rgb-sdk-core';
 import { runConformanceChecks } from '@utexo/rgb-sdk-core/conformance';
 import { UTEXOWallet } from '../lib/module/wallet/utexo-wallet.js';
+import { toSafeBridgeNumber } from '../lib/module/wallet/operations/validation.js';
 
 // ── Minimal describe/it/expect ───────────────────────────────────────────────
 
@@ -211,6 +212,152 @@ describe('UniFFI 0.13 response mapping', () => {
       assert.equal(decoded.description, extra.description ?? undefined);
       assert.equal(decoded.descriptionHash, extra.descriptionHash ?? undefined);
     }
+  });
+});
+
+describe('Native bridge amounts', () => {
+  const max = Number.MAX_SAFE_INTEGER;
+  const invalid = [
+    -1,
+    -1n,
+    -9007199254740993n,
+    max + 1,
+    BigInt(max) + 1n,
+    1.5,
+    NaN,
+    Infinity,
+    -Infinity,
+  ];
+
+  it('preserves safe amounts and omitted values, and rejects invalid amounts', () => {
+    for (const value of [0, 1, max]) {
+      assert.equal(toSafeBridgeNumber(value, 'amount'), value);
+      assert.equal(toSafeBridgeNumber(BigInt(value), 'amount'), value);
+    }
+    for (const value of [null, undefined])
+      assert.equal(toSafeBridgeNumber(value, 'amount'), null);
+    for (const value of invalid)
+      assert.throws(() => toSafeBridgeNumber(value, 'amount'), ValidationError);
+  });
+
+  it('rejects invalid channel and invoice amounts before calling the native manager', async () => {
+    const wallet = createWalletSync();
+    let calls = 0;
+    wallet.rln = new Proxy(
+      {},
+      {
+        get: () => async () => {
+          calls++;
+          throw new Error('Unexpected native call');
+        },
+      }
+    );
+    const channel = {
+      peerPubkey: 'peer',
+      capacitySat: 100000,
+      isPublic: false,
+      assetId: 'rgb:asset',
+    };
+    const hodl = { paymentHash: 'hash', expirySec: 3600, assetId: 'rgb:asset' };
+    for (const value of invalid) {
+      for (const field of [
+        'capacitySat',
+        'pushMsat',
+        'assetLocalAmount',
+        'pushAssetAmount',
+      ])
+        await assert.rejects(
+          wallet.openChannel({ ...channel, [field]: value }),
+          ValidationError,
+          field
+        );
+      for (const field of ['amtMsat', 'assetAmount'])
+        await assert.rejects(
+          wallet.createHodlInvoice({ ...hodl, [field]: value }),
+          ValidationError,
+          field
+        );
+      if (typeof value === 'number')
+        await assert.rejects(
+          wallet.createLightningInvoice({
+            amountSats: 1,
+            asset: { assetId: 'rgb:asset', amount: value },
+          }),
+          ValidationError,
+          'asset.amount'
+        );
+    }
+    for (const amountSats of [
+      -1,
+      0.0005,
+      NaN,
+      Infinity,
+      -Infinity,
+      Math.floor(max / 1000) + 1,
+    ])
+      await assert.rejects(
+        wallet.createLightningInvoice({ amountSats }),
+        ValidationError,
+        'amountSats'
+      );
+    assert.equal(calls, 0);
+  });
+
+  it('passes safe amounts, zero pushes and omitted invoice amounts unchanged', async () => {
+    const wallet = createWalletSync();
+    let channel;
+    const invoices = [];
+    wallet.rln.rlnOpenChannel = async (request) => {
+      channel = request;
+      return { temporaryChannelId: 'channel' };
+    };
+    wallet.rln.rlnLnInvoice = async (...args) => {
+      invoices.push(args);
+      return { invoice: 'invoice' };
+    };
+    await wallet.openChannel({
+      peerPubkey: 'peer',
+      capacitySat: 100000n,
+      isPublic: false,
+      pushMsat: 0n,
+      assetId: 'rgb:asset',
+      assetLocalAmount: BigInt(max),
+      pushAssetAmount: 0n,
+    });
+    assert.equal(channel.capacitySat, 100000);
+    assert.equal(channel.pushMsat, 0);
+    assert.equal(channel.assetAmount, max);
+    assert.equal(channel.pushAssetAmount, 0);
+    await wallet.openChannel({
+      peerPubkey: 'peer',
+      capacitySat: 100000,
+      isPublic: false,
+    });
+    assert.equal(channel.pushMsat, 0);
+    assert.equal(channel.assetAmount, null);
+    assert.equal(channel.pushAssetAmount, null);
+    await wallet.createHodlInvoice({
+      paymentHash: 'hash',
+      expirySec: 3600,
+      amtMsat: BigInt(max),
+      assetId: 'rgb:asset',
+      assetAmount: BigInt(max),
+    });
+    await wallet.createLightningInvoice({
+      amountSats: 1,
+      asset: { assetId: 'rgb:asset', amount: max },
+    });
+    await wallet.createLightningInvoice({});
+    await wallet.createHodlInvoice({ paymentHash: 'hash', expirySec: 3600 });
+    assert.deepEqual(
+      invoices.map((args) => [args[0], args[3]]),
+      [
+        [max, max],
+        [1000, max],
+        [null, null],
+        [null, null],
+      ]
+    );
   });
 });
 

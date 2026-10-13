@@ -54,15 +54,15 @@ export function toSafeBridgeNumber(
 ): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'bigint') {
-    if (value > BigInt(Number.MAX_SAFE_INTEGER))
+    if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER))
       throw new ValidationError(
-        `${field} exceeds the exact integer range of the native bridge`
+        `${field} must be a non-negative safe integer for the native bridge`
       );
     return Number(value);
   }
-  if (!Number.isSafeInteger(value))
+  if (!Number.isSafeInteger(value) || value < 0)
     throw new ValidationError(
-      `${field} must be a safe integer for the native bridge`
+      `${field} must be a non-negative safe integer for the native bridge`
     );
   return value;
 }

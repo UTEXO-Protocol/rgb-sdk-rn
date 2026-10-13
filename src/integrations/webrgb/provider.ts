@@ -219,15 +219,15 @@ export class WebRgbProvider implements SupportedProvider {
 
   async getInfo(): Promise<RgbInfo> {
     this.requireEnabled();
+    const burnMethods = (await this.burnController?.methods()) ?? [];
     return {
       ready: true,
       network: this.wallet.getNetwork(),
       protocol: 'RGB_LN',
-      methods: [
-        ...WEBRGB_READ_METHODS,
-        'signMessage',
-        ...((await this.burnController?.methods()) ?? []),
-      ],
+      ...(burnMethods.includes('burnAsset') && {
+        burnRecipientNamespaces: ['eip155', 'tron'],
+      }),
+      methods: [...WEBRGB_READ_METHODS, 'signMessage', ...burnMethods],
     };
   }
   async getAddress() {

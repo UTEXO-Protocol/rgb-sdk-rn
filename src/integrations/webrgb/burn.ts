@@ -31,7 +31,8 @@
  * and proof sharing. The host serializes approval dialogs. The operation service
  * serializes burns, persists prepared -> pending before invoking native burn,
  * and saves the result as complete. Failure before invocation cancels the record.
- * The EVM address is encoded as 12 zero bytes followed by its 20 address bytes;
+ * EVM and Tron recipients encode 12 zero bytes followed by 20 account bytes;
+ * Tron addresses retain Base58Check casing in prompts and stored metadata;
  * the requested payout chain is confirmed and saved in operation metadata.
  *
  * Proof export returns Base64, byte length, and a Keccak-256 digest (16 MiB limit).
@@ -52,7 +53,7 @@ import type {
   RgbGetConsignmentResult,
   RgbTransferStatusResult,
 } from '@utexo/webrgb';
-import { encodeEvmBurnRecipient } from './recipient';
+import { encodeBurnRecipient, normalizeBurnRecipient } from './recipient';
 import {
   validateBurnParams,
   validateConsignmentLookup,
@@ -120,8 +121,7 @@ export class WebRgbBurnController {
       args.network !== this.wallet.getNetwork() ||
       !args.burnRecipient ||
       typeof args.burnRecipient.address !== 'string' ||
-      typeof args.burnRecipient.chainId !== 'string' ||
-      !/^eip155:[1-9][0-9]*$/.test(args.burnRecipient.chainId)
+      typeof args.burnRecipient.chainId !== 'string'
     )
       throw new WebRgbError(
         'INVALID_PARAMS',
@@ -139,15 +139,13 @@ export class WebRgbBurnController {
       network: args.network,
       assetId: args.assetId,
       amount: args.amount,
-      burnRecipient: {
-        chainId: args.burnRecipient.chainId,
-        address: args.burnRecipient.address.toLowerCase() as `0x${string}`,
-      },
+      burnRecipient: { ...args.burnRecipient },
       feeRate: args.feeRate ?? 2,
       minConfirmations: Math.max(3, args.minConfirmations ?? 3),
     };
     try {
-      recipient = encodeEvmBurnRecipient(request.burnRecipient.address);
+      request.burnRecipient = normalizeBurnRecipient(request.burnRecipient);
+      recipient = encodeBurnRecipient(request.burnRecipient);
       validateBurnParams({
         ...request,
         burnRecipient: recipient,

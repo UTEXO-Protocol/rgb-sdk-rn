@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0-beta.38
+
+__changed__
+
+- Updated iOS and Android RLN native bindings from **`v0.16.0-beta.3` to `v0.17.0-beta.3`**.
+
 ## 1.0.0-beta.37
 
 __added__

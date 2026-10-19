@@ -77,6 +77,10 @@ function unzip(zipPath, outDir) {
 }
 
 async function setupIos() {
+  if (require('../package.json').version.includes('bfa.local')) {
+    console.log('[rln] BFA Android draft: stage the rebuilt AAR with stage-bfa-native.mjs. iOS is not supported by this build.');
+    return;
+  }
   if (process.platform !== 'darwin') {
     console.log('[rln] Skipping iOS framework: not macOS.');
     return;

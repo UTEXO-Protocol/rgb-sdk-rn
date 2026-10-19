@@ -13,7 +13,10 @@ export class WebRgbError extends Error {
 }
 
 /** Native errors are implementation details; expose only the WebRGB contract. */
-export async function walletCall<T>(action: () => Promise<T>): Promise<T> {
+export async function walletCall<T>(
+  action: () => Promise<T>,
+  context?: 'asset-balance'
+): Promise<T> {
   try {
     return await action();
   } catch (error) {
@@ -25,7 +28,14 @@ export async function walletCall<T>(action: () => Promise<T>): Promise<T> {
     const code =
       typeof native?.code === 'string' ? native.code : native?.code?.type;
     let mapped: ProviderErrorCode = 'INTERNAL_ERROR';
-    if (code === 'AssetNotFound' || code === 'UnknownAsset')
+    // UniFFI groups missing assets, payments and channels under NotFound.
+    // Only an asset-balance lookup makes that generic code an absent asset.
+    if (
+      code === 'AssetNotFound' ||
+      code === 'UnknownAsset' ||
+      (context === 'asset-balance' &&
+        (code === 'NotFound' || code === 'UnknownContractId'))
+    )
       mapped = 'ASSET_NOT_FOUND';
     else if (
       code === 'InvalidAssetId' ||
@@ -38,6 +48,11 @@ export async function walletCall<T>(action: () => Promise<T>): Promise<T> {
       code === 'UnsupportedInExternalSignerMode'
     )
       mapped = 'METHOD_NOT_SUPPORTED';
-    throw new WebRgbError(mapped, native?.message ?? 'Wallet operation failed');
+    throw new WebRgbError(
+      mapped,
+      mapped === 'ASSET_NOT_FOUND' && context === 'asset-balance'
+        ? 'This asset is not in this wallet yet. Receive it first, then refresh your balance.'
+        : (native?.message ?? 'Wallet operation failed')
+    );
   }
 }

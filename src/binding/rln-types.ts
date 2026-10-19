@@ -288,7 +288,7 @@ export interface RlnRgbInvoiceResponse {
 
 export interface RlnDecodeRgbInvoiceResponse {
   recipientId: string;
-  proxyRecipientId: string;
+  proxyRecipientId: string | null;
   recipientType: string;
   assetSchema?: string;
   assetId?: string;

@@ -230,6 +230,12 @@ export type {
 } from './wallet/types';
 
 export { BurnOperations, normalizeBurnRecord } from './wallet/operations/burn';
+export {
+  burnDestinationHash,
+  localBfaBurnDestination,
+} from './wallet/operations/burn-destination';
+export { createBurnPackage } from './wallet/operations/burn-package';
+export type { BurnDestination } from './wallet/operations/burn-destination';
 export type {
   BurnOperationRecord,
   BurnOperationStore,

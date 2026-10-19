@@ -492,6 +492,32 @@ describe('Mainnet Lightning gate', () => {
   });
 });
 
+describe('RGB receive defaults', () => {
+  for (const method of ['blindReceive', 'witnessReceive', 'onchainReceive']) {
+    it(`${method} uses 24 hours for an unknown asset and preserves explicit TTL`, async () => {
+      const wallet = createWalletSync();
+      const calls = [];
+      wallet.rln.rlnRgbInvoice = async (...args) => {
+        calls.push(args);
+        return {
+          invoice: 'rgb:invoice',
+          recipientId: 'utxob:receiver',
+          expirationTimestamp: 1234,
+          batchTransferIdx: 7,
+        };
+      };
+      for (const ttl of [undefined, 90, 86400, 2592000]) {
+        await wallet[method]({ durationSeconds: ttl });
+        assert.deepEqual(calls.at(-1), [
+          null, null, ttl ?? 86400, 0, method !== 'blindReceive',
+        ]);
+      }
+      await wallet[method]({ assetId: 'rgb:known', amount: 12, durationSeconds: 120 });
+      assert.deepEqual(calls.at(-1).slice(0, 3), ['rgb:known', 12, 120]);
+    });
+  }
+});
+
 describe('BFA mapping', () => {
   it('retains exact balances and rejects values rounded by the numeric native bridge', async () => {
     const wallet = createWalletSync();

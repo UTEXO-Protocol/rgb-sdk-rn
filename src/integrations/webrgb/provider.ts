@@ -15,6 +15,7 @@ import type {
 import { WebRgbError, walletCall } from './errors';
 import { WebRgbBurnController, type WebRgbBurnOptions } from './burn';
 import type { UTEXOWallet } from '../../wallet/utexo-wallet';
+import { DEFAULT_RGB_INVOICE_DURATION_SECONDS } from '../../wallet/invoice-defaults';
 
 export const WEBRGB_READ_METHODS = [
   'enable',
@@ -226,6 +227,7 @@ export class WebRgbProvider implements SupportedProvider {
       protocol: 'RGB_LN',
       ...(burnMethods.includes('burnAsset') && {
         burnRecipientNamespaces: ['eip155', 'tron'],
+        ...this.burnController?.capabilities(),
       }),
       methods: [...WEBRGB_READ_METHODS, 'signMessage', ...burnMethods],
     };
@@ -279,7 +281,7 @@ export class WebRgbProvider implements SupportedProvider {
       amount:
         raw.amount === undefined ? undefined : integer(raw.amount, 'amount'),
       durationSeconds: integer(
-        raw.durationSeconds ?? 3600,
+        raw.durationSeconds ?? DEFAULT_RGB_INVOICE_DURATION_SECONDS,
         'durationSeconds',
         1,
         2_592_000
@@ -329,7 +331,10 @@ export class WebRgbProvider implements SupportedProvider {
     this.requireEnabled();
     if (!optionalAsset(assetId))
       throw new WebRgbError('INVALID_PARAMS', 'assetId is required');
-    const raw = await walletCall(() => this.wallet.getAssetBalance(assetId));
+    const raw = await walletCall(
+      () => this.wallet.getAssetBalance(assetId),
+      'asset-balance'
+    );
     if (!Number.isSafeInteger(raw.spendable))
       throw new WebRgbError(
         'INTERNAL_ERROR',

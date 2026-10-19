@@ -1,6 +1,6 @@
 {
   "name": "@utexo/rgb-sdk-rn",
-  "version": "1.0.0-beta.39",
+  "version": "1.0.0-bfa.local.5",
   "description": "React Native SDK for Bitcoin RGB Protocol",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
@@ -48,7 +48,8 @@
     "!**/.*",
     "!src/bindings/**/*.zip",
     "!ios/*.zip",
-    "!scripts/*.test.mjs"
+    "!scripts/*.test.mjs",
+    "BFA_ANDROID_BUILD.txt"
   ],
   "scripts": {
     "dev": "tsc -w",

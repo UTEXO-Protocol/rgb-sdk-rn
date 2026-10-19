@@ -3,12 +3,19 @@ import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import type { BurnParams, BurnResult } from '../types';
 import { validateBurnParams } from './validation';
 import { encodeBurnRecipient } from './recipient';
+import {
+  burnDestinationHash,
+  LOCAL_BFA_BURN_ROUTES,
+  localBfaBurnDestination,
+  type BurnDestination,
+} from './burn-destination';
 
 /** Wallet-owned context, retained across transport sessions and app restarts. */
 export interface BurnOperationMetadata {
   origin: string;
   network: string;
   payout: { chainId: string; address: string };
+  burnDestination?: BurnDestination;
 }
 export interface BurnOperationRecord {
   version: 2;
@@ -75,10 +82,18 @@ export function normalizeBurnRecord(value: unknown): BurnOperationRecord {
   )
     throw new Error('Invalid burn journal record');
   if (
-    encodeBurnRecipient(record.metadata.payout) !==
+    (record.metadata.burnDestination
+      ? burnDestinationHash(record.metadata.burnDestination)
+      : encodeBurnRecipient(record.metadata.payout)) !==
     record.params.burnRecipient?.toLowerCase()
   )
     throw new Error('Burn journal recipient does not match payout metadata');
+  if (
+    record.metadata.burnDestination &&
+    burnDestinationHash(localBfaBurnDestination(record.metadata.payout)) !==
+      burnDestinationHash(record.metadata.burnDestination)
+  )
+    throw new Error('Burn destination does not match payout metadata');
   if (record.state === 'complete') validateResult(record.result);
   return record;
 }
@@ -112,7 +127,8 @@ export class BurnOperations {
   private readonly runtime: Runtime;
   constructor(
     private readonly wallet: BurnWallet,
-    private readonly store: BurnOperationStore
+    private readonly store: BurnOperationStore,
+    private readonly options: { destinationV1?: boolean } = {}
   ) {
     let runtime = runtimes.get(wallet);
     if (!runtime) {
@@ -120,6 +136,24 @@ export class BurnOperations {
       runtimes.set(wallet, runtime);
     }
     this.runtime = runtime;
+  }
+  /** Validate the route before presenting any irreversible-operation consent. */
+  destinationFor(
+    payout: BurnOperationMetadata['payout']
+  ): BurnDestination | undefined {
+    return this.options.destinationV1
+      ? localBfaBurnDestination(payout)
+      : undefined;
+  }
+  capabilities() {
+    return this.options.destinationV1
+      ? {
+          burnDestinationVersion: 1 as const,
+          burnDestinationRoutes: LOCAL_BFA_BURN_ROUTES.map((route) => ({
+            ...route,
+          })),
+        }
+      : {};
   }
   private exclusive<T>(action: () => Promise<T>): Promise<T> {
     const result = this.runtime.queue.catch(() => undefined).then(action);
@@ -153,7 +187,25 @@ export class BurnOperations {
   ): Promise<BurnOperationRecord> {
     // Copy before entering the queue: caller mutations cannot change approved data.
     const request = { ...params };
-    const context = { ...metadata, payout: { ...metadata.payout } };
+    const context = {
+      ...metadata,
+      payout: { ...metadata.payout },
+      ...(metadata.burnDestination && {
+        burnDestination: { ...metadata.burnDestination },
+      }),
+    };
+    if (this.options.destinationV1) {
+      context.burnDestination = localBfaBurnDestination(context.payout);
+      // Validate the approved account before replacing it with the V1 commitment.
+      if (
+        encodeBurnRecipient(context.payout) !==
+        request.burnRecipient?.toLowerCase()
+      )
+        return Promise.reject(
+          new Error('Burn recipient does not match payout metadata')
+        );
+      request.burnRecipient = burnDestinationHash(context.burnDestination);
+    }
     return this.exclusive(async () => {
       validateBurnParams(request);
       await this.flush();

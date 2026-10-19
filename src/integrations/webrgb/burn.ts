@@ -35,7 +35,7 @@
  * Tron addresses retain Base58Check casing in prompts and stored metadata;
  * the requested payout chain is confirmed and saved in operation metadata.
  *
- * Proof export returns Base64, byte length, and a Keccak-256 digest (16 MiB limit).
+ * Proof export returns Base64, byte length, and a Keccak-256 digest (10 MiB limit).
  * Local paths stay inside the wallet; another origin's proof needs fresh consent.
  *
  * Recovery: never retry a pending burn. retryPersistence() saves a known result
@@ -61,8 +61,12 @@ import {
 import type { BurnOperations } from '../../wallet/operations/burn';
 import { WebRgbError } from './errors';
 import type { UTEXOWallet } from '../../wallet/utexo-wallet';
+import {
+  burnDestinationHash,
+  type BurnDestination,
+} from '../../wallet/operations/burn-destination';
 
-const MAX_CONSIGNMENT_BYTES = 16 * 1024 * 1024;
+const MAX_CONSIGNMENT_BYTES = 10 * 1024 * 1024;
 export interface WebRgbBurnOptions {
   operations: BurnOperations;
 }
@@ -87,6 +91,9 @@ interface Host {
   ): Promise<boolean>;
 }
 export class WebRgbBurnController {
+  capabilities() {
+    return this.options.operations.capabilities();
+  }
   private exports = new Set<string>();
   private proof?: { key: string; bytes: Uint8Array; digest: `0x${string}` };
   revoke() {
@@ -109,7 +116,9 @@ export class WebRgbBurnController {
       ...(caps.consignment ? ['getConsignment'] : []),
     ];
   }
-  async burnAsset(args: RgbBurnAssetArgs): Promise<RgbBurnAssetResult> {
+  async burnAsset(
+    args: RgbBurnAssetArgs
+  ): Promise<RgbBurnAssetResult & { burnDestination?: BurnDestination }> {
     this.requireEnabled();
     if (!(await this.methods()).includes('burnAsset'))
       throw new WebRgbError(
@@ -135,6 +144,7 @@ export class WebRgbBurnController {
     )
       throw new WebRgbError('INVALID_PARAMS', 'Invalid confirmation count');
     let recipient: string;
+    let burnDestination: BurnDestination | undefined;
     const request: RgbBurnAssetArgs = {
       network: args.network,
       assetId: args.assetId,
@@ -146,6 +156,21 @@ export class WebRgbBurnController {
     try {
       request.burnRecipient = normalizeBurnRecipient(request.burnRecipient);
       recipient = encodeBurnRecipient(request.burnRecipient);
+      burnDestination = this.options.operations.destinationFor(
+        request.burnRecipient
+      );
+      if (burnDestination) {
+        const supplied = (
+          args as RgbBurnAssetArgs & { burnDestination?: BurnDestination }
+        ).burnDestination;
+        if (
+          !supplied ||
+          burnDestinationHash(supplied) !== burnDestinationHash(burnDestination)
+        )
+          throw new Error(
+            'Update the bridge frontend: matching V1 burn destination details are required before approval.'
+          );
+      }
       validateBurnParams({
         ...request,
         burnRecipient: recipient,
@@ -174,6 +199,7 @@ export class WebRgbBurnController {
     if (
       !(await this.host.confirm('burnAsset', {
         ...request,
+        ...(burnDestination && { burnDestination: { ...burnDestination } }),
         getConsignment: true,
       }))
     )
@@ -202,6 +228,9 @@ export class WebRgbBurnController {
       burnRecipient: request.burnRecipient,
       status: 'WaitingConfirmations',
       minConfirmations: request.minConfirmations!,
+      ...(record.metadata.burnDestination && {
+        burnDestination: { ...record.metadata.burnDestination },
+      }),
     };
   }
   async getTransferStatus(
@@ -253,6 +282,9 @@ export class WebRgbBurnController {
         amountBaseUnits: record.params.amount,
         blockHeight,
         confirmations,
+        ...(record.metadata.burnDestination && {
+          burnDestination: { ...record.metadata.burnDestination },
+        }),
       },
     };
   }
@@ -317,13 +349,13 @@ export class WebRgbBurnController {
       if (encoded.length > Math.ceil(MAX_CONSIGNMENT_BYTES / 3) * 4)
         throw new WebRgbError(
           'INTERNAL_ERROR',
-          'Consignment exceeds the 16 MiB wallet limit'
+          'Consignment exceeds the 10 MiB wallet limit'
         );
       const bytes = base64.decode(encoded);
       if (bytes.length > MAX_CONSIGNMENT_BYTES)
         throw new WebRgbError(
           'INTERNAL_ERROR',
-          'Consignment exceeds the 16 MiB wallet limit'
+          'Consignment exceeds the 10 MiB wallet limit'
         );
       this.proof = { key, bytes, digest: `0x${bytesToHex(keccak_256(bytes))}` };
     }

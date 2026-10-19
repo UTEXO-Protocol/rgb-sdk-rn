@@ -66,16 +66,24 @@ android {
 }
 
 repositories {
+  maven { url uri("$projectDir/local-maven") }
   mavenCentral()
   google()
 }
 
 def kotlin_version = getExtOrDefault("kotlinVersion")
 
+// This workspace is a local BFA migration build. Never fall back to the published
+// RLN artifact: it embeds the incompatible beta.50 RGB fork.
+def localRlnAar = file("local-maven/com/utexo/local/rgb-lightning-node-android/0.17.0-bfa.local.2/rgb-lightning-node-android-0.17.0-bfa.local.2.aar")
+if (!localRlnAar.isFile()) {
+  throw new GradleException("Local BFA RLN AAR is missing: ${localRlnAar}. Build and verify the migrated native library before building this APK.")
+}
+
 dependencies {
   implementation "com.facebook.react:react-android"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-  implementation("com.utexo:rgb-lightning-node-android:0.17.0-beta.3")
+  implementation "com.utexo.local:rgb-lightning-node-android:0.17.0-bfa.local.2"
   // UniFFI-generated RLN Kotlin bindings require JNA. Use Android AAR artifact
   // explicitly to avoid Gradle resolving both .aar and .jar variants.
   implementation "net.java.dev.jna:jna:5.17.0@aar"

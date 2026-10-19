@@ -1,0 +1,33 @@
+BFA Android draft integration
+
+This branch requires the companion rgb-lightning-node BFA migration and the
+frontend V1 burn integration (utexo-bridge-fe PR #108). It is an Android-only
+test build. Swift/iOS compatibility and live payouts have not been validated.
+
+Build the native artifact with the companion RLN scripts/build-bfa-android.py.
+Then, in this SDK checkout, run:
+
+  npm install --ignore-scripts
+  npm run build
+  node scripts/stage-bfa-native.mjs /path/to/rln/target/bfa-android-artifact
+  npm pack --ignore-scripts
+
+The staging helper checks the exact RGB-lib revision, native build marker and
+native/AAR SHA-256 values. Generated artifacts stay ignored by Git. The SDK's
+Android build fails if the BFA AAR is absent, avoiding an incompatible fallback.
+No Maven/npm artifact is published by these commands.
+
+When installing this branch as a Git dependency in the sandbox, install the
+dependency with lifecycle scripts disabled, build this SDK first, and stage
+the artifact into the installed node_modules/@utexo/rgb-sdk-rn using its own
+scripts/stage-bfa-native.mjs helper before Expo prebuild. Alternatively install
+a locally packed SDK that already contains the staged artifact. Keep local
+archive overrides out of committed package manifests and lockfiles.
+
+Dev payout routes: Arbitrum One, Ethereum, Polygon, Plasma and Tron mainnet.
+V1 destination details are a coordinated extension with frontend PR #108.
+Missing/mismatched destinations fail before consent. Ambiguous burn outcomes
+remain pending; export/history recovery must never reburn automatically.
+
+Draft: artifact distribution and other platform/build configurations require
+review before merging or publishing this package.

@@ -17,8 +17,8 @@ export interface NetworkEndpoints {
 const RLN_NETWORK_OVERRIDES: Partial<
   Record<string, Partial<NetworkEndpoints>>
 > = {
-  utexo: { proxyEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc' },
-  signet: { proxyEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc' },
+  utexo: { proxyEndpoint: 'rpcs://rgb-proxy.dev.utexo.com/json-rpc' },
+  signet: { proxyEndpoint: 'rpcs://rgb-proxy.dev.utexo.com/json-rpc' },
 };
 
 // LSP defaults moved to @utexo/rgb-sdk-core (they were duplicated here and in

@@ -60,3 +60,6 @@ graphify-out/
 
 # Claude Code local settings
 .claude/
+
+# Generated local BFA native artifacts
+/android/local-maven/

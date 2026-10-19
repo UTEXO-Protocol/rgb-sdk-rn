@@ -164,11 +164,34 @@ for (const method of ['blindReceive', 'witnessReceive']) {
     assert.deepEqual(calls[0], {
       assetId: undefined,
       amount: undefined,
-      durationSeconds: 3600,
+      durationSeconds: 86400,
       minConfirmations: 6,
     });
     assert.equal(result.minConfirmations, 6);
     assert.deepEqual(prompts[0].params, calls[0]);
+  });
+  test(`${method} preserves explicit TTL and rejects invalid TTL before approval`, async () => {
+    const { provider, calls, prompts } = fixture({ sessionApproved: true });
+    for (const durationSeconds of [90, 86400, 2592000]) {
+      await provider[method]({ durationSeconds });
+      assert.equal(calls.at(-1).durationSeconds, durationSeconds);
+      assert.equal(prompts.at(-1).params.durationSeconds, durationSeconds);
+    }
+    for (const durationSeconds of [
+      0,
+      -1,
+      1.5,
+      2592001,
+      '86400',
+      NaN,
+      Infinity,
+    ]) {
+      await assert.rejects(provider[method]({ durationSeconds }), {
+        code: 'INVALID_PARAMS',
+      });
+    }
+    assert.equal(calls.length, 3);
+    assert.equal(prompts.length, 3);
   });
   test(`${method} maps native missing-asset errors`, async () => {
     const { provider, wallet } = fixture({ sessionApproved: true });
@@ -365,4 +388,62 @@ test('native asset errors map to WebRGB and unsafe balances are rejected', async
     code: 'INTERNAL_ERROR',
   });
   assert.equal(provider.request, undefined);
+});
+
+test('missing native contract is actionable for balance reads and succeeds after receiving', async () => {
+  const { provider, wallet, prompts } = fixture({ sessionApproved: true });
+  await provider.enable();
+  for (const code of [
+    'NotFound',
+    { type: 'NotFound' },
+    'UnknownContractId',
+    'AssetNotFound',
+  ]) {
+    wallet.getAssetBalance = async () => {
+      throw Object.assign(new Error('Unknown RGB contract ID'), { code });
+    };
+    await assert.rejects(provider.getAssetBalance('rgb:missing'), {
+      code: 'ASSET_NOT_FOUND',
+      message:
+        'This asset is not in this wallet yet. Receive it first, then refresh your balance.',
+    });
+  }
+  wallet.getAssetBalance = async () => ({
+    settled: 0,
+    future: 0,
+    spendable: 0,
+  });
+  assert.equal((await provider.getAssetBalance('rgb:missing')).balance, 0);
+  wallet.getAssetBalance = async () => ({
+    settled: 10,
+    future: 10,
+    spendable: 7,
+  });
+  assert.equal((await provider.getAssetBalance('rgb:missing')).balance, 7);
+  assert.equal(
+    prompts.length,
+    0,
+    'Balance reads never request a burn or an approval'
+  );
+});
+
+test('missing non-asset records and network failures keep their original classification', async () => {
+  const { provider, wallet } = fixture({ sessionApproved: true });
+  await provider.enable();
+  wallet.getAddress = async () => {
+    throw Object.assign(new Error('Address record unavailable'), {
+      code: 'NotFound',
+    });
+  };
+  await assert.rejects(provider.getAddress(), {
+    code: 'INTERNAL_ERROR',
+    message: 'Address record unavailable',
+  });
+  wallet.getAssetBalance = async () => {
+    throw Object.assign(new Error('Indexer unreachable'), { code: 'Network' });
+  };
+  await assert.rejects(provider.getAssetBalance('rgb:a'), {
+    code: 'INTERNAL_ERROR',
+    message: 'Indexer unreachable',
+  });
 });

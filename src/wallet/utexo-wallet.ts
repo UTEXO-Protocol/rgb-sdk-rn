@@ -56,6 +56,7 @@ import {
 } from '@utexo/rgb-sdk-core';
 
 import { RLNManager, createRLNManager } from './rln-manager';
+import { DEFAULT_RGB_INVOICE_DURATION_SECONDS } from './invoice-defaults';
 import type { IRLNSigner } from './rln-signers';
 import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../binding/IRLN';
 import { toNativeNetwork } from '../binding/Interfaces';
@@ -664,7 +665,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       await this.rln.rlnRgbInvoice(
         params.assetId ?? null,
         params.amount ?? null,
-        params.durationSeconds ?? null,
+        params.durationSeconds ?? DEFAULT_RGB_INVOICE_DURATION_SECONDS,
         params.minConfirmations ?? 0,
         false
       )
@@ -676,7 +677,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       await this.rln.rlnRgbInvoice(
         params.assetId ?? null,
         params.amount ?? null,
-        params.durationSeconds ?? null,
+        params.durationSeconds ?? DEFAULT_RGB_INVOICE_DURATION_SECONDS,
         params.minConfirmations ?? 0,
         true
       )
@@ -1071,7 +1072,7 @@ export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     const resp = await this.rln.rlnRgbInvoice(
       params.assetId ?? null,
       params.amount ?? null,
-      params.durationSeconds ?? null,
+      params.durationSeconds ?? DEFAULT_RGB_INVOICE_DURATION_SECONDS,
       params.minConfirmations ?? 0,
       params.witness ?? true
     );

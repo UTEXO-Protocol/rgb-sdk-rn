@@ -25,6 +25,7 @@ import org.utexo.rgblightningnode.LnInvoiceRequest
 import org.utexo.rgblightningnode.NativeExternalSigner
 import org.utexo.rgblightningnode.RlnException
 import org.utexo.rgblightningnode.SdkExternalSignerBootstrap
+import org.utexo.rgblightningnode.localBfaBuildInfo
 import org.utexo.rgblightningnode.SdkNode
 import org.utexo.rgblightningnode.SdkOpenChannelRequest
 import org.utexo.rgblightningnode.SdkRefreshTransfersRequest
@@ -1748,6 +1749,14 @@ class RgbModule(reactContext: ReactApplicationContext) :
   }
 
   override fun rlnBfaCapabilities(promise: Promise) {
+    try {
+      check(localBfaBuildInfo() == "rgb-lib=3f571ac58909400046d69143ebb535f4da1f4d42;proxy=1.0;vss=off;lightning=off;android-ca=apex-preferred;proxy-http=1.1;decode-cause=on") {
+        "The loaded native library does not match this local BFA build"
+      }
+    } catch (error: Throwable) {
+      promise.reject("LocalBfaBuildMismatch", "The local BFA native library could not be verified", error)
+      return
+    }
     val map = Arguments.createMap()
     map.putBoolean("burn", true)
     map.putBoolean("consignment", true)

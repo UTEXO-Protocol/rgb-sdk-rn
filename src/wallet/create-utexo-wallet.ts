@@ -19,7 +19,8 @@ export type {
   RgbLibWalletInit,
   WalletInit,
 } from './wallet-options';
-export type AnyUtexoWallet = UTEXOWallet<'RGB_LN'> | UTEXOWallet<'RGB_L1'>;
+export type { AnyUtexoWallet } from './utexo-wallet';
+import type { AnyUtexoWallet } from './utexo-wallet';
 
 /** Optional shorthand for the public constructor. Both modes return UTEXOWallet. */
 export function createUtexoWallet(input: RlnWalletInit): UTEXOWallet<'RGB_LN'>;

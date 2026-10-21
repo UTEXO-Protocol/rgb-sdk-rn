@@ -11,6 +11,15 @@ import { snapshot } from './runtime/snapshot';
 export type { UTEXOWalletNodeParams } from './rln-wallet';
 export type { UTEXOWalletOptions } from './wallet-options';
 
+/** A wallet with either protocol; narrow protocol before protocol-specific calls. */
+export type AnyUtexoWallet = UTEXOWallet<'RGB_LN'> | UTEXOWallet<'RGB_L1'>;
+
+// A union generic loses the correlation between an engine and its unlock params.
+// Keep shared operations available, but require a concrete protocol to unlock.
+type ConcreteWallet<P extends WalletProtocol> = WalletProtocol extends P
+  ? never
+  : UTEXOWallet<P>;
+
 type Engine<P extends WalletProtocol> = P extends 'RGB_LN'
   ? RlnWallet
   : RgbLibWallet;
@@ -45,7 +54,7 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
   private readonly engine: RlnWallet | RgbLibWallet;
 
   constructor(
-    params: TProtocol extends 'RGB_LN' ? UTEXOWalletNodeParams : never,
+    params: [TProtocol] extends ['RGB_LN'] ? UTEXOWalletNodeParams : never,
     signer: IRLNSigner
   );
   constructor(options: UTEXOWalletOptions<TProtocol>);
@@ -150,12 +159,14 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
   }
 
   unlock(
+    this: ConcreteWallet<TProtocol>,
     ...args: Parameters<Method<TProtocol, 'unlock'>>
   ): ReturnType<Method<TProtocol, 'unlock'>> {
     return this.invoke('unlock', ...args);
   }
 
   reinit(
+    this: ConcreteWallet<TProtocol>,
     ...args: Parameters<Method<TProtocol, 'reinit'>>
   ): ReturnType<Method<TProtocol, 'reinit'>> {
     return this.invoke('reinit', ...args);

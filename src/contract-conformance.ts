@@ -14,8 +14,26 @@ import type { IUTEXOProtocol } from '@utexo/rgb-sdk-core';
 import type { UTEXOWallet } from './wallet/utexo-wallet';
 import type { IRLNUnlockParams } from './binding/IRLN';
 import type { RefreshTransfersResult } from './wallet/refresh-types';
+import type { RlnWallet } from './wallet/rln-wallet';
+import type { RgbLibWallet } from './wallet/rgb-lib-wallet';
+import type { OnchainWalletApi } from './wallet/wallet-api';
+import type { RgbLibUnlockParams } from './wallet/backends/rgb-lib/config';
 
 declare const concrete: UTEXOWallet;
+declare const onchain: UTEXOWallet<'RGB_L1'>;
+type PublicMethods<T> = Pick<
+  T,
+  {
+    [K in keyof T]: T[K] extends (...args: never[]) => unknown ? K : never;
+  }[keyof T]
+>;
+// Adding a method to either engine must also update the public facade.
+const rlnSurface: PublicMethods<RlnWallet> = concrete;
+const rgbLibSurface: PublicMethods<RgbLibWallet> = onchain;
+const onchainContract: OnchainWalletApi<RgbLibUnlockParams> = onchain;
+void rlnSurface;
+void rgbLibSurface;
+void onchainContract;
 // A consumer programming against the shared contract, not the concrete class:
 const w: IUTEXOProtocol<IRLNUnlockParams> = concrete;
 

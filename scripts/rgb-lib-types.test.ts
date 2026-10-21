@@ -142,3 +142,36 @@ export async function constructorTypes(
     }),
   ];
 }
+
+// Wide generics must not silently select either engine's unlock signature.
+export function wideProtocolTypes(
+  wide: UTEXOWallet<WalletProtocol>,
+  rlnUnlock: IRLNUnlockParams,
+  rgbUnlock: RgbLibUnlockParams,
+  rlnParams: UTEXOWalletNodeParams,
+  signer: IRLNSigner,
+  mixed: AnyUtexoWallet
+) {
+  // @ts-expect-error A wide generic cannot identify the native protocol.
+  void wide.unlock(rlnUnlock);
+  // @ts-expect-error RGB Lib params are equally unsafe on a wide generic.
+  void wide.unlock(rgbUnlock);
+  // @ts-expect-error Reinit also accepts protocol-specific params.
+  void wide.reinit(rlnUnlock);
+  // @ts-expect-error Reinit must not silently default a wide type to RGB Lib.
+  void wide.reinit(rgbUnlock);
+  // @ts-expect-error The legacy constructor always has the concrete RGB_LN type.
+  new UTEXOWallet<WalletProtocol>(rlnParams, signer);
+  // Safe shared operations remain available without a protocol discriminator.
+  void wide.getAddress();
+  void wide.dispose();
+  if (mixed.protocol === 'RGB_LN') {
+    void mixed.unlock(rlnUnlock);
+    void mixed.reinit(rlnUnlock);
+  } else {
+    void mixed.unlock(rgbUnlock);
+    void mixed.reinit(rgbUnlock);
+    // @ts-expect-error Narrowing preserves the RGB Lib unlock requirements.
+    void mixed.unlock(rlnUnlock);
+  }
+}

@@ -13,6 +13,12 @@ import uniffi.rgb_lib.*
 internal class RgbLibBridgeError(val code: String, message: String) : Exception(message)
 
 /**
+ * `RGB_LIB_<Variant>`, matching RgbLibSwiftHelper's rgbLibErrorCode for the same
+ * Rust variant. Used for rejections and for per-transfer refresh failures.
+ */
+internal fun rgbLibErrorCode(error: RgbLibException) = "RGB_LIB_" + error.javaClass.simpleName
+
+/**
  * Thread-safe. The registry lock is held only for handle lookup and ownership
  * changes; each session's lock serializes its own native calls, so slow indexer
  * I/O on one wallet does not block others. UniFFI owns the Rust wallet.
@@ -238,7 +244,7 @@ internal class RgbLibSessionStore {
       "inflate" -> rgbDto(w.inflate(online(s),p.getString("assetId"),strings(p,"amounts").map { it.toULong() },amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte()))
       "burn" -> rgbDto(w.burn(online(s),p.getString("assetId"),amount(p,"amount"),optional(p,"burnReason"),amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte()))
       "failTransfers" -> w.failTransfers(online(s),if(p.isNull("batchTransferIdx")) null else number(p,"batchTransferIdx",Int.MAX_VALUE.toLong()).toInt(),p.getBoolean("noAssetOnly"),p.getBoolean("skipSync"))
-      "refresh" -> w.refresh(online(s),null,emptyList(),p.getBoolean("skipSync")).map { (id,r) -> mapOf("batchTransferIdx" to id.toDouble(),"updatedStatus" to r.updatedStatus?.let { rgbEnum(it) },"failure" to r.failure?.let { mapOf("name" to "RGB_LIB_${it.javaClass.simpleName}","message" to (it.message ?: "RGB Lib operation failed")) }) }
+      "refresh" -> w.refresh(online(s),null,emptyList(),p.getBoolean("skipSync")).map { (id,r) -> mapOf("batchTransferIdx" to id.toDouble(),"updatedStatus" to r.updatedStatus?.let { rgbEnum(it) },"failure" to r.failure?.let { mapOf("name" to rgbLibErrorCode(it),"message" to (it.message ?: "RGB Lib operation failed")) }) }
       "sync" -> { w.sync(online(s),SyncOptions(SyncKeychain.Colored,SyncStrategy.FULL_SYNC)); w.sync(online(s),SyncOptions(SyncKeychain.Vanilla(20U),SyncStrategy.FULL_SYNC)); null }
       "estimateFeeRate" -> w.getFeeEstimation(online(s),number(p,"blocks",65535).toUShort())
       // This UniFFI release has no block-height method. Preserve the optional API field.

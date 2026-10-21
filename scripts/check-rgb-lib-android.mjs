@@ -2,7 +2,8 @@
 // Compiles and runs the Android Kotlin storage/session code on the JVM.
 // Requires kotlinc (or KOTLINC) and java on PATH.
 //
-// Stage 1 always runs: RLN storage claim checks (no native artifacts).
+// Stage 1 always runs: RLN storage claim and RgbLibDispatcher checks (no native
+// artifacts).
 // Stage 2 runs when RGB_LIB_JVM_BINDINGS_DIR points to a desktop UniFFI bundle
 // of the pinned revision:
 //   manifest.json  { version, sourceRevision, uniffiVersion }
@@ -46,6 +47,17 @@ try {
     claimJar,
   ]);
   run(java, ['-cp', claimJar, 'com.rgbsdkrn.RlnStorageClaimMainKt']);
+
+  // RgbLibModule's per-handle dispatch, with a gated fake store.
+  const dispatcherJar = path.join(tmp, 'rgb-lib-dispatcher.jar');
+  run(kotlinc, [
+    src('RgbLibDispatcher.kt'),
+    native('RgbLibDispatcherChecks.kt'),
+    '-include-runtime',
+    '-d',
+    dispatcherJar,
+  ]);
+  run(java, ['-cp', dispatcherJar, 'com.rgbsdkrn.RgbLibDispatcherChecksKt']);
 
   const bundle = process.env.RGB_LIB_JVM_BINDINGS_DIR;
   if (!bundle) {

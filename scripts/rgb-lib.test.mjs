@@ -578,6 +578,173 @@ test('native operation results and full invoice reach the public API unchanged',
     'WaitingSafeHeight'
   );
 });
+test('native rejections reach callers only as SDK errors and map to WebRGB codes', async () => {
+  const reject = (nativeCode, message) => async () => {
+    throw Object.assign(new Error(message), { code: nativeCode });
+  };
+  const { wallet } = fixture({
+    getAssetBalance: reject('RGB_LIB_AssetNotFound', 'Asset not found'),
+    decodeInvoice: reject('RGB_LIB_InvalidInvoice', 'Invalid invoice'),
+    listTransfers: reject('WALLET_PROFILE_MISMATCH', 'Profile mismatch'),
+    listAssets: reject('NATIVE_BRIDGE_ERROR', 'RGB Lib native bridge failed'),
+    sendBtc: reject('RGB_LIB_InsufficientBitcoins', 'Not enough sats'),
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  const sdk = (expected, operation) => (error) => {
+    assert.equal(error.name, 'WalletBackendError');
+    assert.equal(error.code, expected);
+    assert.equal(error.operation, operation);
+    return true;
+  };
+  await assert.rejects(
+    wallet.getAssetBalance('rgb:unknown'),
+    sdk('ASSET_NOT_FOUND', 'getAssetBalance')
+  );
+  await assert.rejects(
+    wallet.decodeRGBInvoice({ invoice: 'rgb:malformed' }),
+    sdk('INVALID_PARAMS', 'decodeInvoice')
+  );
+  await assert.rejects(
+    wallet.listTransfers(),
+    sdk('WALLET_PROFILE_MISMATCH', 'listTransfers')
+  );
+  await assert.rejects(wallet.listAssets(), sdk('NATIVE_ERROR', 'listAssets'));
+  await assert.rejects(
+    wallet.sendBtc({ address: 'btc', amount: 1 }),
+    sdk('INSUFFICIENT_FUNDS', 'sendBtc')
+  );
+  const provider = new WebRgbProvider(wallet, {
+    origin: 'https://example.com',
+    sessionApproved: true,
+    confirm: async () => true,
+  });
+  await provider.enable();
+  await assert.rejects(
+    provider.getAssetBalance('rgb:unknown'),
+    code('ASSET_NOT_FOUND')
+  );
+  await assert.rejects(
+    provider.decodeRgbInvoice('rgb:malformed'),
+    code('INVALID_PARAMS')
+  );
+  await wallet.dispose();
+});
+test('init and restore translate native rejections without changing key-provider errors', async () => {
+  const opening = fixture({
+    async openWallet() {
+      throw Object.assign(new Error('Storage busy'), {
+        code: 'WALLET_STORAGE_IN_USE',
+      });
+    },
+  });
+  await assert.rejects(opening.wallet.init(), code('WALLET_STORAGE_IN_USE'));
+  const keyError = new Error('keychain locked');
+  const locked = fixture();
+  locked.keys.getMnemonic = async () => {
+    throw keyError;
+  };
+  await assert.rejects(locked.wallet.init(), (error) => error === keyError);
+  await assert.rejects(
+    restoreRgbLibBackupWith(
+      {
+        backupPath: '/backups/a.rgb',
+        password: 'pw',
+        storageDirPath: '/wallets/restored',
+      },
+      () => ({
+        getRuntimeInfo: async () => runtime,
+        restoreBackup: async () => {
+          throw Object.assign(new Error('Wrong password'), {
+            code: 'RGB_LIB_WrongPassword',
+          });
+        },
+      })
+    ),
+    (error) =>
+      error.name === 'WalletBackendError' && error.code === 'NATIVE_ERROR'
+  );
+});
+test('refresh failures use the cross-platform RGB_LIB_<Variant> name', async () => {
+  let failure = {
+    name: 'RGB_LIB_InsufficientAssignments',
+    message: 'Insufficient assignments',
+  };
+  const { wallet } = fixture({
+    async refresh() {
+      return [
+        { batchTransferIdx: 4, updatedStatus: 'Failed', failure },
+        { batchTransferIdx: 5, updatedStatus: null, failure: null },
+      ];
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  const { transfers } = await wallet.refreshTransfers();
+  assert.deepEqual(transfers[4].failure, {
+    name: 'RGB_LIB_InsufficientAssignments',
+    message: 'Insufficient assignments',
+  });
+  assert.equal(transfers[5].failure, undefined);
+  // The pre-fix iOS shape lost the variant; it must not reach callers.
+  for (const name of ['RgbLibError', 'RGB_LIB_', 'InsufficientAssignments']) {
+    failure = { name, message: 'x' };
+    await assert.rejects(
+      wallet.refreshTransfers(),
+      code('INVALID_NATIVE_RESPONSE')
+    );
+  }
+});
+test('receive converts durationSeconds to absolute Unix seconds and uses the proxy endpoint', async () => {
+  const received = [];
+  const { wallet } = fixture({
+    async receive(...args) {
+      received.push(args);
+      return {
+        invoice: 'rgb:invoice',
+        recipientId: 'recipient',
+        expirationTimestamp: args[4],
+        batchTransferIdx: 9,
+        publicKey: 'pk',
+      };
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  const realNow = Date.now;
+  Date.now = () => 1_700_000_000_999;
+  try {
+    const blind = await wallet.blindReceive({
+      assetId: 'rgb:asset',
+      amount: 9,
+      durationSeconds: 60,
+      minConfirmations: 2,
+    });
+    await wallet.witnessReceive({});
+    await wallet.onchainReceive({ durationSeconds: 1 });
+    await wallet.onchainReceive({ witness: false });
+    assert.deepEqual(blind, {
+      invoice: 'rgb:invoice',
+      recipientId: 'recipient',
+      expirationTimestamp: 1_700_000_060,
+      batchTransferIdx: 9,
+      publicKey: 'pk',
+    });
+  } finally {
+    Date.now = realNow;
+  }
+  const endpoints = [config.proxyEndpoint.replace('http:', 'rpc:')];
+  assert.deepEqual(received, [
+    ['handle-1', false, 'rgb:asset', '9', '1700000060', endpoints, 2],
+    ['handle-1', true, null, null, '1700086400', endpoints, 0],
+    ['handle-1', true, null, null, '1700000001', endpoints, 0],
+    ['handle-1', false, null, null, '1700086400', endpoints, 0],
+  ]);
+  for (const durationSeconds of [0, 1.5, -1, 2 ** 32]) {
+    await assert.rejects(wallet.witnessReceive({ durationSeconds }));
+  }
+  assert.equal(received.length, 4);
+});
 test('fee rates and amounts reject lossy inputs instead of silently rounding', () => {
   assert.equal(
     amounts.u64(18446744073709551615n, 'amount'),

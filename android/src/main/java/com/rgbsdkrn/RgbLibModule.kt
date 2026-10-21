@@ -4,20 +4,21 @@ package com.rgbsdkrn
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import uniffi.rgb_lib.RgbLibException
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 @ReactModule(name = RgbLibModule.NAME)
 class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context) {
   private val store = RgbLibSessionStore()
-  // Calls without an open handle run concurrently; storage locks guard them.
-  private val shared = Executors.newCachedThreadPool()
-  // One serial executor per wallet, so slow indexer I/O never blocks other wallets.
-  private val sessions = mutableMapOf<String, ExecutorService>()
-  private var accepting = true
+  // Per-handle queues, adoption and invalidation live in RgbLibDispatcher.
+  private val dispatcher = RgbLibDispatcher(store::execute, this::rejection)
   override fun getName() = NAME
 
-  private fun execute(operation: String, params: Map<String, Any?>): Any? = store.execute(operation, params)
+  private fun rejection(error: Throwable): Pair<String, String?> = when (error) {
+    is RgbLibBridgeError -> error.code to error.message
+    is RgbLibException -> rgbLibErrorCode(error) to error.message
+    is UnsatisfiedLinkError -> "NATIVE_BACKEND_UNAVAILABLE" to "Build RGB Lib native artifacts and rebuild the app"
+    // Do not include request data or credentials in a bridge error.
+    else -> "NATIVE_BRIDGE_ERROR" to "RGB Lib native bridge operation failed"
+  }
   private fun convert(value: Any?): Any? = when(value) {
     null -> null
     is Map<*, *> -> Arguments.makeNativeMap(value.entries.associate { it.key as String to convert(it.value) })
@@ -25,50 +26,13 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
     is Number -> value.toDouble()
     else -> value
   }
-  @Synchronized private fun invoke(operation: String, params: Map<String, Any?>, promise: Promise) {
-    if (!accepting) { promise.reject("WALLET_DISPOSED", "Native module is closed"); return }
-    val handle = params["handle"] as? String
-    val executor = handle?.let { sessions[it] } ?: shared
-    executor.execute {
-      try {
-        val result = execute(operation, params)
-        if (operation == "openWallet" && !adopt(result as String)) {
-          try { execute("closeWallet", mapOf("handle" to result)) } catch (_: Exception) {}
-          promise.reject("WALLET_DISPOSED", "Native module is closed")
-          return@execute
-        }
-        promise.resolve(convert(result))
-      } catch (error: RgbLibBridgeError) {
-        promise.reject(error.code, error.message)
-      } catch (error: RgbLibException) {
-        promise.reject("RGB_LIB_" + error.javaClass.simpleName, error.message)
-      } catch (_: UnsatisfiedLinkError) {
-        promise.reject("NATIVE_BACKEND_UNAVAILABLE", "Build RGB Lib native artifacts and rebuild the app")
-      } catch (_: Exception) {
-        // Do not include request data or credentials in a bridge error.
-        promise.reject("NATIVE_BRIDGE_ERROR", "RGB Lib native bridge operation failed")
-      } finally {
-        if (operation == "closeWallet" && handle != null) release(handle)
-      }
-    }
-  }
-  @Synchronized private fun adopt(handle: String): Boolean {
-    if (!accepting) return false
-    sessions[handle] = Executors.newSingleThreadExecutor()
-    return true
-  }
-  // shutdown() still runs calls already queued; they fail as closed.
-  @Synchronized private fun release(handle: String) { sessions.remove(handle)?.shutdown() }
-  @Synchronized override fun invalidate() {
-    if (!accepting) return
-    accepting = false
-    // Close on each wallet's own executor, after the calls already queued for it.
-    sessions.forEach { (handle, executor) ->
-      executor.execute { try { execute("closeWallet", mapOf("handle" to handle)) } catch (_: Exception) {} }
-      executor.shutdown()
-    }
-    sessions.clear()
-    shared.shutdown()
+  private fun invoke(operation: String, params: Map<String, Any?>, promise: Promise) =
+    dispatcher.invoke(operation, params, object : RgbLibDispatcher.Reply {
+      override fun resolve(value: Any?) = promise.resolve(convert(value))
+      override fun reject(code: String, message: String?) = promise.reject(code, message)
+    })
+  override fun invalidate() {
+    dispatcher.invalidate()
     super.invalidate()
   }
   override fun getRuntimeInfo(promise: Promise) = invoke("getRuntimeInfo", mapOf(), promise)

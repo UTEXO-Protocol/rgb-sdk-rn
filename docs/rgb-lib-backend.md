@@ -245,21 +245,35 @@ npm run test:rgb-lib:android
 
 iOS smoke test використовує справжні UniFFI-виклики: завантажує обидва engines,
 створює wallet, перевіряє lease/profile, повторне відкриття, invoice/history,
-точну суму понад `Number.MAX_SAFE_INTEGER` та encrypted backup/restore.
-Тест створює власний Simulator і видаляє його після виконання.
+точну суму понад `Number.MAX_SAFE_INTEGER`, відмову `send` для invoice іншої
+мережі, конфліктного amount override та expiry менше ніж за 600 секунд
+(`INVALID_CONFIG` до будь-якого online-виклику) і encrypted backup/restore.
+Перед цим на host без frameworks запускається
+`scripts/native/rgb-lib-dispatcher-checks.m` для `ios/RgbLibDispatcher.m`:
+окрема черга на handle, серіалізація, release після close і drain під час
+`invalidate`. Тест створює власний Simulator і видаляє його після виконання.
 Він використовує out-of-band receive і не підтверджує роботу конкретного
 proxy/indexer deployment або перекази з коштами.
 
 `npm run test:rgb-lib:android` (потрібні `kotlinc` і `java`) компілює й запускає
-Android Kotlin-код на JVM. Без artifacts він перевіряє лише RLN storage claim:
-новий каталог, legacy RLN-каталог без marker і відмову відкривати RGB Lib profile.
+Android Kotlin-код на JVM. Без artifacts він перевіряє RLN storage claim
+(новий каталог, legacy RLN-каталог без marker і відмову відкривати RGB Lib profile)
+та `RgbLibDispatcher`, через який `RgbLibModule` диспетчеризує виклики
+(`scripts/native/RgbLibDispatcherChecks.kt`, gated fake store).
 Якщо `RGB_LIB_JVM_BINDINGS_DIR` вказує на desktop UniFFI bundle того самого
 revision (`manifest.json`, `kotlin/`, `lib/`, `jars/` з JNA та org.json),
 додатково запускається `scripts/native/RgbLibKotlinSmoke.kt` проти справжнього
 `RgbLibSessionStore`: профіль, блокування, взаємне виключення RLN/RGB Lib storage,
-invoice/history та backup/restore. `--require-native` робить відсутній bundle
+invoice/history, перевірки invoice у `send` та backup/restore. `--require-native` робить відсутній bundle
 помилкою. Це не замінює запуск React Native застосунку на Android.
 iOS smoke test так само перевіряє взаємне виключення RLN/RGB Lib storage.
+
+Обидва bridges відхиляють помилки rgb-lib з кодом `RGB_LIB_<Variant>` (той самий
+формат має `failure.name` у `refreshTransfers()`). Адаптер перетворює кожне native
+відхилення на `WalletBackendError`: `AssetNotFound` → `ASSET_NOT_FOUND`,
+`Invalid*` → `INVALID_PARAMS`, `Insufficient*` → `INSUFFICIENT_FUNDS`, відомі
+bridge-коди зберігаються, решта → `NATIVE_ERROR`. WebRGB відображає ці коди на
+`ASSET_NOT_FOUND`, `INVALID_PARAMS` і `METHOD_NOT_SUPPORTED`.
 
 ## Мінімальний перехід rgb-sdk-rn-demo
 

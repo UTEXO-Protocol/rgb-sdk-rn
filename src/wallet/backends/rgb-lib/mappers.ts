@@ -279,6 +279,20 @@ export function assets(values: NativeAsset[]): ListAssets {
   }
   return result;
 }
+/** Both bridges name a failed transfer `RGB_LIB_<Variant>`, as for rejections. */
+export function refreshFailure(value: { name: string; message: string }) {
+  if (
+    typeof value?.name !== 'string' ||
+    !/^RGB_LIB_[A-Z][A-Za-z0-9]*$/.test(value.name) ||
+    typeof value.message !== 'string'
+  ) {
+    throw new WalletBackendError(
+      'INVALID_NATIVE_RESPONSE',
+      'Invalid refresh failure'
+    );
+  }
+  return { name: value.name, message: value.message };
+}
 export function receive(value: NativeReceive) {
   return {
     ...value,

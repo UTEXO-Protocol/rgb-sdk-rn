@@ -11,6 +11,12 @@ private struct RgbBridgeFailure: Error {
 private func rgbInvalid(_ message: String) -> RgbBridgeFailure {
   RgbBridgeFailure(code: "INVALID_CONFIG", message: message)
 }
+/// `RGB_LIB_<Variant>`, matching the Kotlin exception subclass name for the same
+/// Rust variant. Used for rejections and for per-transfer refresh failures.
+func rgbLibErrorCode(_ error: RGBLib.RgbLibError) -> String {
+  let name = String(describing: error).prefix { $0 != "(" }
+  return "RGB_LIB_" + name.prefix(1).uppercased() + name.dropFirst()
+}
 private struct RgbParams {
   let values: [String: Any]
   func optional(_ key: String) -> String? { values[key] as? String }
@@ -108,10 +114,7 @@ public final class RgbLibSwiftHelper: NSObject {
   public static func execute(_ operation: String, params: NSDictionary) -> NSDictionary {
     do { return ["result": try call(operation, RgbParams(values: params as? [String: Any] ?? [:]))] }
     catch let error as RgbBridgeFailure { return ["error": ["code": error.code, "message": error.message]] }
-    catch let error as RGBLib.RgbLibError {
-      let name = String(describing: error).prefix { $0 != "(" }
-      return ["error": ["code": "RGB_LIB_" + name.prefix(1).uppercased() + name.dropFirst(), "message": String(describing: error)]]
-    }
+    catch let error as RGBLib.RgbLibError { return ["error": ["code": rgbLibErrorCode(error), "message": String(describing: error)]] }
     catch { return ["error": ["code": "NATIVE_BRIDGE_ERROR", "message": "RGB Lib native bridge operation failed"]] }
   }
   private static func open(_ p: RgbParams) throws -> String {
@@ -299,7 +302,7 @@ public final class RgbLibSwiftHelper: NSObject {
     case "burn": return try rgbDto(w.burn(online: s.requireOnline(), assetId: p.string("assetId"), amount: p.amount("amount"), burnReason: p.optional("burnReason"), feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self)))
     case "failTransfers": return try w.failTransfers(online: s.requireOnline(), batchTransferIdx: p.has("batchTransferIdx") ? p.number("batchTransferIdx", Int32.self) : nil, noAssetOnly: p.bool("noAssetOnly"), skipSync: p.bool("skipSync"))
     case "refresh": return try w.refresh(online: s.requireOnline(), assetId: nil, filter: [], skipSync: p.bool("skipSync")).map { id, r -> [String: Any] in
-      ["batchTransferIdx": NSNumber(value: id), "updatedStatus": r.updatedStatus.map { rgbEnum($0) as Any } ?? NSNull(), "failure": r.failure.map { ["name": "RgbLibError", "message": String(describing: $0)] as Any } ?? NSNull()]
+      ["batchTransferIdx": NSNumber(value: id), "updatedStatus": r.updatedStatus.map { rgbEnum($0) as Any } ?? NSNull(), "failure": r.failure.map { ["name": rgbLibErrorCode($0), "message": String(describing: $0)] as Any } ?? NSNull()]
     }
     case "sync":
       try w.sync(online: s.requireOnline(), options: RGBLib.SyncOptions(keychain: .colored, strategy: .fullSync))

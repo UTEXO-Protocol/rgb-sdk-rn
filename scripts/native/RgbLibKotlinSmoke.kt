@@ -39,6 +39,32 @@ fun main() {
     check(history.size == 1)
     check((history[0]["requestedAssignment"] as Map<*, *>)["amount"] == "9007199254740993")
     check(history[0]["expiration"] == expiry)
+    // send validates the invoice before going online, so nothing can be broadcast.
+    val send = mapOf(
+      "assetId" to "rgb:smoke-asset", "amount" to null, "witnessAmountSat" to null, "witnessBlinding" to null,
+      "donation" to false, "feeRate" to "2", "minConfirmations" to 1.0, "skipSync" to true,
+      "senderTransportEndpoint" to "rpc://localhost:3000/json-rpc"
+    )
+    fun rejected(values: Map<String, Any?>): RgbLibBridgeError =
+      runCatching { call("send", send + values) }.exceptionOrNull() as RgbLibBridgeError
+    val conflict = rejected(mapOf("invoice" to receive["invoice"], "amount" to "1"))
+    check(conflict.code == "INVALID_CONFIG" && conflict.message == "Amount override does not match invoice")
+    val soon = (System.currentTimeMillis()/1000 + 300).toString()
+    val expiring = call("receive", mapOf(
+      "witness" to true, "assetId" to null, "amount" to "5",
+      "expirationTimestamp" to soon, "transportEndpoints" to emptyList<String>(), "minConfirmations" to 1.0
+    )) as Map<String, Any?>
+    val tooSoon = rejected(mapOf("invoice" to expiring["invoice"]))
+    check(tooSoon.code == "INVALID_CONFIG" && tooSoon.message == "Invoice expires too soon")
+    val signet = store.execute("openWallet", params + mapOf("dataDir" to root.resolve("signet").path, "network" to "signet")) as String
+    val foreign = try {
+      store.execute("receive", mapOf(
+        "handle" to signet, "witness" to true, "assetId" to null, "amount" to "5", "expirationTimestamp" to expiry,
+        "transportEndpoints" to emptyList<String>(), "minConfirmations" to 1.0
+      )) as Map<String, Any?>
+    } finally { store.execute("closeWallet", mapOf("handle" to signet)) }
+    val network = rejected(mapOf("invoice" to foreign["invoice"], "amount" to "5"))
+    check(network.code == "INVALID_CONFIG" && network.message == "Invoice network does not match wallet")
     val backup = root.resolve("backup.rgb").path
     call("backup", mapOf("backupPath" to backup, "password" to "smoke-test-password"))
     call("closeWallet"); active = null
@@ -63,7 +89,7 @@ fun main() {
     check(call("getWalletIdentity") == identity)
     check(call("getAddress", mapOf("rotate" to false)) == address)
     call("closeWallet"); active = null
-    println("Direct Kotlin UniFFI: lifecycle, storage lock, RLN exclusion, invoice/history and encrypted backup/restore passed")
+    println("Direct Kotlin UniFFI: lifecycle, storage lock, RLN exclusion, invoice/history, send invoice checks and encrypted backup/restore passed")
   } finally {
     if (active != null) call("closeWallet")
     root.deleteRecursively()

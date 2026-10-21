@@ -7,77 +7,32 @@
 #else
 #import "Rgb-Swift.h"
 #endif
+#import "RgbLibDispatcher.h"
 
 @interface RgbLib : NSObject <NativeRgbLibSpec, RCTInvalidating>
 @end
 @implementation RgbLib {
-  // Calls without an open handle run concurrently; storage locks guard them.
-  dispatch_queue_t _shared;
-  // One serial queue per wallet, so slow indexer I/O never blocks other wallets.
-  NSMutableDictionary<NSString *, dispatch_queue_t> *_sessions;
-  BOOL _accepting;
+  // Per-handle queues, adoption and invalidation live in RgbLibDispatcher.
+  RgbLibDispatcher *_dispatcher;
 }
 RCT_EXPORT_MODULE(RgbLib)
 + (BOOL)requiresMainQueueSetup { return NO; }
 - (instancetype)init {
   if ((self = [super init])) {
-    _shared = dispatch_queue_create("org.utexo.rgb-lib", DISPATCH_QUEUE_CONCURRENT);
-    _sessions = [NSMutableDictionary new];
-    _accepting = YES;
+    _dispatcher = [[RgbLibDispatcher alloc] initWithExecute:^NSDictionary *(NSString *operation, NSDictionary *params) {
+      return [RgbLibSwiftHelper execute:operation params:params];
+    }];
   }
   return self;
 }
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:(const facebook::react::ObjCTurboModule::InitParams &)params {
   return std::make_shared<facebook::react::NativeRgbLibSpecJSI>(params);
 }
-- (NSDictionary *)execute:(NSString *)operation params:(NSDictionary *)params error:(NSError **)error {
-  return [RgbLibSwiftHelper execute:operation params:params];
-}
 - (void)invoke:(NSString *)operation params:(NSDictionary *)params resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
-  @synchronized(self) {
-    if (!_accepting) { reject(@"WALLET_DISPOSED", @"Native module is closed", nil); return; }
-    NSString *handle = [params[@"handle"] isKindOfClass:[NSString class]] ? params[@"handle"] : nil;
-    dispatch_queue_t queue = (handle ? _sessions[handle] : nil) ?: _shared;
-    dispatch_async(queue, ^{
-      @autoreleasepool {
-        NSError *error = nil;
-        NSDictionary *response = [self execute:operation params:params error:&error];
-        if ([operation isEqualToString:@"closeWallet"]) [self releaseQueue:handle];
-        if (!response) { reject(@"INVALID_NATIVE_RESPONSE", @"Cannot decode native response", error); return; }
-        NSDictionary *failure = response[@"error"];
-        if (failure) { reject(failure[@"code"], failure[@"message"], nil); return; }
-        id result = response[@"result"];
-        if ([operation isEqualToString:@"openWallet"] && ![self adoptHandle:result]) {
-          [self execute:@"closeWallet" params:@{@"handle":result} error:nil];
-          reject(@"WALLET_DISPOSED", @"Native module is closed", nil);
-          return;
-        }
-        resolve(result == [NSNull null] ? nil : result);
-      }
-    });
-  }
-}
-- (BOOL)adoptHandle:(NSString *)handle {
-  @synchronized(self) {
-    if (!_accepting) return NO;
-    _sessions[handle] = dispatch_queue_create("org.utexo.rgb-lib.session", DISPATCH_QUEUE_SERIAL);
-    return YES;
-  }
-}
-- (void)releaseQueue:(NSString *)handle {
-  if (!handle) return;
-  @synchronized(self) { [_sessions removeObjectForKey:handle]; }
+  [_dispatcher invoke:operation params:params resolve:^(id result) { resolve(result); } reject:^(NSString *code, NSString *message) { reject(code, message, nil); }];
 }
 - (void)invalidate {
-  @synchronized(self) {
-    if (!_accepting) return;
-    _accepting = NO;
-    // Close on each wallet's own queue, after the calls already queued for it.
-    [_sessions enumerateKeysAndObjectsUsingBlock:^(NSString *handle, dispatch_queue_t queue, BOOL *stop) {
-      dispatch_async(queue, ^{ [self execute:@"closeWallet" params:@{@"handle":handle} error:nil]; });
-    }];
-    [_sessions removeAllObjects];
-  }
+  [_dispatcher invalidate];
 }
 - (void)getRuntimeInfo:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   [self invoke:@"getRuntimeInfo" params:@{} resolve:resolve reject:reject];

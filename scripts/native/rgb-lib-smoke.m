@@ -62,6 +62,39 @@ int main(void) {
     check(history.count == 1, "Receive is missing from history");
     check([history[0][@"requestedAssignment"][@"amount"] isEqual:@"9007199254740993"], "History amount was rounded");
     check([history[0][@"expiration"] isEqual:expiry], "History expiry changed");
+    // send validates the invoice before going online, so nothing can be broadcast.
+    NSDictionary *sendParams = @{
+      @"handle":handle, @"assetId":@"rgb:smoke-asset", @"amount":NSNull.null,
+      @"witnessAmountSat":NSNull.null, @"witnessBlinding":NSNull.null, @"donation":@NO,
+      @"feeRate":@"2", @"minConfirmations":@1, @"skipSync":@YES,
+      @"senderTransportEndpoint":@"rpc://localhost:3000/json-rpc"
+    };
+    NSDictionary *(^rejected)(NSDictionary *) = ^NSDictionary *(NSDictionary *values) {
+      NSMutableDictionary *p = [sendParams mutableCopy];
+      [p addEntriesFromDictionary:values];
+      NSDictionary *error = [RgbLibSwiftHelper execute:@"send" params:p][@"error"];
+      check([error[@"code"] isEqual:@"INVALID_CONFIG"], "send did not reject an invalid invoice as INVALID_CONFIG");
+      return error;
+    };
+    check([rejected(@{@"invoice":receive[@"invoice"], @"amount":@"1"})[@"message"] isEqual:@"Amount override does not match invoice"], "send accepted a conflicting amount override");
+    NSString *soon = [NSString stringWithFormat:@"%llu", (unsigned long long)NSDate.date.timeIntervalSince1970 + 300];
+    NSDictionary *expiring = call(@"receive", @{
+      @"handle":handle, @"witness":@YES, @"assetId":NSNull.null,
+      @"amount":@"5", @"expirationTimestamp":soon,
+      @"transportEndpoints":@[], @"minConfirmations":@1
+    });
+    check([rejected(@{@"invoice":expiring[@"invoice"]})[@"message"] isEqual:@"Invoice expires too soon"], "send accepted an invoice expiring within 600 seconds");
+    NSMutableDictionary *signetParams = [params mutableCopy];
+    signetParams[@"dataDir"] = [base stringByAppendingPathComponent:@"signet"];
+    signetParams[@"network"] = @"signet";
+    NSString *signet = call(@"openWallet", signetParams);
+    NSDictionary *foreign = call(@"receive", @{
+      @"handle":signet, @"witness":@YES, @"assetId":NSNull.null,
+      @"amount":@"5", @"expirationTimestamp":expiry,
+      @"transportEndpoints":@[], @"minConfirmations":@1
+    });
+    call(@"closeWallet", @{@"handle":signet});
+    check([rejected(@{@"invoice":foreign[@"invoice"], @"amount":@"5"})[@"message"] isEqual:@"Invoice network does not match wallet"], "send accepted an invoice for another network");
     NSString *backup = [base stringByAppendingPathComponent:@"backup.rgb"];
     call(@"backup", @{@"handle":handle, @"backupPath":backup, @"password":@"smoke-test-password"});
     call(@"closeWallet", @{@"handle":handle});
@@ -104,7 +137,7 @@ int main(void) {
     check([address isEqual:call(@"getAddress", @{@"handle":handle, @"rotate":@NO})], "Restored address changed");
     call(@"closeWallet", @{@"handle":handle});
     [[NSFileManager defaultManager] removeItemAtPath:base error:nil];
-    puts("Direct UniFFI: RLN coexistence and storage exclusion, wallet lifecycle, storage lock, invoice/history and encrypted backup/restore passed");
+    puts("Direct UniFFI: RLN coexistence and storage exclusion, wallet lifecycle, storage lock, invoice/history, send invoice checks and encrypted backup/restore passed");
   }
   return 0;
 }

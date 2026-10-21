@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Requires built RGB Lib/RLN frameworks and an installed iOS Simulator runtime.
+// Stage 1 checks the TurboModule dispatcher on the host with a fake store.
+// Stage 2 requires built RGB Lib/RLN frameworks and an installed iOS Simulator runtime.
 // Creates and removes its own simulator; never uses an existing user's device.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,6 +21,23 @@ const run = (command, args, capture = false) => {
 };
 let device;
 try {
+  // Stage 1 runs on the host without frameworks: the TurboModule dispatcher.
+  const dispatcherChecks = path.join(tmp, 'rgb-lib-dispatcher-checks');
+  run('xcrun', [
+    'clang',
+    '-fobjc-arc',
+    '-Wall',
+    '-I',
+    path.join(root, 'ios'),
+    '-framework',
+    'Foundation',
+    path.join(root, 'ios/RgbLibDispatcher.m'),
+    path.join(root, 'scripts/native/rgb-lib-dispatcher-checks.m'),
+    '-o',
+    dispatcherChecks,
+  ]);
+  run(dispatcherChecks, []);
+
   const runtimes = JSON.parse(
     run('xcrun', ['simctl', 'list', 'runtimes', '-j'], true)
   ).runtimes;

@@ -26,6 +26,7 @@ import type {
 } from './config';
 import { feeRate, issuanceAmounts, u64 } from './amounts';
 import * as map from './mappers';
+import { guardNative } from './errors';
 
 /** One backend owns one native handle, one queue, and one immutable wallet profile. */
 export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockParams> {
@@ -123,7 +124,8 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (this.opening) return this.opening;
     if (this.handle) return Promise.resolve();
     const opening = this.queue.run(async () => {
-      const native = this.loadBinding();
+      // Native rejections become WalletBackendError before any caller sees them.
+      const native = guardNative(this.loadBinding());
       const runtime = await native.getRuntimeInfo();
       if (
         runtime.bridgeVersion !== RGB_LIB_BRIDGE_VERSION ||
@@ -554,7 +556,10 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
                 item.updatedStatus === null
                   ? undefined
                   : map.transferStatus(item.updatedStatus),
-              failure: item.failure ?? undefined,
+              failure:
+                item.failure === null
+                  ? undefined
+                  : map.refreshFailure(item.failure),
             },
           ])
         ),

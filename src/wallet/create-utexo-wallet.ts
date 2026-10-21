@@ -11,6 +11,7 @@ import {
   RGB_LIB_REVISION,
   RGB_LIB_BRIDGE_VERSION,
 } from './backends/rgb-lib/config';
+import { guardNative } from './backends/rgb-lib/errors';
 
 export { RgbLibWallet } from './rgb-lib-wallet';
 export type {
@@ -65,7 +66,7 @@ export async function restoreRgbLibBackupWith(
       'Restore requires absolute paths and a nonempty password'
     );
   }
-  const native = loadBinding();
+  const native = guardNative(loadBinding());
   const runtime = await native.getRuntimeInfo();
   if (
     runtime.version !== RGB_LIB_VERSION ||

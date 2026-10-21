@@ -24,7 +24,7 @@ import type {
   RgbLibUnlockParams,
   RgbLibWalletParams,
 } from './config';
-import { feeRate, u64 } from './amounts';
+import { feeRate, issuanceAmounts, u64 } from './amounts';
 import * as map from './mappers';
 
 /** One backend owns one native handle, one queue, and one immutable wallet profile. */
@@ -424,36 +424,41 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         'issueAssetNia',
         false,
         params,
-        async (native, handle, params) =>
-          map.nia(
+        async (native, handle, params) => {
+          const { amounts } = issuanceAmounts(params.amounts);
+          return map.nia(
             await native.issueAssetNia(
               handle,
               params.ticker,
               params.name,
               integer(params.precision, 'precision', 0, 18),
-              params.amounts.map((n) => u64(n, 'amount', true))
+              amounts
             )
-          )
+          );
+        }
       ),
     issueAssetIfa: (params) =>
       this.input(
         'issueAssetIfa',
         false,
         params,
-        async (native, handle, params) =>
-          map.ifa(
+        async (native, handle, params) => {
+          const { amounts, inflationAmounts } = issuanceAmounts(
+            params.amounts,
+            params.inflationAmounts
+          );
+          return map.ifa(
             await native.issueAssetIfa(
               handle,
               params.ticker,
               params.name,
               integer(params.precision, 'precision', 0, 18),
-              params.amounts.map((n) => u64(n, 'amount', true)),
-              params.inflationAmounts.map((n) =>
-                u64(n, 'inflationAmount', true)
-              ),
+              amounts,
+              inflationAmounts,
               params.rejectListUrl
             )
-          )
+          );
+        }
       ),
     inflate: (params) =>
       this.input('inflate', true, params, (native, handle, params) =>

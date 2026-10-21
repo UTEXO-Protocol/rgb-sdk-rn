@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { RgbLibWalletBackend } from '../lib/module/wallet/backends/rgb-lib/backend.js';
 import { OnchainWallet } from '../lib/module/wallet/onchain-wallet.js';
-import { createUtexoWallet } from '../lib/module/wallet/create-utexo-wallet.js';
+import {
+  createUtexoWallet,
+  restoreRgbLibBackup,
+  restoreRgbLibBackupWith,
+} from '../lib/module/wallet/create-utexo-wallet.js';
 import { UTEXOWallet } from '../lib/module/wallet/utexo-wallet.js';
 import {
   RGB_LIB_VERSION,
@@ -95,6 +99,32 @@ function fixture(overrides = {}) {
           failure: null,
         },
       ];
+    },
+    async issueAssetNia(...args) {
+      calls.push(['issueNia', ...args]);
+      throw new Error('unexpected issuance');
+    },
+    async issueAssetIfa(...args) {
+      calls.push(['issueIfa', ...args]);
+      throw new Error('unexpected issuance');
+    },
+    async burn(...args) {
+      calls.push(['burn', ...args]);
+      return { txid: 'burn-txid', batchTransferIdx: 21 };
+    },
+    async getConsignment(...args) {
+      calls.push(['consignment', ...args]);
+      return 'consignment-bytes';
+    },
+    async getConsignmentPath(...args) {
+      calls.push(['consignmentPath', ...args]);
+      return '/wallets/consignment.rgb';
+    },
+    async backup(...args) {
+      calls.push(['backup', ...args]);
+    },
+    async restoreBackup(...args) {
+      calls.push(['restore', ...args]);
     },
     ...overrides,
   };
@@ -676,4 +706,244 @@ test('WebRGB accepts the common wallet API and advertises only verified capabili
     code('METHOD_NOT_SUPPORTED')
   );
   assert.equal(prompts, 0);
+});
+test('legacy aliases dispatch through subclass overrides of init, destroy and refreshTransfers', async () => {
+  const calls = [];
+  class AppWallet extends UTEXOWallet {
+    async init() {
+      calls.push('init');
+    }
+    async destroy() {
+      calls.push('destroy');
+    }
+    async refreshTransfers() {
+      calls.push('refreshTransfers');
+      return { transfers: {} };
+    }
+  }
+  for (const wallet of [
+    new AppWallet(params, {}),
+    new AppWallet({
+      protocol: 'RGB_L1',
+      params,
+      keys: { getMnemonic: async () => 'unused' },
+    }),
+  ]) {
+    calls.length = 0;
+    await wallet.initialize();
+    assert.equal(await wallet.refreshWallet(), undefined);
+    await wallet.dispose();
+    assert.deepEqual(calls, ['init', 'refreshTransfers', 'destroy']);
+  }
+});
+test('issuance rejects totals the numeric asset model cannot represent before any native call', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  const safe = Number.MAX_SAFE_INTEGER;
+  await assert.rejects(
+    wallet.issueAssetNia({
+      ticker: 'T',
+      name: 'Token',
+      precision: 0,
+      amounts: [safe, 1],
+    }),
+    code('AMOUNT_OVERFLOW')
+  );
+  await assert.rejects(
+    wallet.issueAssetNia({
+      ticker: 'T',
+      name: 'Token',
+      precision: 0,
+      amounts: ['18446744073709551615'],
+    }),
+    code('AMOUNT_OVERFLOW')
+  );
+  await assert.rejects(
+    wallet.issueAssetIfa({
+      ticker: 'T',
+      name: 'Token',
+      precision: 0,
+      amounts: [1],
+      inflationAmounts: [safe],
+      rejectListUrl: null,
+    }),
+    code('AMOUNT_OVERFLOW')
+  );
+  assert.ok(!calls.some((c) => Array.isArray(c) && c[0].startsWith('issue')));
+  assert.deepEqual(amounts.issuanceAmounts([safe - 1], [1]), {
+    amounts: [String(safe - 1)],
+    inflationAmounts: ['1'],
+  });
+  await wallet.dispose();
+});
+const assetId = 'rgb:asset-id';
+const txid = 'a'.repeat(64);
+const burnParams = {
+  assetId,
+  amount: '18446744073709551615',
+  burnRecipient: 'b'.repeat(64),
+  feeRate: 3,
+  minConfirmations: 1,
+};
+test('burn validates input and maps burnRecipient before a single native call', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  await wallet.unlock(config);
+  const burns = () => calls.filter((c) => Array.isArray(c) && c[0] === 'burn');
+  for (const invalid of [
+    { amount: '1.5' },
+    { amount: 10 },
+    { amount: '0' },
+    { amount: '18446744073709551616' },
+    { feeRate: 1.5 },
+    { burnRecipient: '0x' + 'b'.repeat(64) },
+    { assetId: 'asset' },
+    { minConfirmations: 0 },
+  ]) {
+    await assert.rejects(wallet.burn({ ...burnParams, ...invalid }));
+  }
+  assert.equal(burns().length, 0);
+  assert.deepEqual(await wallet.burn(burnParams), {
+    txid: 'burn-txid',
+    batchTransferIdx: 21,
+  });
+  assert.deepEqual(burns()[0], [
+    'burn',
+    'handle-1',
+    assetId,
+    '18446744073709551615',
+    'b'.repeat(64),
+    '3',
+    1,
+  ]);
+  const unaddressed = { ...burnParams };
+  delete unaddressed.burnRecipient;
+  await wallet.burn(unaddressed);
+  assert.equal(burns()[1][4], null);
+  await wallet.dispose();
+});
+test('burn is rejected when the runtime lacks the capability and is never retried', async () => {
+  const unsupported = fixture({
+    async getRuntimeInfo() {
+      return { ...runtime, burn: false };
+    },
+  });
+  await unsupported.wallet.init();
+  await unsupported.wallet.unlock(config);
+  assert.equal((await unsupported.wallet.getBfaCapabilities()).burn, false);
+  await assert.rejects(
+    unsupported.wallet.burn(burnParams),
+    code('UNSUPPORTED_CAPABILITY')
+  );
+  assert.ok(
+    !unsupported.calls.some((c) => Array.isArray(c) && c[0] === 'burn')
+  );
+  let attempts = 0;
+  const failing = fixture({
+    async burn() {
+      attempts++;
+      throw new Error('ambiguous broadcast');
+    },
+  });
+  await failing.wallet.init();
+  await failing.wallet.unlock(config);
+  await assert.rejects(failing.wallet.burn(burnParams), /ambiguous broadcast/);
+  assert.equal(attempts, 1);
+  assert.equal(await failing.wallet.getAddress(), 'address');
+});
+test('consignment lookups validate assetId and txid before reaching native', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  for (const [a, t] of [
+    ['asset', txid],
+    [assetId, 'z'.repeat(64)],
+    [assetId, 'a'.repeat(63)],
+  ]) {
+    await assert.rejects(wallet.getConsignment(a, t), /Invalid assetId/);
+    await assert.rejects(wallet.getConsignmentPath(a, t), /Invalid assetId/);
+  }
+  assert.ok(
+    !calls.some((c) => Array.isArray(c) && c[0].startsWith('consignment'))
+  );
+  assert.equal(await wallet.getConsignment(assetId, txid), 'consignment-bytes');
+  assert.equal(
+    await wallet.getConsignmentPath(assetId, txid),
+    '/wallets/consignment.rgb'
+  );
+  assert.deepEqual(
+    calls.find((c) => Array.isArray(c) && c[0] === 'consignment'),
+    ['consignment', 'handle-1', assetId, txid]
+  );
+  await wallet.dispose();
+});
+test('createBackup requires an absolute path and nonempty password', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  for (const invalid of [
+    { backupPath: 'relative/backup', password: 'pw' },
+    { backupPath: '/backup', password: '' },
+    { backupPath: '/backup' },
+  ]) {
+    await assert.rejects(wallet.createBackup(invalid), code('INVALID_CONFIG'));
+  }
+  assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'backup'));
+  assert.deepEqual(
+    await wallet.createBackup({ backupPath: '/backups/w.rgb', password: 'pw' }),
+    { message: 'Backup created successfully', backupPath: '/backups/w.rgb' }
+  );
+  assert.deepEqual(
+    calls.find((c) => Array.isArray(c) && c[0] === 'backup'),
+    ['backup', 'handle-1', '/backups/w.rgb', 'pw']
+  );
+  await wallet.dispose();
+});
+test('restoreRgbLibBackup validates paths and runtime version before restoring', async () => {
+  const valid = {
+    backupPath: '/backups/w.rgb',
+    password: 'pw',
+    storageDirPath: '/wallets/restored',
+  };
+  for (const invalid of [
+    { backupPath: 'backups/w.rgb' },
+    { storageDirPath: 'wallets/restored' },
+    { password: '' },
+    { backupPath: '/backups/w\0.rgb' },
+    { storageDirPath: '/wallets/\0restored' },
+  ]) {
+    const { native, calls } = fixture();
+    await assert.rejects(
+      restoreRgbLibBackupWith({ ...valid, ...invalid }, () => native),
+      code('INVALID_CONFIG')
+    );
+    assert.deepEqual(calls, []);
+  }
+  // The public entry point validates before it even loads the native module.
+  await assert.rejects(
+    restoreRgbLibBackup({ ...valid, backupPath: 'relative' }),
+    code('INVALID_CONFIG')
+  );
+  for (const mismatch of [
+    { version: '0.0.0' },
+    { sourceRevision: 'other' },
+    { bridgeVersion: -1 },
+  ]) {
+    const { native, calls } = fixture({
+      async getRuntimeInfo() {
+        return { ...runtime, ...mismatch };
+      },
+    });
+    await assert.rejects(
+      restoreRgbLibBackupWith(valid, () => native),
+      code('NATIVE_VERSION_MISMATCH')
+    );
+    assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'restore'));
+  }
+  const { native, calls } = fixture();
+  await restoreRgbLibBackupWith(valid, () => native);
+  assert.deepEqual(calls.at(-1), [
+    'restore',
+    valid.backupPath,
+    valid.password,
+    valid.storageDirPath,
+  ]);
 });

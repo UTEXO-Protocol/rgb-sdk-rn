@@ -29,6 +29,33 @@ export function u64(
   return n.toString();
 }
 
+/**
+ * Converts issuance allocations and checks, before any native call, that the
+ * resulting supply (and max supply including inflation) fits the numeric
+ * public asset model. Balances never exceed the max supply, so this also
+ * bounds every balance field the issued asset can later report.
+ */
+export function issuanceAmounts(
+  amounts: readonly (number | bigint | string)[],
+  inflationAmounts: readonly (number | bigint | string)[] = []
+): { amounts: string[]; inflationAmounts: string[] } {
+  const native = amounts.map((n) => u64(n, 'amount', true));
+  const inflation = inflationAmounts.map((n) =>
+    u64(n, 'inflationAmount', true)
+  );
+  const total = [...native, ...inflation].reduce(
+    (sum, n) => sum + BigInt(n),
+    0n
+  );
+  if (total > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new WalletBackendError(
+      'AMOUNT_OVERFLOW',
+      'Total issued and inflatable supply cannot be represented by the numeric SDK fields'
+    );
+  }
+  return { amounts: native, inflationAmounts: inflation };
+}
+
 export function safeNumber(value: string, field: string): number {
   if (typeof value !== 'string' || !/^-?(0|[1-9]\d*)$/.test(value)) {
     throw new WalletBackendError(

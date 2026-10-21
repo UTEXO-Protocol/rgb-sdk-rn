@@ -486,10 +486,14 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   async destroy(): Promise<void> {
     try {
       await this.rln.rlnShutdown();
-    } catch {}
+    } catch {
+      // Best-effort: the node may already be stopped.
+    }
     try {
       await this.rln.rlnDestroyNode();
-    } catch {}
+    } catch {
+      // Best-effort: the node may already be destroyed.
+    }
     await this.signer.dispose?.(this.rln);
     this.disposed = true;
   }

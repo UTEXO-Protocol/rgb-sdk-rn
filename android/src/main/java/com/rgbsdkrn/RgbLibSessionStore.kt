@@ -191,7 +191,13 @@ internal class RgbLibSessionStore {
       }
       "getAddress" -> {
         if (p.getBoolean("rotate") || !s.reuse || s.profile.isNull("cachedAddress")) {
-          s.profile.put("cachedAddress",w.getAddress()); save(s)
+          val address=w.getAddress(); val previous=s.profile.opt("cachedAddress")
+          s.profile.put("cachedAddress",address)
+          // Never keep an in-memory address that was not persisted.
+          try { save(s) } catch (e: Throwable) {
+            if (previous == null) s.profile.remove("cachedAddress") else s.profile.put("cachedAddress",previous)
+            throw e
+          }
         }
         s.profile.getString("cachedAddress")
       }

@@ -259,7 +259,10 @@ public final class RgbLibSwiftHelper: NSObject {
       return NSNull()
     case "getAddress":
       if try p.bool("rotate") || !s.reuse || s.profile["cachedAddress"] as? String == nil {
-        s.profile["cachedAddress"] = try w.getAddress(); try s.save()
+        let address = try w.getAddress(), previous = s.profile["cachedAddress"]
+        s.profile["cachedAddress"] = address
+        // Never keep an in-memory address that was not persisted.
+        do { try s.save() } catch { s.profile["cachedAddress"] = previous; throw error }
       }
       return s.profile["cachedAddress"]!
     case "getBtcBalance": return try rgbDto(w.getBtcBalance(online: s.online, skipSync: p.bool("skipSync")))

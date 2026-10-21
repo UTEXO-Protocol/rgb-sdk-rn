@@ -42,6 +42,14 @@ export async function restoreRgbLibBackup(params: {
   password: string;
   storageDirPath: string;
 }): Promise<void> {
+  return restoreRgbLibBackupWith(params, getRgbLibBinding);
+}
+
+/** @internal Transport-injectable implementation; not exported from the package. */
+export async function restoreRgbLibBackupWith(
+  params: { backupPath: string; password: string; storageDirPath: string },
+  loadBinding: typeof getRgbLibBinding
+): Promise<void> {
   params = { ...params };
   if (
     !params ||
@@ -57,7 +65,7 @@ export async function restoreRgbLibBackup(params: {
       'Restore requires absolute paths and a nonempty password'
     );
   }
-  const native = getRgbLibBinding();
+  const native = loadBinding();
   const runtime = await native.getRuntimeInfo();
   if (
     runtime.version !== RGB_LIB_VERSION ||

@@ -24,6 +24,13 @@ type Method<P extends WalletProtocol, K extends SharedMethod> = Extract<
   Engine<P>[K],
   (...args: never[]) => unknown
 >;
+// Both engines share these zero-argument signatures; the generic Method<>
+// types cannot be resolved inside the class body.
+type VirtualAliases = {
+  init(): Promise<void>;
+  destroy(): Promise<void>;
+  refreshTransfers(): Promise<unknown>;
+};
 
 /**
  * One public wallet constructor. The legacy two-argument form always selects RLN.
@@ -164,10 +171,9 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     return this.invoke('destroy', ...args);
   }
 
-  initialize(
-    ...args: Parameters<Method<TProtocol, 'initialize'>>
-  ): ReturnType<Method<TProtocol, 'initialize'>> {
-    return this.invoke('initialize', ...args);
+  /** Backward-compat alias for init(); dispatches through `this` so subclass overrides run. */
+  async initialize(): Promise<void> {
+    return (this as unknown as VirtualAliases).init();
   }
 
   getNetwork(
@@ -176,10 +182,9 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     return this.invoke('getNetwork', ...args);
   }
 
-  dispose(
-    ...args: Parameters<Method<TProtocol, 'dispose'>>
-  ): ReturnType<Method<TProtocol, 'dispose'>> {
-    return this.invoke('dispose', ...args);
+  /** Backward-compat alias for destroy(); dispatches through `this` so subclass overrides run. */
+  async dispose(): Promise<void> {
+    return (this as unknown as VirtualAliases).destroy();
   }
 
   isDisposed(
@@ -326,10 +331,9 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     return this.invoke('failTransfers', ...args);
   }
 
-  refreshWallet(
-    ...args: Parameters<Method<TProtocol, 'refreshWallet'>>
-  ): ReturnType<Method<TProtocol, 'refreshWallet'>> {
-    return this.invoke('refreshWallet', ...args);
+  /** Refreshes transfers through `this` so a subclass refreshTransfers() override runs. */
+  async refreshWallet(): Promise<void> {
+    await (this as unknown as VirtualAliases).refreshTransfers();
   }
 
   refreshTransfers(

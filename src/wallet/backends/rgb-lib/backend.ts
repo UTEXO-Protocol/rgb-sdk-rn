@@ -28,6 +28,20 @@ import { feeRate, issuanceAmounts, u64 } from './amounts';
 import * as map from './mappers';
 import { guardNative } from './errors';
 
+/** A handle already removed by native needs no further close call. */
+async function closeHandle(native: Spec, handle: string): Promise<void> {
+  try {
+    await native.closeWallet(handle);
+  } catch (error) {
+    if (
+      !(error instanceof WalletBackendError) ||
+      error.code !== 'WALLET_NOT_INITIALIZED'
+    ) {
+      throw error;
+    }
+  }
+}
+
 /** One backend owns one native handle, one queue, and one immutable wallet profile. */
 export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockParams> {
   private readonly queue = new SerialExecutor();
@@ -176,7 +190,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       } catch (error) {
         // Keep ownership if cleanup fails. A subsequent dispose/shutdown can retry it.
         try {
-          await native.closeWallet(handle);
+          await closeHandle(native, handle);
           this.handle = undefined;
           this.native = undefined;
         } catch (cleanupError) {
@@ -264,7 +278,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (this.stopping) return this.stopping;
     const stopping = this.queue.run(async () => {
       if (this.handle && this.native)
-        await this.native.closeWallet(this.handle);
+        await closeHandle(this.native, this.handle);
       this.handle = undefined;
       this.native = undefined;
       this.runtime = undefined;
@@ -463,13 +477,15 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         }
       ),
     inflate: (params) =>
-      this.input('inflate', true, params, (native, handle, params) =>
-        native.inflate(
-          handle,
-          params.assetId,
-          params.inflationAmounts.map((n) => u64(n, 'inflationAmount', true)),
-          feeRate(params.feeRate),
-          integer(params.minConfirmations ?? 1, 'minConfirmations', 1, 255)
+      this.input('inflate', true, params, async (native, handle, params) =>
+        map.operation(
+          await native.inflate(
+            handle,
+            params.assetId,
+            params.inflationAmounts.map((n) => u64(n, 'inflationAmount', true)),
+            feeRate(params.feeRate),
+            integer(params.minConfirmations ?? 1, 'minConfirmations', 1, 255)
+          )
         )
       ),
     blindReceive: (params) => this.receive(false, params),

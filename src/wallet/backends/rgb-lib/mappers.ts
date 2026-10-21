@@ -12,6 +12,7 @@ import type {
   NativeAssignment,
   NativeBalance,
   NativeInvoice,
+  NativeOperation,
   NativeReceive,
   NativeTransaction,
   NativeTransfer,
@@ -292,6 +293,21 @@ export function refreshFailure(value: { name: string; message: string }) {
     );
   }
   return { name: value.name, message: value.message };
+}
+/** Public result of a broadcast operation; the native entropy stays internal. */
+export function operation(value: NativeOperation) {
+  if (
+    typeof value?.txid !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(value.txid) ||
+    !Number.isSafeInteger(value.batchTransferIdx) ||
+    value.batchTransferIdx < 0
+  ) {
+    throw new WalletBackendError(
+      'INVALID_NATIVE_RESPONSE',
+      'Invalid operation result'
+    );
+  }
+  return { txid: value.txid, batchTransferIdx: value.batchTransferIdx };
 }
 export function receive(value: NativeReceive) {
   return {

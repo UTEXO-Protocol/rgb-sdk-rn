@@ -5,6 +5,8 @@ import type { IRLNSigner } from './rln-signers';
 import type { WalletProtocol } from './wallet-api';
 import type { WalletInit, UTEXOWalletOptions } from './wallet-options';
 import { WalletBackendError } from './backend-errors';
+import type { BfaCapabilities, BurnParams, BurnResult } from './types';
+import { snapshot } from './runtime/snapshot';
 
 export type { UTEXOWalletNodeParams } from './rln-wallet';
 export type { UTEXOWalletOptions } from './wallet-options';
@@ -223,16 +225,25 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     return this.invoke('createUtxos', ...args);
   }
 
-  getBfaCapabilities(
-    ...args: Parameters<Method<TProtocol, 'getBfaCapabilities'>>
-  ): ReturnType<Method<TProtocol, 'getBfaCapabilities'>> {
-    return this.invoke('getBfaCapabilities', ...args);
+  getBfaCapabilities(): Promise<BfaCapabilities> {
+    return this.engine.getBfaCapabilities();
   }
 
-  burn(
-    ...args: Parameters<Method<TProtocol, 'burn'>>
-  ): ReturnType<Method<TProtocol, 'burn'>> {
-    return this.invoke('burn', ...args);
+  async burn(params: BurnParams): Promise<BurnResult> {
+    // Preserve the request while an application's capability override awaits.
+    const owned = snapshot(params);
+    if (
+      this.getBfaCapabilities !== UTEXOWallet.prototype.getBfaCapabilities &&
+      !(await this.getBfaCapabilities()).burn
+    ) {
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        'Burn is disabled by this wallet',
+        'burn',
+        this.engine.protocol === 'RGB_LN' ? 'rln' : 'rgb-lib'
+      );
+    }
+    return this.engine.burn(owned);
   }
 
   getConsignment(

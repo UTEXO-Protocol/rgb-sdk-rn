@@ -496,6 +496,21 @@ test('failed cleanup retains ownership and blocks operations until cleanup succe
   await wallet.dispose();
   assert.equal(attempts, 3);
 });
+test('a close retry that finds the handle already released by native completes cleanup', async () => {
+  // Mirrors RgbLibSessionStore.kt: the handle is unregistered even when close fails.
+  let attempts = 0;
+  const { wallet } = fixture({
+    async closeWallet() {
+      if (++attempts === 1) throw new Error('close failed');
+      throw { code: 'WALLET_NOT_INITIALIZED', message: 'Unknown or closed wallet' };
+    },
+  });
+  await wallet.init();
+  await assert.rejects(wallet.dispose(), /close failed/);
+  await wallet.dispose();
+  assert.equal(wallet.isDisposed(), true);
+  assert.equal(attempts, 2);
+});
 test('failed native calls do not poison the queue or cause transaction retries', async () => {
   let sends = 0;
   const { wallet } = fixture({
@@ -512,6 +527,24 @@ test('failed native calls do not poison the queue or cause transaction retries',
   );
   assert.equal(await wallet.getAddress(), 'address');
   assert.equal(sends, 1);
+});
+test('init preserves its validation error when native already released the failed handle', async () => {
+  let invalidIdentity = true;
+  const { wallet, calls } = fixture({
+    async getWalletIdentity() {
+      return { id: 'identity', network: invalidIdentity ? 'signet' : 'regtest' };
+    },
+    async closeWallet() {
+      throw { code: 'WALLET_NOT_INITIALIZED', message: 'Unknown or closed wallet' };
+    },
+  });
+  await assert.rejects(wallet.init(), code('WALLET_CONFIG_MISMATCH'));
+  invalidIdentity = false;
+  await wallet.init();
+  assert.equal(calls.filter((c) => Array.isArray(c) && c[0] === 'open').length, 2);
+  assert.equal(await wallet.getAddress(), 'address');
+  await wallet.dispose();
+  assert.equal(wallet.isDisposed(), true);
 });
 test('queued transactions own their input even when the caller mutates the original object', async () => {
   const gate = deferred(),
@@ -1017,6 +1050,126 @@ test('burn is rejected when the runtime lacks the capability and is never retrie
   await assert.rejects(failing.wallet.burn(burnParams), /ambiguous broadcast/);
   assert.equal(attempts, 1);
   assert.equal(await failing.wallet.getAddress(), 'address');
+});
+test('a subclass that disables burn is honoured on both protocols', async () => {
+  class NoBurn extends UTEXOWallet {
+    async getBfaCapabilities() {
+      return { ...(await super.getBfaCapabilities()), burn: false };
+    }
+  }
+  const rln = new NoBurn(params, { supportsBurn: true });
+  let rlnBurns = 0;
+  rln.engine.rln.rlnBfaCapabilities = async () => ({
+    burn: true,
+    consignment: true,
+    bfa: true,
+  });
+  rln.engine.rln.rlnBurn = async () => {
+    rlnBurns++;
+    return { txid };
+  };
+  const f = fixture();
+  const l1 = new NoBurn({ protocol: 'RGB_L1', params, keys: f.keys });
+  l1.engine.ports.loadBinding = () => f.native;
+  await l1.init();
+  await l1.unlock(config);
+  for (const wallet of [rln, l1]) {
+    await assert.rejects(
+      wallet.burn(burnParams),
+      code('UNSUPPORTED_CAPABILITY')
+    );
+  }
+  assert.equal(rlnBurns, 0);
+  assert.ok(!f.calls.some((c) => Array.isArray(c) && c[0] === 'burn'));
+  await l1.dispose();
+});
+test('inflate converts inputs exactly and returns only the public result', async () => {
+  const { wallet, calls } = fixture({
+    async inflate(...args) {
+      calls.push(['inflate', ...args]);
+      return { txid, batchTransferIdx: 4, entropy: '1' };
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  const request = { assetId, inflationAmounts: ['18446744073709551615', 2] };
+  for (const invalid of [
+    { inflationAmounts: [Number.MAX_SAFE_INTEGER + 1] },
+    { inflationAmounts: ['18446744073709551616'] },
+    { minConfirmations: 0 },
+    { feeRate: 1.5 },
+  ]) {
+    await assert.rejects(wallet.inflate({ ...request, ...invalid }));
+  }
+  assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'inflate'));
+  assert.deepEqual(await wallet.inflate({ ...request, feeRate: 5 }), {
+    txid,
+    batchTransferIdx: 4,
+  });
+  assert.deepEqual(calls.at(-1), [
+    'inflate',
+    'handle-1',
+    assetId,
+    ['18446744073709551615', '2'],
+    '5',
+    1,
+  ]);
+  const malformed = fixture({
+    async inflate() {
+      return { txid: 'x', batchTransferIdx: 4 };
+    },
+  });
+  await malformed.wallet.init();
+  await malformed.wallet.unlock(config);
+  await assert.rejects(
+    malformed.wallet.inflate(request),
+    code('INVALID_NATIVE_RESPONSE')
+  );
+  await wallet.dispose();
+  await malformed.wallet.dispose();
+});
+test('burn snapshots parameters before awaiting a subclass capability check', async () => {
+  const gate = deferred();
+  const started = deferred();
+  class AppWallet extends UTEXOWallet {
+    async getBfaCapabilities() {
+      started.resolve();
+      await gate.promise;
+      return super.getBfaCapabilities();
+    }
+  }
+  const f = fixture();
+  const wallet = new AppWallet({ protocol: 'RGB_L1', params, keys: f.keys });
+  wallet.engine.ports.loadBinding = () => f.native;
+  await wallet.init();
+  await wallet.unlock(config);
+  const request = { ...burnParams, amount: '5' };
+  const burning = wallet.burn(request);
+  await started.promise;
+  request.amount = '999';
+  request.assetId = 'rgb:changed';
+  gate.resolve();
+  await burning;
+  const calls = f.calls.filter((c) => Array.isArray(c) && c[0] === 'burn');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][2], assetId);
+  assert.equal(calls[0][3], '5');
+  await wallet.dispose();
+});
+test('a subclass cannot enable burn when the native runtime does not support it', async () => {
+  class AppWallet extends UTEXOWallet {
+    async getBfaCapabilities() {
+      return { burn: true, consignment: true, bfa: true };
+    }
+  }
+  const f = fixture({ getRuntimeInfo: async () => ({ ...runtime, burn: false }) });
+  const wallet = new AppWallet({ protocol: 'RGB_L1', params, keys: f.keys });
+  wallet.engine.ports.loadBinding = () => f.native;
+  await wallet.init();
+  await wallet.unlock(config);
+  await assert.rejects(wallet.burn(burnParams), code('UNSUPPORTED_CAPABILITY'));
+  assert.ok(!f.calls.some((c) => Array.isArray(c) && c[0] === 'burn'));
+  await wallet.dispose();
 });
 test('consignment lookups validate assetId and txid before reaching native', async () => {
   const { wallet, calls } = fixture();

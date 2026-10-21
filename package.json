@@ -62,6 +62,7 @@
     "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/binding && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgbsdkrn",
     "codegen:rgb-lib": "node scripts/generate-rgb-lib-bridge.mjs && node scripts/generate-rgb-lib-dtos.mjs",
     "test:rgb-lib:ios": "node scripts/check-rgb-lib-ios.mjs",
+    "test:rgb-lib:android": "node scripts/check-rgb-lib-android.mjs",
     "test:rgb-lib": "bob build && node scripts/generate-rgb-lib-bridge.mjs --check && node scripts/generate-rgb-lib-dtos.mjs --check && node --experimental-loader ./scripts/rn-stub-loader.mjs --test scripts/rgb-lib.test.mjs",
     "build": "bob build",
     "build:watch": "tsc -w",

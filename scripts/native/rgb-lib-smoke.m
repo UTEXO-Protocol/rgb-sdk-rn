@@ -4,6 +4,9 @@
 @interface RgbLibSwiftHelper : NSObject
 + (NSDictionary *)execute:(NSString *)operation params:(NSDictionary *)params;
 @end
+@interface RlnStorageClaim : NSObject
++ (nullable NSDictionary *)claimForTesting:(NSString *)path;
+@end
 
 static id call(NSString *operation, NSDictionary *params) {
   NSDictionary *response = [RgbLibSwiftHelper execute:operation params:params];
@@ -39,6 +42,7 @@ int main(void) {
     check([address hasPrefix:@"bcrt1p"], "Wrong address type");
     NSDictionary *busy = [RgbLibSwiftHelper execute:@"openWallet" params:params];
     check([busy[@"error"][@"code"] isEqual:@"WALLET_STORAGE_IN_USE"], "Storage lease did not reject a second wallet");
+    check([[RlnStorageClaim claimForTesting:root][@"errorCode"] isEqual:@"WALLET_PROFILE_MISMATCH"], "RLN claimed an open RGB Lib wallet");
     check([call(@"listAssets", @{@"handle":handle}) count] == 0, "Unexpected assets");
     NSDictionary *balance = call(@"getBtcBalance", @{@"handle":handle, @"skipSync":@YES});
     check([balance[@"vanilla"][@"settled"] isEqual:@"0"], "Balance lost decimal encoding");
@@ -69,6 +73,27 @@ int main(void) {
     NSDictionary *mismatch = [RgbLibSwiftHelper execute:@"openWallet" params:params];
     check([mismatch[@"error"][@"code"] isEqual:@"WALLET_PROFILE_MISMATCH"], "Profile mismatch was accepted");
     params[@"network"] = @"regtest";
+
+    // RLN and RGB Lib never share storage, in either direction.
+    NSFileManager *fm = NSFileManager.defaultManager;
+    check([[RlnStorageClaim claimForTesting:root][@"errorCode"] isEqual:@"WALLET_PROFILE_MISMATCH"], "RLN claimed RGB Lib storage");
+    check(![fm fileExistsAtPath:[root stringByAppendingPathComponent:@".rln-sdk-profile"]], "RLN marked RGB Lib storage");
+    NSString *rln = [base stringByAppendingPathComponent:@"rln"];
+    check([RlnStorageClaim claimForTesting:rln] == nil, "RLN could not claim a fresh directory");
+    check([fm fileExistsAtPath:[rln stringByAppendingPathComponent:@".rln-sdk-profile"]], "RLN marker was not created");
+    NSMutableDictionary *rlnParams = [params mutableCopy];
+    rlnParams[@"dataDir"] = rln;
+    NSDictionary *crossOpen = [RgbLibSwiftHelper execute:@"openWallet" params:rlnParams];
+    check([crossOpen[@"error"][@"code"] isEqual:@"WALLET_STORAGE_NOT_EMPTY"], "RGB Lib opened RLN storage");
+    NSDictionary *crossRestore = [RgbLibSwiftHelper execute:@"restoreBackup" params:@{@"dataDir":rln, @"backupPath":backup, @"password":@"smoke-test-password"}];
+    check([crossRestore[@"error"][@"code"] isEqual:@"WALLET_STORAGE_NOT_EMPTY"], "RGB Lib restored into RLN storage");
+    NSString *legacy = [base stringByAppendingPathComponent:@"legacy-rln"];
+    [fm createDirectoryAtPath:legacy withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *legacyData = [legacy stringByAppendingPathComponent:@"rgb_lightning_node.db"];
+    [@"legacy" writeToFile:legacyData atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    check([RlnStorageClaim claimForTesting:legacy] == nil, "Legacy RLN storage without a marker was rejected");
+    check([[NSString stringWithContentsOfFile:legacyData encoding:NSUTF8StringEncoding error:nil] isEqual:@"legacy"], "Legacy RLN data changed");
+
     NSString *restored = [base stringByAppendingPathComponent:@"restored"];
     NSDictionary *wrongPassword = [RgbLibSwiftHelper execute:@"restoreBackup" params:@{@"dataDir":restored, @"backupPath":backup, @"password":@"wrong"}];
     check(wrongPassword[@"error"] != nil, "Wrong backup password was accepted");
@@ -79,7 +104,7 @@ int main(void) {
     check([address isEqual:call(@"getAddress", @{@"handle":handle, @"rotate":@NO})], "Restored address changed");
     call(@"closeWallet", @{@"handle":handle});
     [[NSFileManager defaultManager] removeItemAtPath:base error:nil];
-    puts("Direct UniFFI: RLN coexistence, wallet lifecycle, storage lock, invoice/history and encrypted backup/restore passed");
+    puts("Direct UniFFI: RLN coexistence and storage exclusion, wallet lifecycle, storage lock, invoice/history and encrypted backup/restore passed");
   }
   return 0;
 }

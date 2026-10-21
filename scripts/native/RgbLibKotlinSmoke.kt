@@ -21,6 +21,7 @@ fun main() {
     val address = call("getAddress", mapOf("rotate" to false))
     check((address as String).startsWith("bcrt1p"))
     check((runCatching { store.execute("openWallet", params) }.exceptionOrNull() as RgbLibBridgeError).code == "WALLET_STORAGE_IN_USE")
+    check((runCatching { RlnStorageClaim.claim(params["dataDir"] as String) }.exceptionOrNull() as RlnStorageClaimError).code == "WALLET_PROFILE_MISMATCH")
     check((call("listAssets") as List<*>).isEmpty())
     val balance = call("getBtcBalance", mapOf("skipSync" to true)) as Map<String, Any?>
     check((balance["vanilla"] as Map<*, *>)["settled"] == "0")
@@ -46,6 +47,14 @@ fun main() {
     check(call("getAddress", mapOf("rotate" to false)) == address)
     call("closeWallet"); active = null
     check((runCatching { store.execute("openWallet", params + ("network" to "signet")) }.exceptionOrNull() as RgbLibBridgeError).code == "WALLET_PROFILE_MISMATCH")
+    // RLN and RGB Lib never share storage, in either direction.
+    check((runCatching { RlnStorageClaim.claim(params["dataDir"] as String) }.exceptionOrNull() as RlnStorageClaimError).code == "WALLET_PROFILE_MISMATCH")
+    check(!root.resolve("source").resolve(RlnStorageClaim.MARKER).exists())
+    val rln = root.resolve("rln").path
+    RlnStorageClaim.claim(rln)
+    check((runCatching { store.execute("openWallet", params + ("dataDir" to rln)) }.exceptionOrNull() as RgbLibBridgeError).code == "WALLET_STORAGE_NOT_EMPTY")
+    check((runCatching { store.execute("restoreBackup", mapOf("dataDir" to rln, "backupPath" to backup, "password" to "smoke-test-password")) }.exceptionOrNull() as RgbLibBridgeError).code == "WALLET_STORAGE_NOT_EMPTY")
+    rlnStorageClaimChecks()
     val restored = root.resolve("restored").path
     val restore = mapOf("dataDir" to restored, "backupPath" to backup, "password" to "smoke-test-password")
     check(runCatching { store.execute("restoreBackup", restore + ("password" to "wrong")) }.isFailure)
@@ -54,7 +63,7 @@ fun main() {
     check(call("getWalletIdentity") == identity)
     check(call("getAddress", mapOf("rotate" to false)) == address)
     call("closeWallet"); active = null
-    println("Direct Kotlin UniFFI: lifecycle, storage lock, invoice/history and encrypted backup/restore passed")
+    println("Direct Kotlin UniFFI: lifecycle, storage lock, RLN exclusion, invoice/history and encrypted backup/restore passed")
   } finally {
     if (active != null) call("closeWallet")
     root.deleteRecursively()

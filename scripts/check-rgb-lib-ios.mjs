@@ -96,6 +96,7 @@ try {
     'rgb_libFFI',
     path.join(root, 'ios/RgbLibDtos.swift'),
     path.join(root, 'ios/RgbLibSwiftHelper.swift'),
+    path.join(root, 'ios/RlnStorageClaim.swift'),
     object,
     path.join(rln, 'librgb_lightning_node.a'),
     '-framework',

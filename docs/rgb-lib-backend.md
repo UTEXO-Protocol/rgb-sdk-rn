@@ -240,6 +240,7 @@ RLN-only build працює без цих artifacts; `rgb-lib.init()` у так�
 npm test
 npm run codegen
 npm run test:rgb-lib:ios
+npm run test:rgb-lib:android
 ```
 
 iOS smoke test використовує справжні UniFFI-виклики: завантажує обидва engines,
@@ -249,10 +250,16 @@ iOS smoke test використовує справжні UniFFI-виклики: 
 Він використовує out-of-band receive і не підтверджує роботу конкретного
 proxy/indexer deployment або перекази з коштами.
 
-`scripts/native/RgbLibKotlinSmoke.kt` містить аналогічну перевірку Kotlin session
-store через UniFFI для JVM: профіль, блокування, invoice/history та backup/restore.
-Її локальний запуск використовує desktop UniFFI library того самого revision;
-це не замінює запуск React Native застосунку на Android.
+`npm run test:rgb-lib:android` (потрібні `kotlinc` і `java`) компілює й запускає
+Android Kotlin-код на JVM. Без artifacts він перевіряє лише RLN storage claim:
+новий каталог, legacy RLN-каталог без marker і відмову відкривати RGB Lib profile.
+Якщо `RGB_LIB_JVM_BINDINGS_DIR` вказує на desktop UniFFI bundle того самого
+revision (`manifest.json`, `kotlin/`, `lib/`, `jars/` з JNA та org.json),
+додатково запускається `scripts/native/RgbLibKotlinSmoke.kt` проти справжнього
+`RgbLibSessionStore`: профіль, блокування, взаємне виключення RLN/RGB Lib storage,
+invoice/history та backup/restore. `--require-native` робить відсутній bundle
+помилкою. Це не замінює запуск React Native застосунку на Android.
+iOS smoke test так само перевіряє взаємне виключення RLN/RGB Lib storage.
 
 ## Мінімальний перехід rgb-sdk-rn-demo
 

@@ -95,19 +95,8 @@ public class RgbSwiftHelper: NSObject {
       }
       // Claim the engine before native creation. An RGB Lib profile must never be
       // opened as an RLN node, including concurrent opens of an empty directory.
-      let storageRoot = URL(fileURLWithPath: storageDirPath, isDirectory: true)
-      try FileManager.default.createDirectory(at: storageRoot, withIntermediateDirectories: true)
-      let rgbLock = storageRoot.appendingPathComponent(".rgb-sdk.lock").path
-      let rgbProfile = storageRoot.appendingPathComponent("rgb-sdk-profile.json").path
-      if FileManager.default.fileExists(atPath: rgbLock) || FileManager.default.fileExists(atPath: rgbProfile) {
-        return ["error": "Storage belongs to RGB Lib; use a separate RLN directory", "errorCode": "WALLET_PROFILE_MISMATCH"]
-      }
-      let marker = storageRoot.appendingPathComponent(".rln-sdk-profile")
-      if !FileManager.default.fileExists(atPath: marker.path) {
-        try Data("rln".utf8).write(to: marker, options: .atomic)
-      }
-      if FileManager.default.fileExists(atPath: rgbLock) {
-        return ["error": "Storage is being opened by RGB Lib", "errorCode": "WALLET_STORAGE_IN_USE"]
+      if let rejected = try RlnStorageClaim.claim(storageDirPath) {
+        return rejected
       }
       let virtualPeerPubkeys: [String]? = (request["virtualPeerPubkeys"] as? [String]).flatMap { $0.isEmpty ? nil : $0 }
       let initReq = SdkInitRequest(

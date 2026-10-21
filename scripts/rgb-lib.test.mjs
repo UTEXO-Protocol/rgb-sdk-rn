@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { SDKError } from '@utexo/rgb-sdk-core';
-import { WalletBackendError } from '../lib/module/wallet/backend-errors.js';
-import { RgbLibWalletBackend } from '../lib/module/wallet/backends/rgb-lib/backend.js';
-import { OnchainWallet } from '../lib/module/wallet/onchain-wallet.js';
+import { WalletBackendError } from '../lib/module/wallet/wallet-errors.js';
+import { RgbLibWalletBackend } from '../lib/module/wallet/rgb-lib/backend.js';
+import { OnchainWallet } from '../lib/module/wallet/rgb-lib/onchain-wallet.js';
 import {
   createUtexoWallet,
   restoreRgbLibBackup,
@@ -17,9 +17,9 @@ import {
   RGB_LIB_BRIDGE_VERSION,
   resolveRgbLibConfig,
   configEquals,
-} from '../lib/module/wallet/backends/rgb-lib/config.js';
-import * as amounts from '../lib/module/wallet/backends/rgb-lib/amounts.js';
-import * as map from '../lib/module/wallet/backends/rgb-lib/mappers.js';
+} from '../lib/module/wallet/rgb-lib/config.js';
+import * as amounts from '../lib/module/wallet/rgb-lib/amounts.js';
+import * as map from '../lib/module/wallet/rgb-lib/mappers.js';
 import { WebRgbProvider } from '../lib/module/integrations/webrgb/provider.js';
 
 const params = { network: 'regtest', storageDirPath: '/wallets/rgb-lib/test' };

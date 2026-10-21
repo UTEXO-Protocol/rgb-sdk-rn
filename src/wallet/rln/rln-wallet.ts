@@ -2,10 +2,10 @@ import {
   toSafeBridgeNumber,
   validateBurnParams,
   validateConsignmentLookup,
-} from './operations/validation';
-import type { BurnParams, BurnResult, ListAssets, Transfer } from './types';
+} from '../operations/validation';
+import type { BurnParams, BurnResult, ListAssets, Transfer } from '../types';
 import { getTransferAmount, parseTransferAssignment } from './transfer-amounts';
-import type { RefreshTransfersResult } from './refresh-types';
+import type { RefreshTransfersResult } from '../refresh-types';
 import type {
   IUTEXOProtocol,
   WalletCapabilities,
@@ -57,8 +57,8 @@ import {
 
 import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
-import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../binding/IRLN';
-import { toNativeNetwork } from '../binding/Interfaces';
+import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../../binding/IRLN';
+import { toNativeNetwork } from '../../binding/Interfaces';
 import {
   getDefaultLspBaseUrl,
   resolveLspBaseUrl,
@@ -79,7 +79,7 @@ import type {
   RlnTransaction,
   RlnTransfer,
   RlnUnspent,
-} from '../binding/rln-types';
+} from '../../binding/rln-types';
 import type {
   CreateHodlInvoiceParams,
   HodlInvoiceResult,
@@ -113,7 +113,7 @@ import {
   toLightningNetworkInfo,
   toLightningPeer,
   toSendPaymentResult,
-} from '../binding/mappers';
+} from '../../binding/mappers';
 
 // ── Constructor params ────────────────────────────────────────────────────────
 

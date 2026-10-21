@@ -1,7 +1,7 @@
-import type { UTEXOWalletNodeParams } from './rln-wallet';
-import type { IRLNSigner } from './rln-signers';
-import type { RgbLibWalletParams } from './backends/rgb-lib/config';
-import type { IRgbLibKeyProvider } from './credentials/rgb-lib-key-provider';
+import type { UTEXOWalletNodeParams } from './rln/rln-wallet';
+import type { IRLNSigner } from './rln/rln-signers';
+import type { RgbLibWalletParams } from './rgb-lib/config';
+import type { IRgbLibKeyProvider } from './rgb-lib/key-provider';
 import type { WalletProtocol } from './wallet-api';
 
 export type RlnWalletInit = {

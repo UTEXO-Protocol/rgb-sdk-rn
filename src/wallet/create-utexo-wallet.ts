@@ -4,16 +4,16 @@ import type {
   RgbLibWalletInit,
   WalletInit,
 } from './wallet-options';
-import { WalletBackendError } from './backend-errors';
-import { getRgbLibBinding } from '../binding/RgbLibBinding';
+import { WalletBackendError } from './wallet-errors';
+import { getRgbLibBinding } from './rgb-lib/native';
 import {
   RGB_LIB_VERSION,
   RGB_LIB_REVISION,
   RGB_LIB_BRIDGE_VERSION,
-} from './backends/rgb-lib/config';
-import { guardNative } from './backends/rgb-lib/errors';
+} from './rgb-lib/config';
+import { guardNative } from './rgb-lib/errors';
 
-export { RgbLibWallet } from './rgb-lib-wallet';
+export { RgbLibWallet } from './rgb-lib/rgb-lib-wallet';
 export type {
   RlnWalletInit,
   RgbLibWalletInit,

@@ -14,10 +14,10 @@ import type { IUTEXOProtocol } from '@utexo/rgb-sdk-core';
 import type { UTEXOWallet } from './wallet/utexo-wallet';
 import type { IRLNUnlockParams } from './binding/IRLN';
 import type { RefreshTransfersResult } from './wallet/refresh-types';
-import type { RlnWallet } from './wallet/rln-wallet';
-import type { RgbLibWallet } from './wallet/rgb-lib-wallet';
+import type { RlnWallet } from './wallet/rln/rln-wallet';
+import type { RgbLibWallet } from './wallet/rgb-lib/rgb-lib-wallet';
 import type { OnchainWalletApi } from './wallet/wallet-api';
-import type { RgbLibUnlockParams } from './wallet/backends/rgb-lib/config';
+import type { RgbLibUnlockParams } from './wallet/rgb-lib/config';
 
 declare const concrete: UTEXOWallet;
 declare const onchain: UTEXOWallet<'RGB_L1'>;

@@ -1,11 +1,11 @@
-import type { BurnParams } from './types';
-import { RLNBinding } from '../binding/RLNBinding';
+import type { BurnParams } from '../types';
+import { RLNBinding } from '../../binding/RLNBinding';
 import type {
   IRLN,
   IRLNNodeCreateParams,
   IRLNUnlockParams,
   IRLNExternalSignerBootstrap,
-} from '../binding/IRLN';
+} from '../../binding/IRLN';
 import type {
   RlnNodeInfo,
   RlnNetworkInfo,
@@ -39,7 +39,7 @@ import type {
   RlnVerifyMessageResponse,
   RlnClaimHodlInvoiceResponse,
   RlnApayNewResponse,
-} from '../binding/rln-types';
+} from '../../binding/rln-types';
 
 export class RLNManager implements IRLN {
   private readonly rlnBinding: RLNBinding;

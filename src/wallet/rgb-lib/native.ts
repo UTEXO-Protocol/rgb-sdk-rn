@@ -1,6 +1,6 @@
-import NativeRgbLib from './NativeRgbLib';
-import type { Spec } from './NativeRgbLib';
-import { WalletBackendError } from '../wallet/backend-errors';
+import NativeRgbLib from '../../binding/NativeRgbLib';
+import type { Spec } from '../../binding/NativeRgbLib';
+import { WalletBackendError } from '../wallet-errors';
 
 /** Native transport. Session ownership and serialization live in the backend. */
 export function getRgbLibBinding(): Spec {

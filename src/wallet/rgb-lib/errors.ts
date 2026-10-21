@@ -1,6 +1,6 @@
-import { WalletBackendError } from '../../backend-errors';
-import type { WalletBackendErrorCode } from '../../backend-errors';
-import type { Spec } from '../../../binding/NativeRgbLib';
+import { WalletBackendError } from '../wallet-errors';
+import type { WalletBackendErrorCode } from '../wallet-errors';
+import type { Spec } from '../../binding/NativeRgbLib';
 
 // Both bridges reject with these codes; see RgbLibSessionStore.kt and RgbLibSwiftHelper.swift.
 const BRIDGE_CODES: readonly WalletBackendErrorCode[] = [

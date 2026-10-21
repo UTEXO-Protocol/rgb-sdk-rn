@@ -1,14 +1,14 @@
-import { RlnWallet } from './rln-wallet';
-import type { UTEXOWalletNodeParams } from './rln-wallet';
-import { RgbLibWallet } from './rgb-lib-wallet';
-import type { IRLNSigner } from './rln-signers';
+import { RlnWallet } from './rln/rln-wallet';
+import type { UTEXOWalletNodeParams } from './rln/rln-wallet';
+import { RgbLibWallet } from './rgb-lib/rgb-lib-wallet';
+import type { IRLNSigner } from './rln/rln-signers';
 import type { WalletProtocol } from './wallet-api';
 import type { WalletInit, UTEXOWalletOptions } from './wallet-options';
-import { WalletBackendError } from './backend-errors';
+import { WalletBackendError } from './wallet-errors';
 import type { BfaCapabilities, BurnParams, BurnResult } from './types';
 import { snapshot } from './runtime/snapshot';
 
-export type { UTEXOWalletNodeParams } from './rln-wallet';
+export type { UTEXOWalletNodeParams } from './rln/rln-wallet';
 export type { UTEXOWalletOptions } from './wallet-options';
 
 /** A wallet with either protocol; narrow protocol before protocol-specific calls. */

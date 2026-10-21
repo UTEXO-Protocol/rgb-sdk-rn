@@ -1,4 +1,4 @@
-import { WalletBackendError } from '../../backend-errors';
+import { WalletBackendError } from '../wallet-errors';
 
 const U64_MAX = 0xffffffffffffffffn;
 export function u64(

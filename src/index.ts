@@ -2,7 +2,7 @@
 export { createWallet } from './wallet/wallet-manager';
 
 // RLN node manager
-export { RLNManager, createRLNManager } from './wallet/rln-manager';
+export { RLNManager, createRLNManager } from './wallet/rln/rln-manager';
 
 // UTEXO wallet — legacy RLN constructor plus an optional on-chain rgb-lib mode.
 export { UTEXOWallet } from './wallet/utexo-wallet';
@@ -25,9 +25,9 @@ export type {
   RgbLibWalletParams,
   RgbLibUnlockParams,
   RgbLibIndexer,
-} from './wallet/backends/rgb-lib/config';
-export { CallbackRgbLibKeyProvider } from './wallet/credentials/rgb-lib-key-provider';
-export type { IRgbLibKeyProvider } from './wallet/credentials/rgb-lib-key-provider';
+} from './wallet/rgb-lib/config';
+export { CallbackRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
+export type { IRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
 export type {
   WalletProtocol,
   WalletIdentity,
@@ -37,18 +37,18 @@ export type {
   WalletInvoiceData,
   WalletUnspent,
 } from './wallet/wallet-api';
-export { WalletBackendError } from './wallet/backend-errors';
-export type { WalletBackendErrorCode } from './wallet/backend-errors';
+export { WalletBackendError } from './wallet/wallet-errors';
+export type { WalletBackendErrorCode } from './wallet/wallet-errors';
 export {
   getNetworkDefaults,
   resolveUnlockParams,
-} from './wallet/network-defaults';
-export type { NetworkEndpoints } from './wallet/network-defaults';
+} from './wallet/rln/network-defaults';
+export type { NetworkEndpoints } from './wallet/rln/network-defaults';
 export {
   PasswordRLNSigner,
   NativeExternalRLNSigner,
-} from './wallet/rln-signers';
-export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln-signers';
+} from './wallet/rln/rln-signers';
+export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln/rln-signers';
 
 // Binding and signer (for advanced / testing use)
 export { RLNBinding } from './binding/RLNBinding';

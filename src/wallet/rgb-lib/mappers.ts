@@ -17,15 +17,15 @@ import type {
   NativeTransaction,
   NativeTransfer,
   NativeUnspent,
-} from '../../../binding/NativeRgbLib';
-import type { ListAssets } from '../../types';
+} from '../../binding/NativeRgbLib';
+import type { ListAssets } from '../types';
 import type {
   WalletAssignment,
   WalletInvoiceData,
   WalletTransfer,
   WalletUnspent,
-} from '../../wallet-api';
-import { WalletBackendError } from '../../backend-errors';
+} from '../wallet-api';
+import { WalletBackendError } from '../wallet-errors';
 import { safeAmount, safeNumber, u64 } from './amounts';
 
 export function known<T extends string>(

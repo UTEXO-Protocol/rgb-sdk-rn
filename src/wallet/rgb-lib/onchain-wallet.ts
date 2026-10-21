@@ -7,7 +7,7 @@ import type {
   WalletHistory,
   WalletBackup,
   WalletBfa,
-} from './wallet-api';
+} from '../wallet-api';
 
 /** Stable on-chain API; all engine-specific behavior belongs to backend ports. */
 export class OnchainWallet<

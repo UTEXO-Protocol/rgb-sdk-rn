@@ -1,15 +1,15 @@
 import type { Network, InvoiceRequest } from '@utexo/rgb-sdk-core';
-import { getRgbLibBinding } from '../../../binding/RgbLibBinding';
-import type { NativeRuntimeInfo, Spec } from '../../../binding/NativeRgbLib';
-import type { IRgbLibKeyProvider } from '../../credentials/rgb-lib-key-provider';
-import type { OnchainWalletBackend, WalletIdentity } from '../../wallet-api';
-import { WalletBackendError } from '../../backend-errors';
-import { SerialExecutor } from '../../runtime/serial-executor';
-import { snapshot } from '../../runtime/snapshot';
+import { getRgbLibBinding } from './native';
+import type { NativeRuntimeInfo, Spec } from '../../binding/NativeRgbLib';
+import type { IRgbLibKeyProvider } from './key-provider';
+import type { OnchainWalletBackend, WalletIdentity } from '../wallet-api';
+import { WalletBackendError } from '../wallet-errors';
+import { SerialExecutor } from '../runtime/serial-executor';
+import { snapshot } from '../runtime/snapshot';
 import {
   validateBurnParams,
   validateConsignmentLookup,
-} from '../../operations/validation';
+} from '../operations/validation';
 import {
   configEquals,
   integer,

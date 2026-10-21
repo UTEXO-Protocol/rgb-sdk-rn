@@ -28,7 +28,7 @@ if (!from) {
     process.exit(0);
   }
   throw new Error(
-    'Provide --from /path/to/mobile-bundle or RGB_LIB_BINDINGS_DIR. See docs/rgb-lib-backend.md.'
+    'Provide --from /path/to/mobile-bundle or set RGB_LIB_BINDINGS_DIR to a matching UniFFI mobile bundle.'
   );
 }
 const source = path.resolve(from);

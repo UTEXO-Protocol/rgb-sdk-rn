@@ -37,8 +37,7 @@ cd ios && pod install
 
 For the optional on-chain rgb-lib-bfa backend, use `new UTEXOWallet({ protocol: 'RGB_L1', params, keys })`.
 The existing `new UTEXOWallet(params, signer)` requires no changes.
-See the [backend architecture, native build, and demo migration guide](docs/rgb-lib-backend.md)
-and [session example](examples/dual-backend.ts). The pinned rgb-lib release requires
+See the [session example](examples/dual-backend.ts). The pinned rgb-lib release requires
 matching UniFFI mobile artifacts before rebuilding the application. The RN SDK does not compile Rust.
 
 The following example uses RLN:

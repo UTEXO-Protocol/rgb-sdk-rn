@@ -8,7 +8,7 @@ typedef void (^RgbLibResolve)(id _Nullable result);
 typedef void (^RgbLibReject)(NSString *code, NSString *_Nullable message);
 
 /// Chooses the queue for each RgbLib call. It has no React Native or UniFFI types,
-/// so scripts/native/rgb-lib-dispatcher-checks.m drives it on the host.
+/// so tests/native/rgb-lib-dispatcher-checks.m drives it on the host.
 @interface RgbLibDispatcher : NSObject
 - (instancetype)initWithExecute:(RgbLibExecute)execute NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;

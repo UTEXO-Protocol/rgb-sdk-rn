@@ -5,7 +5,7 @@ import java.util.concurrent.Executors
 
 /**
  * Chooses the thread for each RgbLibModule call. It has no React Native or UniFFI
- * types, so scripts/native/RgbLibDispatcherChecks.kt drives it on the JVM.
+ * types, so tests/native/RgbLibDispatcherChecks.kt drives it on the JVM.
  */
 internal class RgbLibDispatcher(
   private val execute: (String, Map<String, Any?>) -> Any?,

@@ -19,11 +19,14 @@
   },
   "files": [
     "src",
-    "lib",
+    "lib/module",
+    "lib/typescript/src",
+    "lib/typescript/package.json",
     "android",
     "ios",
     "cpp",
-    "scripts",
+    "scripts/download-rln-bindings.js",
+    "scripts/setup-rgb-lib-bindings.mjs",
     "*.podspec",
     "!src/bindings/extracted-android/**",
     "!src/bindings/.tmp-rln-android/**",
@@ -48,10 +51,10 @@
     "!**/.*",
     "!src/bindings/**/*.zip",
     "!ios/*.zip",
-    "!scripts/*.test.mjs",
-    "!scripts/*.test.ts",
     "!ios/RgbLibBindings/**",
-    "!android/rgb-lib-maven/**"
+    "!android/rgb-lib-maven/**",
+    "!android/src/test/**",
+    "!android/src/androidTest/**"
   ],
   "scripts": {
     "dev": "tsc -w",
@@ -63,7 +66,7 @@
     "codegen:rgb-lib": "node scripts/generate-rgb-lib-bridge.mjs && node scripts/generate-rgb-lib-dtos.mjs",
     "test:rgb-lib:ios": "node scripts/check-rgb-lib-ios.mjs",
     "test:rgb-lib:android": "node scripts/check-rgb-lib-android.mjs",
-    "test:rgb-lib": "bob build && node scripts/generate-rgb-lib-bridge.mjs --check && node scripts/generate-rgb-lib-dtos.mjs --check && node --experimental-loader ./scripts/rn-stub-loader.mjs --test scripts/rgb-lib.test.mjs",
+    "test:rgb-lib": "bob build && node scripts/generate-rgb-lib-bridge.mjs --check && node scripts/generate-rgb-lib-dtos.mjs --check && node --experimental-loader ./tests/support/rn-stub-loader.mjs --test tests/rgb-lib.test.mjs",
     "build": "bob build",
     "build:watch": "tsc -w",
     "prettier": "prettier --write \"**/*.{js,ts,tsx}\"",
@@ -71,9 +74,9 @@
     "version:patch": "npm version patch && git push && git push --tags && npm publish --access public",
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public",
-    "check:contract": "bob build && node --experimental-loader ./scripts/rn-stub-loader.mjs scripts/check-contract.mjs",
+    "check:contract": "bob build && node --experimental-loader ./tests/support/rn-stub-loader.mjs scripts/check-contract.mjs",
     "test": "npm run typecheck && npm run check:contract && npm run test:rgb-lib && npm run test:webrgb",
-    "test:webrgb": "bob build && node --test scripts/webrgb.test.mjs scripts/webrgb-burn.test.mjs",
+    "test:webrgb": "bob build && node --test tests/webrgb.test.mjs tests/webrgb-burn.test.mjs",
     "bindings:rgb-lib": "node scripts/setup-rgb-lib-bindings.mjs"
   },
   "repository": {

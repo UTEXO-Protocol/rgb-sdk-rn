@@ -1,5 +1,5 @@
 /**
- * Type-level conformance check — compiled, never bundled.
+ * Type-level conformance check — checked by typecheck, never published.
  *
  * The mirror of web's `contract-conformance.ts`: that file proves the carriers
  * are *present* and reachable on web, this one proves they are *absent* here
@@ -11,13 +11,13 @@
  */
 
 import type { IUTEXOProtocol } from '@utexo/rgb-sdk-core';
-import type { UTEXOWallet } from './wallet/utexo-wallet';
-import type { IRLNUnlockParams } from './binding/IRLN';
-import type { RefreshTransfersResult } from './wallet/refresh-types';
-import type { RlnWallet } from './wallet/rln/rln-wallet';
-import type { RgbLibWallet } from './wallet/rgb-lib/rgb-lib-wallet';
-import type { OnchainWalletApi } from './wallet/wallet-api';
-import type { RgbLibUnlockParams } from './wallet/rgb-lib/config';
+import type { UTEXOWallet } from '../../src/wallet/utexo-wallet';
+import type { IRLNUnlockParams } from '../../src/binding/IRLN';
+import type { RefreshTransfersResult } from '../../src/wallet/refresh-types';
+import type { RlnWallet } from '../../src/wallet/rln/rln-wallet';
+import type { RgbLibWallet } from '../../src/wallet/rgb-lib/rgb-lib-wallet';
+import type { OnchainWalletApi } from '../../src/wallet/wallet-api';
+import type { RgbLibUnlockParams } from '../../src/wallet/rgb-lib/config';
 
 declare const concrete: UTEXOWallet;
 declare const onchain: UTEXOWallet<'RGB_L1'>;

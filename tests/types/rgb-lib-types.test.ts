@@ -10,10 +10,10 @@ import {
   type IRLNSigner,
   type UTEXOWalletNodeParams,
   type WalletProtocol,
-} from '../src';
+} from '../../src';
 import type { RgbInfo } from '@utexo/webrgb';
-import { WebRgbProvider } from '../src/integrations/webrgb/provider';
-export { createDemoSession } from '../examples/dual-backend';
+import { WebRgbProvider } from '../../src/integrations/webrgb/provider';
+export { createDemoSession } from '../../examples/dual-backend';
 
 // Compile-only checks: demo-facing contracts must accept both implementations.
 export function sharedApi(rln: UTEXOWallet, rgb: UTEXOWallet<'RGB_L1'>) {

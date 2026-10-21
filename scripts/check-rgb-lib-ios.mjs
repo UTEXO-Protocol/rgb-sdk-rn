@@ -32,7 +32,7 @@ try {
     '-framework',
     'Foundation',
     path.join(root, 'ios/RgbLibDispatcher.m'),
-    path.join(root, 'scripts/native/rgb-lib-dispatcher-checks.m'),
+    path.join(root, 'tests/native/rgb-lib-dispatcher-checks.m'),
     '-o',
     dispatcherChecks,
   ]);
@@ -92,7 +92,7 @@ try {
     '-I',
     path.join(rln, 'Headers'),
     '-c',
-    path.join(root, 'scripts/native/rgb-lib-smoke.m'),
+    path.join(root, 'tests/native/rgb-lib-smoke.m'),
     '-o',
     object,
   ]);

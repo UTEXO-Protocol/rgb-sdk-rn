@@ -129,10 +129,14 @@ form is also available: `new UTEXOWallet({ protocol: 'RGB_LN', params, signer })
 name is internal; do not pass a `backend` field in constructor options.
 
 Use separate storage profiles. Selecting rgb-lib does not migrate an RLN wallet.
-Both modes satisfy `instanceof UTEXOWallet`. `createUtexoWallet` remains an optional
-shorthand. For a wallet that can use either mode, use `AnyUtexoWallet` and narrow
+Both modes satisfy `instanceof UTEXOWallet`. For a wallet that can use either
+mode, use `AnyUtexoWallet` and narrow
 `wallet.protocol` before calling Lightning methods. JavaScript RLN-only calls on
 rgb-lib reject with `UNSUPPORTED_CAPABILITY`.
+
+Use `AnyUtexoWallet` instead of `UTEXOWallet<WalletProtocol>`: the union keeps
+each protocol paired with its unlock parameters. A wide generic cannot call
+`unlock()` or `reinit()` safely.
 
 On **mainnet**, Lightning and LSP methods on `UTEXOWallet` reject with a `WalletError` whose `code` is `LIGHTNING_DISABLED_ON_MAINNET`. On-chain BTC/RGB operations remain available. This check applies only to `UTEXOWallet`; the lower-level manager, binding, and native node are unchanged.
 

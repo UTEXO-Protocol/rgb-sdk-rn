@@ -1,6 +1,4 @@
 import {
-  createUtexoWallet,
-  type RgbLibWallet,
   UTEXOWallet,
   type AnyUtexoWallet,
   type WalletTransfer,
@@ -18,7 +16,7 @@ import { WebRgbProvider } from '../src/integrations/webrgb/provider';
 export { createDemoSession } from '../examples/dual-backend';
 
 // Compile-only checks: demo-facing contracts must accept both implementations.
-export function sharedApi(rln: UTEXOWallet, rgb: RgbLibWallet) {
+export function sharedApi(rln: UTEXOWallet, rgb: UTEXOWallet<'RGB_L1'>) {
   const a: OnchainWalletApi<IRLNUnlockParams> = rln;
   const b: OnchainWalletApi<RgbLibUnlockParams> = rgb;
   const options = { origin: 'https://example.com', confirm: async () => true };
@@ -29,14 +27,14 @@ export function sharedApi(rln: UTEXOWallet, rgb: RgbLibWallet) {
     new WebRgbProvider(rgb, options),
   ];
 }
-export function factoryTypes(
+export function optionsTypes(
   params: RgbLibWalletParams,
   keys: IRgbLibKeyProvider,
   signer: IRLNSigner,
   rlnParams: UTEXOWalletNodeParams
 ) {
-  const rgb = createUtexoWallet({ protocol: 'RGB_L1', params, keys });
-  const rln = createUtexoWallet({
+  const rgb = new UTEXOWallet({ protocol: 'RGB_L1', params, keys });
+  const rln = new UTEXOWallet({
     protocol: 'RGB_LN',
     params: rlnParams,
     signer,
@@ -44,9 +42,9 @@ export function factoryTypes(
   // @ts-expect-error Lightning requires the RLN backend.
   void rgb.createLightningInvoice({ amountSats: 1 });
   // @ts-expect-error External RLN signers cannot be used as RGB Lib key providers.
-  createUtexoWallet({ protocol: 'RGB_L1', params, signer });
+  new UTEXOWallet({ protocol: 'RGB_L1', params, signer });
   // @ts-expect-error Credentials for different engines cannot be mixed.
-  createUtexoWallet({ protocol: 'RGB_LN', params: rlnParams, signer, keys });
+  new UTEXOWallet({ protocol: 'RGB_LN', params: rlnParams, signer, keys });
   void rln.createLightningInvoice;
   return [rgb, rln];
 }

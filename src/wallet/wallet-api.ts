@@ -124,7 +124,7 @@ export interface OnchainWalletApi<TUnlockParams>
 
 /** Backend ports are composed once; facades do not branch on backend per operation. */
 export interface OnchainWalletBackend<T> {
-  lifecycle: WalletLifecycle<T>;
+  lifecycle: Omit<WalletLifecycle<T>, 'initialize' | 'dispose'>;
   bitcoin: WalletBitcoin;
   rgb: WalletRgb;
   history: WalletHistory;

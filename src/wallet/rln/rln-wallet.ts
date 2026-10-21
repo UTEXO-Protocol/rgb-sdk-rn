@@ -57,7 +57,10 @@ import {
 
 import { RLNManager, createRLNManager } from './rln-manager';
 import type { IRLNSigner } from './rln-signers';
-import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../../binding/IRLN';
+import type {
+  IRLNUnlockParams,
+  IRLNNodeCreateParams,
+} from '../../binding/IRLN';
 import { toNativeNetwork } from '../../binding/Interfaces';
 import {
   getDefaultLspBaseUrl,

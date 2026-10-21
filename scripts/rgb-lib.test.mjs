@@ -3,13 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { SDKError } from '@utexo/rgb-sdk-core';
 import { WalletBackendError } from '../lib/module/wallet/wallet-errors.js';
-import { RgbLibWalletBackend } from '../lib/module/wallet/rgb-lib/backend.js';
-import { OnchainWallet } from '../lib/module/wallet/rgb-lib/onchain-wallet.js';
+import { RgbLibWallet } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
 import {
-  createUtexoWallet,
   restoreRgbLibBackup,
   restoreRgbLibBackupWith,
-} from '../lib/module/wallet/create-utexo-wallet.js';
+} from '../lib/module/wallet/rgb-lib/restore.js';
 import { UTEXOWallet } from '../lib/module/wallet/utexo-wallet.js';
 import {
   RGB_LIB_VERSION,
@@ -136,8 +134,7 @@ function fixture(overrides = {}) {
       return 'test mnemonic';
     },
   };
-  const backend = new RgbLibWalletBackend(params, keys, () => native);
-  const wallet = new OnchainWallet('RGB_L1', backend);
+  const wallet = new RgbLibWallet(params, keys, () => native);
   return { wallet, native, calls, keys };
 }
 
@@ -209,7 +206,7 @@ test('network info omits block height when the UniFFI API does not expose it', a
   assert.deepEqual(await wallet.getNetworkInfo(), { network: 'regtest' });
   await wallet.dispose();
 });
-test('factory preserves the legacy constructor and does not read credentials before init', () => {
+test('options constructor preserves the legacy constructor and does not read credentials before init', () => {
   let reads = 0;
   const keys = {
     async getMnemonic() {
@@ -217,19 +214,19 @@ test('factory preserves the legacy constructor and does not read credentials bef
       return 'unused';
     },
   };
-  const rgb = createUtexoWallet({ protocol: 'RGB_L1', params, keys });
+  const rgb = new UTEXOWallet({ protocol: 'RGB_L1', params, keys });
   assert.ok(rgb instanceof UTEXOWallet);
   assert.equal(rgb.protocol, 'RGB_L1');
   assert.equal(reads, 0);
-  const rln = createUtexoWallet({ protocol: 'RGB_LN', params, signer: {} });
+  const rln = new UTEXOWallet({ protocol: 'RGB_LN', params, signer: {} });
   assert.ok(rln instanceof UTEXOWallet);
   assert.equal(rln.protocol, 'RGB_LN');
   assert.throws(
-    () => createUtexoWallet({ protocol: 'RGB_L1', params, keys, signer: {} }),
+    () => new UTEXOWallet({ protocol: 'RGB_L1', params, keys, signer: {} }),
     code('INVALID_CONFIG')
   );
   assert.throws(
-    () => createUtexoWallet({ protocol: 'other', params }),
+    () => new UTEXOWallet({ protocol: 'other', params }),
     code('INVALID_CONFIG')
   );
 });
@@ -419,7 +416,7 @@ test('protocol is immutable and WebRGB reports the same mode for either construc
 });
 test('missing native artifacts fail explicitly without loading key material', async () => {
   let reads = 0;
-  const w = createUtexoWallet({
+  const w = new UTEXOWallet({
     protocol: 'RGB_L1',
     params,
     keys: {
@@ -1212,6 +1209,29 @@ test('a subclass cannot enable burn when the native runtime does not support it'
   assert.ok(!f.calls.some((c) => Array.isArray(c) && c[0] === 'burn'));
   await wallet.dispose();
 });
+test('instance and bound capability overrides both prevent native burn', async () => {
+  class BoundWallet extends UTEXOWallet {
+    constructor(options) {
+      super(options);
+      this.getBfaCapabilities = this.getBfaCapabilities.bind(this);
+    }
+    async getBfaCapabilities() {
+      return { ...(await super.getBfaCapabilities()), burn: false };
+    }
+  }
+  for (const bound of [false, true]) {
+    const f = fixture();
+    const options = { protocol: 'RGB_L1', params, keys: f.keys };
+    const wallet = bound ? new BoundWallet(options) : new UTEXOWallet(options);
+    wallet.engine.ports.loadBinding = () => f.native;
+    if (!bound) wallet.getBfaCapabilities = async () => ({ burn: false });
+    await wallet.init();
+    await wallet.unlock(config);
+    await assert.rejects(wallet.burn(burnParams), code('UNSUPPORTED_CAPABILITY'));
+    assert.ok(!f.calls.some((c) => Array.isArray(c) && c[0] === 'burn'));
+    await wallet.dispose();
+  }
+});
 test('consignment lookups validate assetId and txid before reaching native', async () => {
   const { wallet, calls } = fixture();
   await wallet.init();
@@ -1279,6 +1299,9 @@ test('restoreRgbLibBackup validates paths and runtime version before restoring',
     assert.deepEqual(calls, []);
   }
   // The public entry point validates before it even loads the native module.
+  for (const missing of [null, undefined]) {
+    await assert.rejects(restoreRgbLibBackup(missing), code('INVALID_CONFIG'));
+  }
   await assert.rejects(
     restoreRgbLibBackup({ ...valid, backupPath: 'relative' }),
     code('INVALID_CONFIG')

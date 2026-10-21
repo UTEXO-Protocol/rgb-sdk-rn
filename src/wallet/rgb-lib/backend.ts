@@ -1,5 +1,5 @@
 import type { Network, InvoiceRequest } from '@utexo/rgb-sdk-core';
-import { getRgbLibBinding } from './native';
+import { getRgbLibBinding, assertRuntime } from './native';
 import type { NativeRuntimeInfo, Spec } from '../../binding/NativeRgbLib';
 import type { IRgbLibKeyProvider } from './key-provider';
 import type { OnchainWalletBackend, WalletIdentity } from '../wallet-api';
@@ -15,9 +15,6 @@ import {
   integer,
   resolveRgbLibConfig,
   validateWalletParams,
-  RGB_LIB_BRIDGE_VERSION,
-  RGB_LIB_REVISION,
-  RGB_LIB_VERSION,
 } from './config';
 import type {
   ResolvedRgbLibConfig,
@@ -149,18 +146,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       // Native rejections become WalletBackendError before any caller sees them.
       const native = guardNative(this.loadBinding());
       const runtime = await native.getRuntimeInfo();
-      if (
-        runtime.bridgeVersion !== RGB_LIB_BRIDGE_VERSION ||
-        runtime.sourceRevision !== RGB_LIB_REVISION ||
-        runtime.version !== RGB_LIB_VERSION
-      ) {
-        throw new WalletBackendError(
-          'NATIVE_VERSION_MISMATCH',
-          'RGB Lib native artifacts do not match this SDK',
-          undefined,
-          'RGB_L1'
-        );
-      }
+      assertRuntime(runtime);
       let mnemonic: string | undefined = await this.keys.getMnemonic();
       if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
         throw new WalletBackendError(
@@ -319,7 +305,6 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
 
   readonly lifecycle: OnchainWalletBackend<RgbLibUnlockParams>['lifecycle'] = {
     init: () => this.init(),
-    initialize: () => this.init(),
     unlock: (params) => this.unlock(params),
     reinit: async (params) => {
       if (this.handle || this.opening) {
@@ -335,7 +320,6 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       if (params) await this.unlock(params);
     },
     shutdown: () => this.close(false),
-    dispose: () => this.close(true),
     destroy: () => this.close(true),
     isDisposed: () => this.disposed,
   };

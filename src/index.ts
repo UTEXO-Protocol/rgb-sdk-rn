@@ -9,18 +9,14 @@ export { UTEXOWallet } from './wallet/utexo-wallet';
 export type {
   UTEXOWalletNodeParams,
   UTEXOWalletOptions,
+  AnyUtexoWallet,
 } from './wallet/utexo-wallet';
-export {
-  createUtexoWallet,
-  RgbLibWallet,
-  restoreRgbLibBackup,
-} from './wallet/create-utexo-wallet';
+export { restoreRgbLibBackup } from './wallet/rgb-lib/restore';
 export type {
   WalletInit,
   RlnWalletInit,
   RgbLibWalletInit,
-  AnyUtexoWallet,
-} from './wallet/create-utexo-wallet';
+} from './wallet/wallet-options';
 export type {
   RgbLibWalletParams,
   RgbLibUnlockParams,

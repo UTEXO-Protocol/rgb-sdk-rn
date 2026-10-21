@@ -13,9 +13,10 @@ Pod::Spec.new do |s|
   s.platforms    = { :ios => min_ios_version_supported }
   s.source       = { :git => "https://github.com/UTEXO-Protocol/rgb-sdk-rn.git", :tag => "#{s.version}" }
 
-  s.source_files = "ios/**/*.{h,m,mm,swift,cpp}"
-  s.private_header_files = "ios/**/*.h"
-  s.exclude_files = "ios/RgbLibBindings/**/*"
+  # Keep framework contents out of source globs without excluding the vendored
+  # frameworks themselves: CocoaPods applies exclude_files to those as well.
+  s.source_files = "ios/*.{h,m,mm,swift,cpp}"
+  s.private_header_files = "ios/*.h"
     
   native_frameworks = ["ios/RGBLightningNode.xcframework"]
   if File.file?(File.join(__dir__, "ios/RgbLibBindings/manifest.json"))

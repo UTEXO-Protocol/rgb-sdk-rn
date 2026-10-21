@@ -12,7 +12,11 @@ import uniffi.rgb_lib.*
 
 internal class RgbLibBridgeError(val code: String, message: String) : Exception(message)
 
-/** Runs only on RgbLibModule's serial executor. UniFFI owns the Rust wallet. */
+/**
+ * Thread-safe. The registry lock is held only for handle lookup and ownership
+ * changes; each session's lock serializes its own native calls, so slow indexer
+ * I/O on one wallet does not block others. UniFFI owns the Rust wallet.
+ */
 internal class RgbLibSessionStore {
   private class Lease(input: File) : AutoCloseable {
     val root = input.canonicalFile
@@ -38,9 +42,10 @@ internal class RgbLibSessionStore {
   }
   private data class Session(
     val wallet: Wallet, val lease: Lease, val profile: JSONObject,
-    val reuse: Boolean, var online: Online? = null
+    val reuse: Boolean, var online: Online? = null, var closed: Boolean = false
   )
   private val sessions = mutableMapOf<String, Session>()
+  private val registry = Any()
   private fun fail(message: String): Nothing = throw RgbLibBridgeError("INVALID_CONFIG", message)
   private fun optional(p: JSONObject, key: String): String? = if (p.isNull(key)) null else p.getString(key)
   private fun amount(p: JSONObject, key: String): ULong =
@@ -108,7 +113,7 @@ internal class RgbLibSessionStore {
       val session = Session(wallet, lease, profile, p.getBoolean("reuseAddresses"))
       save(session)
       val handle = UUID.randomUUID().toString()
-      sessions[handle] = session
+      synchronized(registry) { sessions[handle] = session }
       return handle
     } catch (error: Exception) {
       wallet?.close()
@@ -170,10 +175,22 @@ internal class RgbLibSessionStore {
       "restoreBackup" -> { restore(p); return null }
     }
     val handle = p.getString("handle")
-    val s = sessions[handle] ?: throw RgbLibBridgeError("WALLET_NOT_INITIALIZED","Unknown or closed wallet")
+    val s = synchronized(registry) { sessions[handle] } ?: throw RgbLibBridgeError("WALLET_NOT_INITIALIZED","Unknown or closed wallet")
+    return synchronized(s) {
+      // A close may have released the handle while this call waited for the lock.
+      if (s.closed) throw RgbLibBridgeError("WALLET_NOT_INITIALIZED","Unknown or closed wallet")
+      run(operation, handle, s, p)
+    }
+  }
+  private fun run(operation: String, handle: String, s: Session, p: JSONObject): Any? {
     val w = s.wallet
     return when(operation) {
-      "closeWallet" -> { w.close(); s.lease.close(); sessions.remove(handle); null }
+      "closeWallet" -> {
+        synchronized(registry) { sessions.remove(handle) }
+        s.closed = true; s.online = null
+        try { w.close() } finally { s.lease.close() }
+        null
+      }
       "getWalletIdentity" -> mapOf("id" to s.profile.getString("id"),"network" to s.profile.getString("network"),"masterFingerprint" to s.profile.getString("masterFingerprint"))
       "goOnline" -> {
         val url=p.getString("indexerUrl")

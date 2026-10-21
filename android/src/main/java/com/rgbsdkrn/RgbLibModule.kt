@@ -4,13 +4,16 @@ package com.rgbsdkrn
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 import uniffi.rgb_lib.RgbLibException
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 @ReactModule(name = RgbLibModule.NAME)
 class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context) {
   private val store = RgbLibSessionStore()
-  private val executor = Executors.newSingleThreadExecutor()
-  private val handles = mutableSetOf<String>()
+  // Calls without an open handle run concurrently; storage locks guard them.
+  private val shared = Executors.newCachedThreadPool()
+  // One serial executor per wallet, so slow indexer I/O never blocks other wallets.
+  private val sessions = mutableMapOf<String, ExecutorService>()
   private var accepting = true
   override fun getName() = NAME
 
@@ -24,11 +27,16 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
   }
   @Synchronized private fun invoke(operation: String, params: Map<String, Any?>, promise: Promise) {
     if (!accepting) { promise.reject("WALLET_DISPOSED", "Native module is closed"); return }
+    val handle = params["handle"] as? String
+    val executor = handle?.let { sessions[it] } ?: shared
     executor.execute {
       try {
         val result = execute(operation, params)
-        if (operation == "openWallet") handles.add(result as String)
-        if (operation == "closeWallet") handles.remove(params["handle"] as String)
+        if (operation == "openWallet" && !adopt(result as String)) {
+          try { execute("closeWallet", mapOf("handle" to result)) } catch (_: Exception) {}
+          promise.reject("WALLET_DISPOSED", "Native module is closed")
+          return@execute
+        }
         promise.resolve(convert(result))
       } catch (error: RgbLibBridgeError) {
         promise.reject(error.code, error.message)
@@ -39,17 +47,28 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
       } catch (_: Exception) {
         // Do not include request data or credentials in a bridge error.
         promise.reject("NATIVE_BRIDGE_ERROR", "RGB Lib native bridge operation failed")
+      } finally {
+        if (operation == "closeWallet" && handle != null) release(handle)
       }
     }
   }
+  @Synchronized private fun adopt(handle: String): Boolean {
+    if (!accepting) return false
+    sessions[handle] = Executors.newSingleThreadExecutor()
+    return true
+  }
+  // shutdown() still runs calls already queued; they fail as closed.
+  @Synchronized private fun release(handle: String) { sessions.remove(handle)?.shutdown() }
   @Synchronized override fun invalidate() {
     if (!accepting) return
     accepting = false
-    executor.execute {
-      handles.forEach { handle -> try { execute("closeWallet", mapOf("handle" to handle)) } catch (_: Exception) {} }
-      handles.clear()
+    // Close on each wallet's own executor, after the calls already queued for it.
+    sessions.forEach { (handle, executor) ->
+      executor.execute { try { execute("closeWallet", mapOf("handle" to handle)) } catch (_: Exception) {} }
+      executor.shutdown()
     }
-    executor.shutdown()
+    sessions.clear()
+    shared.shutdown()
     super.invalidate()
   }
   override fun getRuntimeInfo(promise: Promise) = invoke("getRuntimeInfo", mapOf(), promise)

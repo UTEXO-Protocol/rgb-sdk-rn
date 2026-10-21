@@ -79,6 +79,8 @@ private final class RgbLibSession {
   var profile: [String: Any]
   let reuse: Bool
   var online: RGBLib.Online?
+  /// Serializes calls on this native handle; other sessions run independently.
+  let lock = NSLock()
   init(wallet: RGBLib.Wallet, lease: RgbLibLease, profile: [String: Any], reuse: Bool) {
     self.wallet = wallet; self.lease = lease; self.profile = profile; self.reuse = reuse
   }
@@ -95,22 +97,22 @@ private final class RgbLibSession {
 }
 
 /// Mirrors the RLN helper: all wallet operations call generated UniFFI methods.
+/// The registry lock is held only for handle lookup and ownership changes; each
+/// session's lock serializes its own native calls, including slow indexer I/O.
 @objc(RgbLibSwiftHelper)
 public final class RgbLibSwiftHelper: NSObject {
-  private static let queue = DispatchQueue(label: "org.utexo.rgb-lib.sessions")
+  private static let registry = NSLock()
   private static var sessions: [String: RgbLibSession] = [:]
 
   @objc(execute:params:)
   public static func execute(_ operation: String, params: NSDictionary) -> NSDictionary {
-    queue.sync {
-      do { return ["result": try call(operation, RgbParams(values: params as? [String: Any] ?? [:]))] }
-      catch let error as RgbBridgeFailure { return ["error": ["code": error.code, "message": error.message]] }
-      catch let error as RGBLib.RgbLibError {
-        let name = String(describing: error).prefix { $0 != "(" }
-        return ["error": ["code": "RGB_LIB_" + name.prefix(1).uppercased() + name.dropFirst(), "message": String(describing: error)]]
-      }
-      catch { return ["error": ["code": "NATIVE_BRIDGE_ERROR", "message": "RGB Lib native bridge operation failed"]] }
+    do { return ["result": try call(operation, RgbParams(values: params as? [String: Any] ?? [:]))] }
+    catch let error as RgbBridgeFailure { return ["error": ["code": error.code, "message": error.message]] }
+    catch let error as RGBLib.RgbLibError {
+      let name = String(describing: error).prefix { $0 != "(" }
+      return ["error": ["code": "RGB_LIB_" + name.prefix(1).uppercased() + name.dropFirst(), "message": String(describing: error)]]
     }
+    catch { return ["error": ["code": "NATIVE_BRIDGE_ERROR", "message": "RGB Lib native bridge operation failed"]] }
   }
   private static func open(_ p: RgbParams) throws -> String {
     let net = try p.string("network")
@@ -154,7 +156,7 @@ public final class RgbLibSwiftHelper: NSObject {
     let session = RgbLibSession(wallet: wallet, lease: lease, profile: profile, reuse: try p.bool("reuseAddresses"))
     try session.save()
     let handle = UUID().uuidString
-    sessions[handle] = session
+    registry.lock(); sessions[handle] = session; registry.unlock()
     return handle
   }
   private static func restore(_ p: RgbParams) throws {
@@ -228,12 +230,22 @@ public final class RgbLibSwiftHelper: NSObject {
     default: break
     }
     let handle = try p.string("handle")
-    guard let s = sessions[handle] else { throw RgbBridgeFailure(code: "WALLET_NOT_INITIALIZED", message: "Unknown or closed wallet") }
+    registry.lock()
+    let found = sessions[handle]
+    registry.unlock()
+    guard let s = found else { throw RgbBridgeFailure(code: "WALLET_NOT_INITIALIZED", message: "Unknown or closed wallet") }
+    s.lock.lock()
+    defer { s.lock.unlock() }
+    // A close may have released the handle while this call waited for the lock.
+    guard let w = s.wallet else { throw RgbBridgeFailure(code: "WALLET_NOT_INITIALIZED", message: "Unknown or closed wallet") }
     if operation == "closeWallet" {
-      s.wallet = nil; s.online = nil; s.lease.release(); sessions.removeValue(forKey: handle)
+      registry.lock(); sessions.removeValue(forKey: handle); registry.unlock()
+      s.wallet = nil; s.online = nil; s.lease.release()
       return NSNull()
     }
-    let w = s.wallet!
+    return try run(operation, s, w, p)
+  }
+  private static func run(_ operation: String, _ s: RgbLibSession, _ w: RGBLib.Wallet, _ p: RgbParams) throws -> Any {
     switch operation {
     case "getWalletIdentity": return ["id": s.profile["id"]!, "network": s.profile["network"]!, "masterFingerprint": s.profile["masterFingerprint"]!]
     case "goOnline":

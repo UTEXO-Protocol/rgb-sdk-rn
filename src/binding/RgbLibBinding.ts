@@ -7,7 +7,9 @@ export function getRgbLibBinding(): Spec {
   if (!NativeRgbLib) {
     throw new WalletBackendError(
       'NATIVE_BACKEND_UNAVAILABLE',
-      'RGB Lib native bindings are not installed. Build/install RGB Lib artifacts and rebuild the app.'
+      'RGB Lib native bindings are not installed. Build/install RGB Lib artifacts and rebuild the app.',
+      undefined,
+      'RGB_L1'
     );
   }
   return NativeRgbLib;

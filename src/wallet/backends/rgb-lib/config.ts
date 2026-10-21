@@ -53,7 +53,7 @@ const NETWORKS: readonly string[] = [
 ];
 
 export function invalidConfig(message: string): never {
-  throw new WalletBackendError('INVALID_CONFIG', message);
+  throw new WalletBackendError('INVALID_CONFIG', message, undefined, 'RGB_L1');
 }
 
 export function integer(

@@ -46,7 +46,9 @@ export function toBackendError(
     typeof native?.message === 'string' && native.message
       ? native.message
       : 'RGB Lib operation failed',
-    operation
+    operation,
+    'RGB_L1',
+    error instanceof Error ? error : undefined
   );
 }
 

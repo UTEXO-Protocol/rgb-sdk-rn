@@ -67,7 +67,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (!keys || typeof keys.getMnemonic !== 'function') {
       throw new WalletBackendError(
         'INVALID_CONFIG',
-        'An RGB Lib key provider is required'
+        'An RGB Lib key provider is required',
+        undefined,
+        'RGB_L1'
       );
     }
     this.params = Object.freeze({ ...params });
@@ -77,13 +79,17 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (this.disposeRequested || this.disposed) {
       throw new WalletBackendError(
         'WALLET_DISPOSED',
-        'This wallet session is disposed'
+        'This wallet session is disposed',
+        undefined,
+        'RGB_L1'
       );
     }
     if (this.stopRequested) {
       throw new WalletBackendError(
         'WALLET_STOPPING',
-        'Wallet cleanup is in progress'
+        'Wallet cleanup is in progress',
+        undefined,
+        'RGB_L1'
       );
     }
   }
@@ -103,14 +109,16 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         throw new WalletBackendError(
           'WALLET_NOT_INITIALIZED',
           'Call init() before this operation',
-          operation
+          operation,
+          'RGB_L1'
         );
       }
       if (requiresOnline && !this.online) {
         throw new WalletBackendError(
           'WALLET_OFFLINE',
           'Call unlock() before this operation',
-          operation
+          operation,
+          'RGB_L1'
         );
       }
       return action(this.native, this.handle);
@@ -148,14 +156,18 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       ) {
         throw new WalletBackendError(
           'NATIVE_VERSION_MISMATCH',
-          'RGB Lib native artifacts do not match this SDK'
+          'RGB Lib native artifacts do not match this SDK',
+          undefined,
+          'RGB_L1'
         );
       }
       let mnemonic: string | undefined = await this.keys.getMnemonic();
       if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
         throw new WalletBackendError(
           'INVALID_CONFIG',
-          'The key provider returned no mnemonic'
+          'The key provider returned no mnemonic',
+          undefined,
+          'RGB_L1'
         );
       }
       let handle: string;
@@ -178,7 +190,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         if (!identity.id || identity.network !== this.params.network) {
           throw new WalletBackendError(
             'WALLET_CONFIG_MISMATCH',
-            'Native wallet identity does not match the profile'
+            'Native wallet identity does not match the profile',
+            undefined,
+            'RGB_L1'
           );
         }
         this.identity = {
@@ -226,7 +240,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         : Promise.reject(
             new WalletBackendError(
               'WALLET_CONFIG_MISMATCH',
-              'A different online configuration is already connecting'
+              'A different online configuration is already connecting',
+              undefined,
+              'RGB_L1'
             )
           );
     }
@@ -236,7 +252,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         : Promise.reject(
             new WalletBackendError(
               'WALLET_CONFIG_MISMATCH',
-              'Restart the wallet to change its online configuration'
+              'Restart the wallet to change its online configuration',
+              undefined,
+              'RGB_L1'
             )
           );
     }
@@ -307,7 +325,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       if (this.handle || this.opening) {
         throw new WalletBackendError(
           'WALLET_CONFIG_MISMATCH',
-          'Call shutdown() before reinit()'
+          'Call shutdown() before reinit()',
+          undefined,
+          'RGB_L1'
         );
       }
       if (params) resolveRgbLibConfig(params);
@@ -390,7 +410,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         ) {
           throw new WalletBackendError(
             'INVALID_NATIVE_RESPONSE',
-            'Invalid fee estimation'
+            'Invalid fee estimation',
+            undefined,
+            'RGB_L1'
           );
         }
         // Estimation is a recommendation. Explicit send inputs are never rounded.
@@ -596,7 +618,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
           ) {
             throw new WalletBackendError(
               'INVALID_CONFIG',
-              'Backup requires an absolute path and a nonempty password'
+              'Backup requires an absolute path and a nonempty password',
+              undefined,
+              'RGB_L1'
             );
           }
           await native.backup(handle, params.backupPath, params.password);
@@ -625,7 +649,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         if (!this.runtime?.burn)
           throw new WalletBackendError(
             'UNSUPPORTED_CAPABILITY',
-            'This native build does not support burn'
+            'This native build does not support burn',
+            undefined,
+            'RGB_L1'
           );
         return native.burn(
           handle,

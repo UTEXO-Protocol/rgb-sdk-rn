@@ -82,7 +82,9 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
         if (input.signer !== undefined) {
           throw new WalletBackendError(
             'INVALID_CONFIG',
-            'RGB Lib requires a key provider'
+            'RGB Lib requires a key provider',
+            undefined,
+            'RGB_L1'
           );
         }
         this.engine = new RgbLibWallet(input.params, input.keys);
@@ -92,7 +94,7 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
             'INVALID_CONFIG',
             'RLN requires an RLN signer',
             undefined,
-            'rln'
+            'RGB_LN'
           );
         }
         this.engine = new RlnWallet(input.params, input.signer);
@@ -108,7 +110,7 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
           'INVALID_CONFIG',
           'RLN requires an RLN signer',
           undefined,
-          'rln'
+          'RGB_LN'
         );
       }
       this.engine = new RlnWallet(input, signer);
@@ -140,7 +142,8 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
       throw new WalletBackendError(
         'UNSUPPORTED_CAPABILITY',
         operation + ' requires the RGB_LN protocol',
-        operation
+        operation,
+        this.engine.protocol
       );
     }
     return this.engine;
@@ -251,7 +254,7 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
         'UNSUPPORTED_CAPABILITY',
         'Burn is disabled by this wallet',
         'burn',
-        this.engine.protocol === 'RGB_LN' ? 'rln' : 'rgb-lib'
+        this.engine.protocol
       );
     }
     return this.engine.burn(owned);

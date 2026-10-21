@@ -64,7 +64,9 @@ export async function restoreRgbLibBackupWith(
   ) {
     throw new WalletBackendError(
       'INVALID_CONFIG',
-      'Restore requires absolute paths and a nonempty password'
+      'Restore requires absolute paths and a nonempty password',
+      undefined,
+      'RGB_L1'
     );
   }
   const native = guardNative(loadBinding());
@@ -76,7 +78,9 @@ export async function restoreRgbLibBackupWith(
   ) {
     throw new WalletBackendError(
       'NATIVE_VERSION_MISMATCH',
-      'RGB Lib native artifacts do not match this SDK'
+      'RGB Lib native artifacts do not match this SDK',
+      undefined,
+      'RGB_L1'
     );
   }
   await native.restoreBackup(

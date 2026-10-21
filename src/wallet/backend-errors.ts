@@ -1,3 +1,6 @@
+import { SDKError } from '@utexo/rgb-sdk-core';
+import type { WalletProtocol } from './wallet-api';
+
 export type WalletBackendErrorCode =
   | 'NATIVE_BACKEND_UNAVAILABLE'
   | 'NATIVE_VERSION_MISMATCH'
@@ -22,14 +25,16 @@ export type WalletBackendErrorCode =
   | 'INVALID_CONSIGNMENT_PATH'
   | 'NATIVE_ERROR';
 
-export class WalletBackendError extends Error {
+export class WalletBackendError extends SDKError {
   constructor(
     readonly code: WalletBackendErrorCode,
     message: string,
     readonly operation?: string,
-    readonly backend: 'rln' | 'rgb-lib' = 'rgb-lib'
+    readonly protocol?: WalletProtocol,
+    cause?: Error
   ) {
-    super(message);
+    super(message, code, undefined, cause);
+    Object.setPrototypeOf(this, new.target.prototype);
     this.name = 'WalletBackendError';
   }
 }

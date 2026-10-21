@@ -36,7 +36,9 @@ export function known<T extends string>(
   if (!values.includes(value as T)) {
     throw new WalletBackendError(
       'INVALID_NATIVE_RESPONSE',
-      `Unknown native ${field}`
+      `Unknown native ${field}`,
+      undefined,
+      'RGB_L1'
     );
   }
   return value as T;
@@ -58,7 +60,9 @@ export function assignment(value: NativeAssignment): WalletAssignment {
     if (value.amount === null)
       throw new WalletBackendError(
         'INVALID_NATIVE_RESPONSE',
-        'Missing assignment amount'
+        'Missing assignment amount',
+        undefined,
+        'RGB_L1'
       );
     const amountBaseUnits = u64(value.amount, 'assignment');
     return {
@@ -72,7 +76,9 @@ export function assignment(value: NativeAssignment): WalletAssignment {
   if (value.amount !== null)
     throw new WalletBackendError(
       'INVALID_NATIVE_RESPONSE',
-      'Unexpected assignment amount'
+      'Unexpected assignment amount',
+      undefined,
+      'RGB_L1'
     );
   return { type };
 }
@@ -194,7 +200,12 @@ function baseAsset(value: NativeAsset) {
 }
 function required<T>(value: T | null, name: string): T {
   if (value === null)
-    throw new WalletBackendError('INVALID_NATIVE_RESPONSE', `Missing ${name}`);
+    throw new WalletBackendError(
+      'INVALID_NATIVE_RESPONSE',
+      `Missing ${name}`,
+      undefined,
+      'RGB_L1'
+    );
   return value;
 }
 export function nia(value: NativeAsset): AssetNIA {
@@ -289,7 +300,9 @@ export function refreshFailure(value: { name: string; message: string }) {
   ) {
     throw new WalletBackendError(
       'INVALID_NATIVE_RESPONSE',
-      'Invalid refresh failure'
+      'Invalid refresh failure',
+      undefined,
+      'RGB_L1'
     );
   }
   return { name: value.name, message: value.message };
@@ -304,7 +317,9 @@ export function operation(value: NativeOperation) {
   ) {
     throw new WalletBackendError(
       'INVALID_NATIVE_RESPONSE',
-      'Invalid operation result'
+      'Invalid operation result',
+      undefined,
+      'RGB_L1'
     );
   }
   return { txid: value.txid, batchTransferIdx: value.batchTransferIdx };

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { SDKError } from '@utexo/rgb-sdk-core';
+import { WalletBackendError } from '../lib/module/wallet/backend-errors.js';
 import { RgbLibWalletBackend } from '../lib/module/wallet/backends/rgb-lib/backend.js';
 import { OnchainWallet } from '../lib/module/wallet/onchain-wallet.js';
 import {
@@ -146,6 +148,45 @@ function publicWalletFixture(overrides = {}) {
   wallet.engine.ports.loadBinding = () => f.native;
   return { ...f, wallet };
 }
+
+test('wallet configuration errors use SDKError and only report a known protocol', () => {
+  for (const [args, protocol] of [
+    [[null], undefined],
+    [[{ protocol: 'unknown' }], undefined],
+    [[params], 'RGB_LN'],
+    [[{ protocol: 'RGB_L1', params, keys: {}, signer: {} }], 'RGB_L1'],
+  ]) {
+    assert.throws(() => new UTEXOWallet(...args), (error) => {
+      assert.ok(error instanceof SDKError);
+      assert.ok(error instanceof WalletBackendError);
+      assert.equal(error.code, 'INVALID_CONFIG');
+      assert.equal(error.protocol, protocol);
+      assert.equal('backend' in error, false);
+      return true;
+    });
+  }
+});
+test('native failures preserve the SDK error contract, protocol, operation and cause', async () => {
+  const cause = Object.assign(new Error('Invalid invoice'), { code: 'RGB_LIB_InvalidInvoice' });
+  const { wallet } = publicWalletFixture({ async getAddress() { throw cause; } });
+  await wallet.init();
+  await assert.rejects(wallet.getAddress(), (error) => {
+    assert.ok(error instanceof SDKError);
+    assert.ok(error instanceof WalletBackendError);
+    assert.equal(error.code, 'INVALID_PARAMS');
+    assert.equal(error.protocol, 'RGB_L1');
+    assert.equal(error.operation, 'getAddress');
+    assert.equal(error.cause, cause);
+    return true;
+  });
+  await assert.rejects(wallet.listChannels(), (error) => {
+    assert.ok(error instanceof SDKError);
+    assert.equal(error.code, 'UNSUPPORTED_CAPABILITY');
+    assert.equal(error.protocol, 'RGB_L1');
+    return true;
+  });
+  await wallet.dispose();
+});
 
 test('native pins agree with the UniFFI artifact manifest', () => {
   const manifest = JSON.parse(

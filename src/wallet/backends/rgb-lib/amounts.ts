@@ -16,14 +16,18 @@ export function u64(
   ) {
     throw new WalletBackendError(
       'INVALID_AMOUNT',
-      `${field} must be an exact unsigned integer`
+      `${field} must be an exact unsigned integer`,
+      undefined,
+      'RGB_L1'
     );
   }
   const n = BigInt(value);
   if (n > U64_MAX || (positive && n === 0n)) {
     throw new WalletBackendError(
       'INVALID_AMOUNT',
-      `${field} is outside the supported u64 range`
+      `${field} is outside the supported u64 range`,
+      undefined,
+      'RGB_L1'
     );
   }
   return n.toString();
@@ -50,7 +54,9 @@ export function issuanceAmounts(
   if (total > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new WalletBackendError(
       'AMOUNT_OVERFLOW',
-      'Total issued and inflatable supply cannot be represented by the numeric SDK fields'
+      'Total issued and inflatable supply cannot be represented by the numeric SDK fields',
+      undefined,
+      'RGB_L1'
     );
   }
   return { amounts: native, inflationAmounts: inflation };
@@ -60,14 +66,18 @@ export function safeNumber(value: string, field: string): number {
   if (typeof value !== 'string' || !/^-?(0|[1-9]\d*)$/.test(value)) {
     throw new WalletBackendError(
       'INVALID_NATIVE_RESPONSE',
-      `Invalid native ${field}`
+      `Invalid native ${field}`,
+      undefined,
+      'RGB_L1'
     );
   }
   const number = Number(value);
   if (!Number.isSafeInteger(number)) {
     throw new WalletBackendError(
       'AMOUNT_OVERFLOW',
-      `${field} cannot be represented by the numeric SDK field`
+      `${field} cannot be represented by the numeric SDK field`,
+      undefined,
+      'RGB_L1'
     );
   }
   return number;
@@ -82,7 +92,9 @@ export function feeRate(value: number = 2): string {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new WalletBackendError(
       'FEE_RATE_UNSUPPORTED',
-      'RGB Lib requires a positive integer feeRate in sat/vB'
+      'RGB Lib requires a positive integer feeRate in sat/vB',
+      undefined,
+      'RGB_L1'
     );
   }
   return String(value);

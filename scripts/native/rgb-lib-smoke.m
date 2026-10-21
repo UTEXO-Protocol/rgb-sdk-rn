@@ -44,6 +44,8 @@ int main(void) {
     check([busy[@"error"][@"code"] isEqual:@"WALLET_STORAGE_IN_USE"], "Storage lease did not reject a second wallet");
     check([[RlnStorageClaim claimForTesting:root][@"errorCode"] isEqual:@"WALLET_PROFILE_MISMATCH"], "RLN claimed an open RGB Lib wallet");
     check([call(@"listAssets", @{@"handle":handle}) count] == 0, "Unexpected assets");
+    NSDictionary *missing = [RgbLibSwiftHelper execute:@"getAssetBalance" params:@{@"handle":handle, @"assetId":@"rgb:smoke-asset"}];
+    check([missing[@"error"][@"code"] isEqual:@"RGB_LIB_AssetNotFound"], "Unknown asset did not map to RGB_LIB_AssetNotFound");
     NSDictionary *balance = call(@"getBtcBalance", @{@"handle":handle, @"skipSync":@YES});
     check([balance[@"vanilla"][@"settled"] isEqual:@"0"], "Balance lost decimal encoding");
 
@@ -129,7 +131,7 @@ int main(void) {
 
     NSString *restored = [base stringByAppendingPathComponent:@"restored"];
     NSDictionary *wrongPassword = [RgbLibSwiftHelper execute:@"restoreBackup" params:@{@"dataDir":restored, @"backupPath":backup, @"password":@"wrong"}];
-    check(wrongPassword[@"error"] != nil, "Wrong backup password was accepted");
+    check([wrongPassword[@"error"][@"code"] isEqual:@"RGB_LIB_WrongPassword"], "Wrong backup password did not map to RGB_LIB_WrongPassword");
     call(@"restoreBackup", @{@"dataDir":restored, @"backupPath":backup, @"password":@"smoke-test-password"});
     params[@"dataDir"] = restored;
     handle = call(@"openWallet", params);

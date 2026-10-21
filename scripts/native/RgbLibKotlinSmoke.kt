@@ -2,6 +2,10 @@ package com.rgbsdkrn
 
 import java.nio.file.Files
 
+/** Code the bridge reports for a real UniFFI error, exactly as JS receives it. */
+private fun rgbLibCode(block: () -> Any?): String? =
+  (runCatching(block).exceptionOrNull() as? uniffi.rgb_lib.RgbLibException)?.let(::rgbLibErrorCode)
+
 /** JVM integration fixture: generated UniFFI bindings + the same Kotlin session store as Android. */
 @Suppress("UNCHECKED_CAST")
 fun main() {
@@ -23,6 +27,7 @@ fun main() {
     check((runCatching { store.execute("openWallet", params) }.exceptionOrNull() as RgbLibBridgeError).code == "WALLET_STORAGE_IN_USE")
     check((runCatching { RlnStorageClaim.claim(params["dataDir"] as String) }.exceptionOrNull() as RlnStorageClaimError).code == "WALLET_PROFILE_MISMATCH")
     check((call("listAssets") as List<*>).isEmpty())
+    check(rgbLibCode { call("getAssetBalance", mapOf("assetId" to "rgb:smoke-asset")) } == "RGB_LIB_AssetNotFound")
     val balance = call("getBtcBalance", mapOf("skipSync" to true)) as Map<String, Any?>
     check((balance["vanilla"] as Map<*, *>)["settled"] == "0")
     val expiry = (System.currentTimeMillis()/1000 + 86400).toString()
@@ -83,7 +88,7 @@ fun main() {
     rlnStorageClaimChecks()
     val restored = root.resolve("restored").path
     val restore = mapOf("dataDir" to restored, "backupPath" to backup, "password" to "smoke-test-password")
-    check(runCatching { store.execute("restoreBackup", restore + ("password" to "wrong")) }.isFailure)
+    check(rgbLibCode { store.execute("restoreBackup", restore + ("password" to "wrong")) } == "RGB_LIB_WrongPassword")
     store.execute("restoreBackup", restore)
     active = store.execute("openWallet", params + ("dataDir" to restored)) as String
     check(call("getWalletIdentity") == identity)

@@ -13,8 +13,15 @@ private func rgbInvalid(_ message: String) -> RgbBridgeFailure {
 }
 /// `RGB_LIB_<Variant>`, matching the Kotlin exception subclass name for the same
 /// Rust variant. Used for rejections and for per-transfer refresh failures.
+/// The case name comes from reflection (payload cases) or the bare case text
+/// (payload-free cases), never from a type-qualified description.
 func rgbLibErrorCode(_ error: RGBLib.RgbLibError) -> String {
-  let name = String(describing: error).prefix { $0 != "(" }
+  let described = String(describing: error).prefix { $0 != "(" }
+  let name = Mirror(reflecting: error).children.first?.label
+    ?? String(described.split(separator: ".").last ?? "")
+  guard let first = name.first, first.isLetter, name.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else {
+    return "RGB_LIB_Unknown"
+  }
   return "RGB_LIB_" + name.prefix(1).uppercased() + name.dropFirst()
 }
 private struct RgbParams {

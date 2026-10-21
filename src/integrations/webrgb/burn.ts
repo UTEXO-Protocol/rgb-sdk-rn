@@ -60,14 +60,14 @@ import {
 } from '../../wallet/operations/validation';
 import type { BurnOperations } from '../../wallet/operations/burn';
 import { WebRgbError } from './errors';
-import type { UTEXOWallet } from '../../wallet/utexo-wallet';
+import type { OnchainWalletApi, WalletProtocol } from '../../wallet/wallet-api';
 
 const MAX_CONSIGNMENT_BYTES = 16 * 1024 * 1024;
 export interface WebRgbBurnOptions {
   operations: BurnOperations;
 }
 type Wallet = Pick<
-  UTEXOWallet,
+  OnchainWalletApi<unknown>,
   | 'getNetwork'
   | 'getBfaCapabilities'
   | 'burn'
@@ -77,7 +77,7 @@ type Wallet = Pick<
   | 'listTransactionsByTxid'
   | 'getNetworkInfo'
   | 'refreshWallet'
->;
+> & { readonly protocol?: WalletProtocol };
 interface Host {
   origin: string;
   enabled(): boolean;
@@ -105,7 +105,11 @@ export class WebRgbBurnController {
   async methods(): Promise<string[]> {
     const caps = await this.wallet.getBfaCapabilities();
     return [
-      ...(caps.burn && caps.consignment ? ['burnAsset'] : []),
+      // Native burn reasons do not establish payout interoperability. Enable this
+      // for RGB Lib only after its bridge proof format is verified end-to-end.
+      ...(caps.burn && caps.consignment && this.wallet.protocol !== 'RGB_L1'
+        ? ['burnAsset']
+        : []),
       ...(caps.consignment ? ['getConsignment'] : []),
     ];
   }

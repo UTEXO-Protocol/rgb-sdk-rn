@@ -4,9 +4,41 @@ export { createWallet } from './wallet/wallet-manager';
 // RLN node manager
 export { RLNManager, createRLNManager } from './wallet/rln-manager';
 
-// UTEXO wallet — implements the shared IUTEXOProtocol contract, backed by RLN.
+// UTEXO wallet — legacy RLN constructor plus an optional on-chain rgb-lib mode.
 export { UTEXOWallet } from './wallet/utexo-wallet';
-export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
+export type {
+  UTEXOWalletNodeParams,
+  UTEXOWalletOptions,
+} from './wallet/utexo-wallet';
+export {
+  createUtexoWallet,
+  RgbLibWallet,
+  restoreRgbLibBackup,
+} from './wallet/create-utexo-wallet';
+export type {
+  WalletInit,
+  RlnWalletInit,
+  RgbLibWalletInit,
+  AnyUtexoWallet,
+} from './wallet/create-utexo-wallet';
+export type {
+  RgbLibWalletParams,
+  RgbLibUnlockParams,
+  RgbLibIndexer,
+} from './wallet/backends/rgb-lib/config';
+export { CallbackRgbLibKeyProvider } from './wallet/credentials/rgb-lib-key-provider';
+export type { IRgbLibKeyProvider } from './wallet/credentials/rgb-lib-key-provider';
+export type {
+  WalletProtocol,
+  WalletIdentity,
+  OnchainWalletApi,
+  WalletTransfer,
+  WalletAssignment,
+  WalletInvoiceData,
+  WalletUnspent,
+} from './wallet/wallet-api';
+export { WalletBackendError } from './wallet/backend-errors';
+export type { WalletBackendErrorCode } from './wallet/backend-errors';
 export {
   getNetworkDefaults,
   resolveUnlockParams,

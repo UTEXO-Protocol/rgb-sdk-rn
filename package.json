@@ -48,15 +48,21 @@
     "!**/.*",
     "!src/bindings/**/*.zip",
     "!ios/*.zip",
-    "!scripts/*.test.mjs"
+    "!scripts/*.test.mjs",
+    "!scripts/*.test.ts",
+    "!ios/RgbLibBindings/**",
+    "!android/rgb-lib-maven/**"
   ],
   "scripts": {
     "dev": "tsc -w",
     "clean": "del-cli android/build ios/build lib",
     "prepare": "bob build",
-    "postinstall": "node scripts/download-rln-bindings.js",
+    "postinstall": "node scripts/download-rln-bindings.js && node scripts/setup-rgb-lib-bindings.mjs --optional",
     "typecheck": "tsc",
-    "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/binding/NativeRgb.ts && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgbsdkrn",
+    "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/binding && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgbsdkrn",
+    "codegen:rgb-lib": "node scripts/generate-rgb-lib-bridge.mjs && node scripts/generate-rgb-lib-dtos.mjs",
+    "test:rgb-lib:ios": "node scripts/check-rgb-lib-ios.mjs",
+    "test:rgb-lib": "bob build && node scripts/generate-rgb-lib-bridge.mjs --check && node scripts/generate-rgb-lib-dtos.mjs --check && node --experimental-loader ./scripts/rn-stub-loader.mjs --test scripts/rgb-lib.test.mjs",
     "build": "bob build",
     "build:watch": "tsc -w",
     "prettier": "prettier --write \"**/*.{js,ts,tsx}\"",
@@ -65,8 +71,9 @@
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public",
     "check:contract": "bob build && node --experimental-loader ./scripts/rn-stub-loader.mjs scripts/check-contract.mjs",
-    "test": "npm run typecheck && npm run check:contract",
-    "test:webrgb": "bob build && node --test scripts/webrgb.test.mjs scripts/webrgb-burn.test.mjs"
+    "test": "npm run typecheck && npm run check:contract && npm run test:rgb-lib && npm run test:webrgb",
+    "test:webrgb": "bob build && node --test scripts/webrgb.test.mjs scripts/webrgb-burn.test.mjs",
+    "bindings:rgb-lib": "node scripts/setup-rgb-lib-bindings.mjs"
   },
   "repository": {
     "type": "git",

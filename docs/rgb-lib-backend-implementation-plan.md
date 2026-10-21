@@ -12,7 +12,7 @@
 
 **2. Головні архітектурні правила.** Публічний on-chain API працює з моделями SDK. Native типи, `Online`, wallet IDs, UniFFI enums і platform-specific errors залишаються всередині адаптерів.
 
-- Один instance має незмінні backend, network, identity та storage path.
+- Один instance має незмінні protocol, network, identity та storage path.
 - Одна активна сесія володіє native handle і послідовним виконанням операцій.
 - Lifecycle, feature support, готовність до операції та стан конкретного transfer — різні поняття.
 - Типізована конфігурація не дозволяє передати RLN signer у `rgb-lib`.
@@ -26,17 +26,14 @@
 
 ```mermaid
 flowchart TD
-    App["Demo та інші застосунки"] --> Factory["createUtexoWallet — вибір backend"]
-    Legacy["new UTEXOWallet — чинний RLN API"] --> RlnFacade["RLN facade та legacy methods"]
-    Factory --> RlnFacade
-    Factory --> RgbFacade["RGB Lib facade"]
-    RlnFacade --> Rln["RlnWalletBackend"]
-    RgbFacade --> Rgb["RgbLibWalletBackend"]
-    Rln --> RlnNative["RLNBinding → NativeRgb → RLN"]
-    Rgb --> RgbNative["RgbLibBinding → NativeRgbLib → rgb-lib-bfa"]
-    WebRgb["WebRgbProvider"] --> Port["Вузький wallet interface"]
-    Port -.-> RlnFacade
-    Port -.-> RgbFacade
+    App["Demo та інші застосунки"] --> Public["new UTEXOWallet — вибір protocol"]
+    Factory["Optional createUtexoWallet"] --> Public
+    Public --> Rln["RlnWallet → RLNManager"]
+    Public --> Rgb["RgbLibWallet → RgbLibWalletBackend"]
+    Rln --> RlnNative["RLNBinding → NativeRgb → RLN UniFFI"]
+    Rgb --> RgbNative["RgbLibBinding → NativeRgbLib → rgb-lib UniFFI"]
+    WebRgb["WebRgbProvider"] --> Port["Спільний on-chain port"]
+    Port --> Public
 ```
 
 | Компонент | Відповідальність |
@@ -50,40 +47,46 @@ flowchart TD
 | `WebRgbProvider` | Авторизація, approvals, WebRGB DTO/errors, список доступних методів |
 | Demo service | Профілі, credentials provider, UI state, переключення, WalletConnect sessions |
 
-Не повертати `RLNRgbLibBinding extends RNRgbLibBinding`. Бекенди використовують композицію та спільний контракт. Не додавати `if (backend === ...)` у кожен публічний метод; вибір реалізації відбувається у фабриці.
+Не повертати `RLNRgbLibBinding extends RNRgbLibBinding`. Бекенди використовують композицію та спільний контракт. Не додавати `if (backend === ...)` у кожен публічний метод; вибір реалізації відбувається у конструкторі.
 
-**4. Публічний API та сумісність TypeScript.** Чинний `UTEXOWallet` залишається експортованим класом RLN із тим самим конструктором. Його внутрішня реалізація переходить на композицію з `RlnWalletBackend`. Зберігаються `instanceof`, публічні методи, exports та можливість використовувати клас як тип.
-
-Новий `createUtexoWallet()` — синхронна фабрика: створює об'єкт, але не читає credentials, не відкриває native wallet і не підключається до мережі. `init()` та `unlock()` залишаються явними. Наявний `createWallet()` продовжує генерувати ключі; його значення не змінюється.
-
-Нижче схема нових декларацій; повні interfaces міститимуть існуючі доменні типи.
+**4. Публічний API та сумісність TypeScript.** `UTEXOWallet` залишається
+експортованим класом із сумісним `new UTEXOWallet(params, signer)` для RLN.
+Новий options constructor додає rgb-lib без обов'язкової фабрики:
 
 ```ts
-type WalletBackendKind = 'rln' | 'rgb-lib';
+const rln = new UTEXOWallet(rlnParams, signer);
+const rgb = new UTEXOWallet({ protocol: 'RGB_L1', params: rgbLibParams, keys });
 
-type RlnWalletInit = {
-  backend: 'rln';
-  params: UTEXOWalletNodeParams;
-  signer: IRLNSigner;
-};
+// Обидва — instanceof UTEXOWallet.
+await rln.init();
+await rln.unlock(rlnUnlockParams);
+await rgb.init();
+await rgb.unlock(rgbLibUnlockParams);
 
-type RgbLibWalletInit = {
-  backend: 'rgb-lib';
-  params: RgbLibWalletParams;
-  keys: IRgbLibKeyProvider;
-};
-
-type WalletInit = RlnWalletInit | RgbLibWalletInit;
-type AnyUtexoWallet = UTEXOWallet | RgbLibWalletApi;
-
-declare function createUtexoWallet(input: RlnWalletInit): UTEXOWallet;
-declare function createUtexoWallet(input: RgbLibWalletInit): RgbLibWalletApi;
-declare function createUtexoWallet(input: WalletInit): AnyUtexoWallet;
+type AnyUtexoWallet = UTEXOWallet<'RGB_LN'> | UTEXOWallet<'RGB_L1'>;
 ```
 
-Фабрика повертає RLN-клас для `rln` і окремий тип facade для `rgb-lib`. Обидва реалізують однакові підтримувані on-chain методи. У `RgbLibWalletApi` немає flat Lightning methods. Discriminant `wallet.backend` звужує union, якщо застосунку потрібна конкретна реалізація.
+`protocol` — публічний discriminant: `RGB_LN` обирає RLN, `RGB_L1` — rgb-lib.
+Він також доступний як read-only `wallet.protocol` і входить у public identity.
+WebRGB повертає це саме значення. `backend` лишається внутрішньою деталлю
+реалізації та persistent storage manifest; constructor options не приймають його.
 
-Це дозволяє зберегти чесний `IUTEXOProtocol`: він продовжує описувати повний RLN-контракт. Не оголошувати, що `rgb-lib` реалізує його через набір методів, які лише кидають помилки.
+Клас використовує композицію: `RlnWallet` зберігає чинну RLN-реалізацію,
+`RgbLibWallet` делегує on-chain операції `RgbLibWalletBackend`. Facade не створює
+RLN manager у rgb-lib режимі. Конструктор не читає credentials і не відкриває
+native wallet; `init()` та `unlock()` залишаються явними.
+
+Generic `TProtocol` за замовчуванням дорівнює `'RGB_LN'`: старі анотації
+`wallet: UTEXOWallet`, subclasses і повний `IUTEXOProtocol` залишаються сумісними.
+Options constructor виводить `'RGB_L1'` автоматично; unlock і return DTO мають
+тип відповідного бекенда. RLN-only методи мають `this: UTEXOWallet<'RGB_LN'>`, тому
+TypeScript відхиляє їх на rgb-lib. JavaScript отримує `UNSUPPORTED_CAPABILITY`
+до звернення до native. WebRGB бере `protocol` безпосередньо з wallet та враховує його при оголошенні можливостей.
+
+`createUtexoWallet` залишається лише необов'язковим shorthand до конструктора.
+`AnyUtexoWallet` звужується через `wallet.protocol`; він використовується там,
+де застосунок підтримує обидва режими. `IUTEXOProtocol` продовжує описувати
+повний RLN-контракт; rgb-lib задовольняє спільний `OnchainWalletApi`.
 
 У core виділити `IOnchainWalletCore` через композицію існуючих `IBitcoinWallet`, `IRgbAssets`, `IOnchainTransfers`, плюс наявні `getNetwork`, history, sync/refresh і локальний backup. `IOnchainWallet<TUnlockParams>` додає до нього `IWalletLifecycle<TUnlockParams>`. Наявні `IUTEXOProtocolCore` та `IUTEXOProtocol` перевикористовують відповідні контракти і зберігають весь попередній required surface. Нові identity methods не стають required для існуючих web або сторонніх implementations: вони належать RN-розширенню або окремому optional interface. RN-specific `shutdown`, `reinit`, detailed refresh та інші extras також залишаються RN-розширенням.
 
@@ -210,7 +213,7 @@ App створює профіль і зберігає credentials до native in
 
 Нові профілі мають окремі directories та credentials. Existing RLN paths і SecureStore keys залишаються точними. Перемикання backend у demo означає вибір іншого профілю; імпорт ключів або даних — окремий явний сценарій.
 
-Додати backend-neutral `getWalletIdentity()`, який повертає public stable identifier, network і backend. Не використовувати rotating deposit address або короткий master fingerprint як єдину identity. Для RGB Lib ідентифікатор виводиться з versioned, domain-separated representation публічної wallet identity, включно з account keys/network/witness profile.
+Додати backend-neutral `getWalletIdentity()`, який повертає public stable identifier, network і protocol. Не використовувати rotating deposit address або короткий master fingerprint як єдину identity. Для RGB Lib ідентифікатор виводиться з versioned, domain-separated representation публічної wallet identity, включно з account keys/network/witness profile.
 
 WalletConnect account mapping належить інтеграції. Existing RLN account `rgb:<network>:<nodePubkey>` зберігається. Нові RGB Lib account identifiers мають узгоджений формат із `webrgb-walletconnect`; credentials, sessions і burn journal прив'язуються до профілю.
 
@@ -232,7 +235,7 @@ SDK backup не охоплює автоматично journal у AsyncStorage а
 | --- | --- |
 | `utils/env.ts` | Backend-specific config; explicit EVM chain map; перевірені proxy defaults |
 | `utils/wallet/node.ts` | Фабрика, key provider, typed open/reopen та account mapping |
-| `utils/wallet/service.ts` | Profile selection, cache key `backend/network/walletId`, capabilities |
+| `utils/wallet/service.ts` | Profile selection, cache key `protocol/network/walletId`, capabilities |
 | `utils/wallet/types.ts` | Спільні wallet DTO замість `ReturnType<UTEXOWallet[...]>` |
 | `utils/wallet/provider.ts` | Backend-neutral port і динамічний набір методів |
 | `utils/wallet/storage.ts` | Збереження старих journal keys; namespace нових профілів |
@@ -259,20 +262,20 @@ Network aliases нормалізуються в одному спільному 
 ```text
 src/
   wallet/
-    utexo-wallet.ts                 # legacy RLN class
-    create-utexo-wallet.ts          # typed factory
-    onchain-wallet.ts              # common facade
+    utexo-wallet.ts                 # public constructor and typed delegation
+    rln-wallet.ts                   # preserved RLN implementation
+    rgb-lib-wallet.ts               # rgb-lib implementation
+    wallet-options.ts              # protocol-discriminated constructor options
+    create-utexo-wallet.ts          # optional factory and restore helper
+    onchain-wallet.ts               # on-chain port delegation
     wallet-api.ts                  # RN interfaces and public union
     types.ts                       # backend-neutral RN models
     backends/
-      rln/backend.ts
-      rln/mappers.ts
       rgb-lib/backend.ts
       rgb-lib/mappers.ts
       rgb-lib/config.ts
     runtime/
       serial-executor.ts
-      session-state.ts
     credentials/
       rgb-lib-key-provider.ts
     operations/                    # existing durable burn and validation
@@ -281,9 +284,8 @@ src/
     RLNBinding.ts                  # existing advanced public binding
     NativeRgbLib.ts
     RgbLibBinding.ts
-    rgb-lib-types.ts
   integrations/webrgb/              # consumes wallet ports
-native-versions.json
+src/bindings/rgb-lib/manifest.json
 ```
 
 Native storage lease, registry і metadata реалізуються у відповідному Swift/Kotlin/native wrapper шарі; не дублювати filesystem state через JS bridge. Окремий `RgbLibManager`, який лише повторює кожен binding method, не потрібний.
@@ -299,7 +301,7 @@ Native storage lease, registry і metadata реалізуються у відп�
 | 4. RGB Lib lifecycle | Bridge create/load/online/close, keys, session executor, storage lease | Create → restart → dispose; failure recovery; жодних leaked handles або змішаних directories |
 | 5. On-chain parity | Balances, history, receive/send, UTXOs, issuance/inflate, backup/restore | Shared conformance проходить для обох бекендів і платформ |
 | 6. BFA та WebRGB | Burn/proof mapping, chain info, feature advertisement, errors | BFA proof приймає цільовий verifier; journal recovery без duplicate burn |
-| 7. Demo | Profiles/config/factory/session switching, credentials і account compatibility | Existing RLN-профіль відкривається після upgrade; RGB Lib працює окремо |
+| 7. Demo | Profiles/config/constructor/session switching, credentials і account compatibility | Existing RLN-профіль відкривається після upgrade; RGB Lib працює окремо |
 | 8. Release | Pinned dependency set, upgrade guide, clean app smoke tests | Відтворювана збірка й задокументована support matrix |
 
 PR 1 не вимагає видалення або перейменування старого `IUTEXOProtocol`. PR 2 не включає виправлення всіх історичних mapper quirks одночасно: semantic changes йдуть окремими commits із regression fixtures. Нативний codegen перевіряється після кожної зміни TurboModule spec.
@@ -310,7 +312,7 @@ PR 1 не вимагає видалення або перейменування 
 
 | Рівень | Обов'язкові сценарії |
 | --- | --- |
-| Public TypeScript | Old constructor/exports; factory narrowing; неправильний signer/config; відсутність LN у RGB Lib |
+| Public TypeScript | Old constructor/exports; new constructor inference; protocol narrowing; неправильний signer/config; LN guards у RGB Lib |
 | DTO contract | u64 boundaries, unsafe JS numbers, nulls, Unix seconds, native enums, MintRight, exact transfer amounts |
 | Lifecycle | Concurrent init/unlock; rejected init retry; shutdown during sync/burn; repeated dispose; reopen після crash |
 | Native resources | Registry cleanup, два профілі, дубль path, помилка після часткового відкриття |
@@ -325,7 +327,7 @@ PR 1 не вимагає видалення або перейменування 
 
 Перевірки сумісності фіксують asset schema ID, protocol version, invoice/consignment fixtures та dependency pins. Якщо старі й нові assets не можуть взаємодіяти, support matrix має це показувати; окремі профілі не вирішують сумісність самих contracts.
 
-Existing tests, які змінюють private `wallet.rln` або викликають `UTEXOWallet.prototype.method.call({ rln })`, переводяться на ін'єкцію fake backend і окремі mapper fixtures. Production API не отримує public mutable backend лише заради тестів.
+Existing RLN tests підставляють fake manager у внутрішню RLN implementation; перевірки facade використовують справжній backend із fake native transport. Окремо перевіряються обидва constructor forms, `instanceof`, legacy subclasses, generic inference, Lightning guards та lifecycle. Production API не отримує public mutable backend лише заради тестів.
 
 Не вимагати bit-for-bit однакових відповідей там, де native engines мають різні реальні дані. Перевіряти спільну семантику й інваріанти; реальні IDs, отриманий count UTXOs та відомі limits залишаються backend-specific.
 
@@ -343,3 +345,12 @@ Existing tests, які змінюють private `wallet.rln` або виклик
 - [Реліз rgb-lib-bfa](https://github.com/UTEXO-Protocol/rgb-lib-bfa/releases/tag/v0.3.0-beta.7-upstream-dev-bfa.1), [UniFFI API](https://github.com/UTEXO-Protocol/rgb-lib-bfa/blob/ad87acb673262dbc0f2270b5b2e2f0d3db74a65a/bindings/uniffi/src/rgb-lib.udl).
 - [RGB Lib single-signature wallet](https://github.com/UTEXO-Protocol/rgb-lib-bfa/blob/ad87acb673262dbc0f2270b5b2e2f0d3db74a65a/src/wallet/singlesig.rs), [новий proxy protocol](https://github.com/UTEXO-Protocol/rgb-lib-bfa/blob/ad87acb673262dbc0f2270b5b2e2f0d3db74a65a/src/api/proxy.rs).
 - [Pinned RLN dependencies](https://github.com/UTEXO-Protocol/rgb-lightning-node/blob/v0.17.0-beta.3/Cargo.toml), [RGB Lib dependencies](https://github.com/UTEXO-Protocol/rgb-lib-bfa/blob/ad87acb673262dbc0f2270b5b2e2f0d3db74a65a/Cargo.toml).
+# Примітка до локальної реалізації
+
+Поточний API, підключення біндінгів і перехід demo описані в
+[rgb-lib-backend.md](rgb-lib-backend.md).
+Обидва бекенди використовують свої згенеровані UniFFI-біндінги.
+RN SDK не містить додаткового Rust crate або patches до rgb-lib.
+Swift-модуль `RGBLib` і Kotlin namespace `uniffi.rgb_lib` ізолюють типи нового
+бекенда; динамічне пакування rgb-lib ізолює native symbols від RLN.
+Існуючий RLN facade збережено, спільний on-chain контракт перевіряється для обох.

@@ -1,0 +1,9 @@
+{
+  "version": "v0.3.0-beta.7-upstream-dev-bfa.1",
+  "sourceRevision": "ad87acb673262dbc0f2270b5b2e2f0d3db74a65a",
+  "uniffiVersion": "0.32.2",
+  "bridgeVersion": 2,
+  "androidVersion": "0.3.0-beta.7-upstream-dev-bfa.1",
+  "swiftModule": "RGBLib",
+  "kotlinPackage": "uniffi.rgb_lib"
+}

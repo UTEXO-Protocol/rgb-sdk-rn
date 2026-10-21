@@ -114,6 +114,20 @@ class RgbModule(reactContext: ReactApplicationContext) :
   ) {
     coroutineScope.launch(Dispatchers.IO) {
       try {
+        val storageRoot = java.io.File(storageDirPath).canonicalFile
+        if (!storageRoot.exists() && !storageRoot.mkdirs()) {
+          throw java.io.IOException("Cannot create wallet storage directory")
+        }
+        val rgbLock = java.io.File(storageRoot, ".rgb-sdk.lock")
+        if (rgbLock.exists() || java.io.File(storageRoot, "rgb-sdk-profile.json").exists()) {
+          promise.reject("WALLET_PROFILE_MISMATCH", "Storage belongs to RGB Lib; use a separate RLN directory")
+          return@launch
+        }
+        java.io.File(storageRoot, ".rln-sdk-profile").createNewFile()
+        if (rgbLock.exists()) {
+          promise.reject("WALLET_STORAGE_IN_USE", "Storage is being opened by RGB Lib")
+          return@launch
+        }
         android.util.Log.d("RgbModule", "[rlnCreateNode] network=$network vssUrl=$vssUrl lspBaseUrl=$lspBaseUrl daemonPort=$daemonListeningPort ldkPort=$ldkPeerListeningPort")
         val peerPubkeysList: List<String>? = virtualPeerPubkeys?.let { arr ->
           (0 until arr.size()).map { arr.getString(it) ?: "" }.filter { it.isNotEmpty() }

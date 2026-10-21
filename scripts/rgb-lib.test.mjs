@@ -1,0 +1,679 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { RgbLibWalletBackend } from '../lib/module/wallet/backends/rgb-lib/backend.js';
+import { OnchainWallet } from '../lib/module/wallet/onchain-wallet.js';
+import { createUtexoWallet } from '../lib/module/wallet/create-utexo-wallet.js';
+import { UTEXOWallet } from '../lib/module/wallet/utexo-wallet.js';
+import {
+  RGB_LIB_VERSION,
+  RGB_LIB_REVISION,
+  RGB_LIB_BRIDGE_VERSION,
+  resolveRgbLibConfig,
+  configEquals,
+} from '../lib/module/wallet/backends/rgb-lib/config.js';
+import * as amounts from '../lib/module/wallet/backends/rgb-lib/amounts.js';
+import * as map from '../lib/module/wallet/backends/rgb-lib/mappers.js';
+import { WebRgbProvider } from '../lib/module/integrations/webrgb/provider.js';
+
+const params = { network: 'regtest', storageDirPath: '/wallets/rgb-lib/test' };
+const config = {
+  indexerUrl: 'http://localhost:3000',
+  proxyEndpoint: 'http://localhost:3001/json-rpc',
+};
+const runtime = {
+  version: RGB_LIB_VERSION,
+  sourceRevision: RGB_LIB_REVISION,
+  bridgeVersion: RGB_LIB_BRIDGE_VERSION,
+  burn: true,
+  consignment: true,
+  bfa: true,
+};
+const code = (expected) => (error) => {
+  assert.equal(error.code, expected);
+  return true;
+};
+const deferred = () => {
+  let resolve, reject;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+function fixture(overrides = {}) {
+  const calls = [];
+  const native = {
+    async getRuntimeInfo() {
+      calls.push('runtime');
+      return runtime;
+    },
+    async openWallet(...args) {
+      calls.push(['open', ...args]);
+      return 'handle-1';
+    },
+    async closeWallet(h) {
+      calls.push(['close', h]);
+    },
+    async getWalletIdentity() {
+      return {
+        id: 'identity',
+        network: 'regtest',
+        masterFingerprint: 'abc12345',
+      };
+    },
+    async goOnline(...args) {
+      calls.push(['online', ...args]);
+    },
+    async getAddress() {
+      calls.push('address');
+      return 'address';
+    },
+    async listAssets() {
+      return [];
+    },
+    async sendBtc(...args) {
+      calls.push(['btc', ...args]);
+      return 'txid';
+    },
+    async createUtxos() {
+      return 3;
+    },
+    async send(...args) {
+      calls.push(['send', ...args]);
+      return {
+        txid: 'txid',
+        batchTransferIdx: 17,
+        entropy: '18446744073709551615',
+      };
+    },
+    async refresh() {
+      return [
+        {
+          batchTransferIdx: 17,
+          updatedStatus: 'WaitingSafeHeight',
+          failure: null,
+        },
+      ];
+    },
+    ...overrides,
+  };
+  const keys = {
+    async getMnemonic() {
+      calls.push('keys');
+      return 'test mnemonic';
+    },
+  };
+  const backend = new RgbLibWalletBackend(params, keys, () => native);
+  const wallet = new OnchainWallet('RGB_L1', backend);
+  return { wallet, native, calls, keys };
+}
+
+function publicWalletFixture(overrides = {}) {
+  const f = fixture(overrides);
+  const wallet = new UTEXOWallet({ protocol: 'RGB_L1', params, keys: f.keys });
+  // Replace only the native transport; exercise the real public facade and backend.
+  wallet.engine.ports.loadBinding = () => f.native;
+  return { ...f, wallet };
+}
+
+test('native pins agree with the UniFFI artifact manifest', () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(
+      new URL('../src/bindings/rgb-lib/manifest.json', import.meta.url)
+    )
+  );
+  assert.equal(manifest.version, RGB_LIB_VERSION);
+  assert.equal(manifest.sourceRevision, RGB_LIB_REVISION);
+  assert.equal(manifest.bridgeVersion, RGB_LIB_BRIDGE_VERSION);
+});
+test('network info omits block height when the UniFFI API does not expose it', async () => {
+  const { wallet } = fixture({
+    async getNetworkInfo() {
+      return { network: 'regtest', blockHeight: null };
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  assert.deepEqual(await wallet.getNetworkInfo(), { network: 'regtest' });
+  await wallet.dispose();
+});
+test('factory preserves the legacy constructor and does not read credentials before init', () => {
+  let reads = 0;
+  const keys = {
+    async getMnemonic() {
+      reads++;
+      return 'unused';
+    },
+  };
+  const rgb = createUtexoWallet({ protocol: 'RGB_L1', params, keys });
+  assert.ok(rgb instanceof UTEXOWallet);
+  assert.equal(rgb.protocol, 'RGB_L1');
+  assert.equal(reads, 0);
+  const rln = createUtexoWallet({ protocol: 'RGB_LN', params, signer: {} });
+  assert.ok(rln instanceof UTEXOWallet);
+  assert.equal(rln.protocol, 'RGB_LN');
+  assert.throws(
+    () => createUtexoWallet({ protocol: 'RGB_L1', params, keys, signer: {} }),
+    code('INVALID_CONFIG')
+  );
+  assert.throws(
+    () => createUtexoWallet({ protocol: 'other', params }),
+    code('INVALID_CONFIG')
+  );
+});
+test('legacy construction preserves signer lifecycle, method overrides and prototype calls', async () => {
+  const calls = [];
+  const signer = {
+    async initNode(manager, storage) {
+      calls.push(['init', manager, storage]);
+    },
+    async unlockNode(manager, options, storage) {
+      calls.push(['unlock', manager, options, storage]);
+    },
+    async dispose(manager) {
+      calls.push(['dispose', manager]);
+    },
+  };
+  class AppWallet extends UTEXOWallet {
+    async getAddress() {
+      return 'app:' + (await super.getAddress());
+    }
+  }
+  const original = {
+    ...params,
+    daemonListeningPort: 9735,
+    ldkPeerListeningPort: 9736,
+  };
+  const wallet = new AppWallet(original, signer);
+  const manager = wallet.engine.rln;
+  manager.rlnCreateNode = async (p) => {
+    calls.push(['create', p]);
+  };
+  manager.rlnAddress = async () => ({ address: 'btc-address' });
+  manager.rlnShutdown = async () => {
+    calls.push(['shutdown']);
+  };
+  manager.rlnDestroyNode = async () => {
+    calls.push(['destroy']);
+  };
+  original.storageDirPath = '/changed';
+  original.network = 'mainnet';
+  assert.ok(wallet instanceof UTEXOWallet);
+  assert.equal(wallet.protocol, 'RGB_LN');
+  assert.equal(calls.length, 0);
+  await wallet.init();
+  await wallet.unlock({ indexerUrl: 'tcp://localhost:50001' });
+  assert.equal(calls[0][1].storageDirPath, params.storageDirPath);
+  assert.deepEqual(calls[1], ['init', manager, params.storageDirPath]);
+  assert.equal(calls[2][0], 'unlock');
+  assert.equal(calls[2][1], manager);
+  assert.equal(calls[2][2].indexerUrl, 'tcp://localhost:50001');
+  assert.equal(calls[2][3], params.storageDirPath);
+  assert.equal(wallet.getNetwork(), 'regtest');
+  assert.equal(await wallet.getAddress(), 'app:btc-address');
+  assert.equal(
+    await UTEXOWallet.prototype.getAddress.call(wallet),
+    'btc-address'
+  );
+  await wallet.dispose();
+  assert.equal(wallet.isDisposed(), true);
+  assert.deepEqual(calls.slice(-3), [
+    ['shutdown'],
+    ['destroy'],
+    ['dispose', manager],
+  ]);
+});
+test('public rgb-lib constructor owns only its on-chain session through reopen and dispose', async () => {
+  const { wallet, calls } = publicWalletFixture();
+  assert.ok(wallet instanceof UTEXOWallet);
+  assert.equal(wallet.protocol, 'RGB_L1');
+  assert.equal(wallet.engine.rln, undefined);
+  assert.deepEqual(calls, []);
+  await wallet.init();
+  await wallet.init();
+  await wallet.unlock(config);
+  assert.equal((await wallet.getWalletIdentity()).id, 'identity');
+  assert.equal(await wallet.getAddress(), 'address');
+  assert.deepEqual(await wallet.listAssets(), {
+    nia: [],
+    uda: [],
+    cfa: [],
+    ifa: [],
+    bfa: [],
+  });
+  assert.equal(
+    await wallet.sendBtc({ address: 'btc-recipient', amount: 123, feeRate: 1 }),
+    'txid'
+  );
+  assert.equal(calls.filter((c) => c === 'keys').length, 1);
+  assert.equal(
+    calls.filter((c) => Array.isArray(c) && c[0] === 'open').length,
+    1
+  );
+  await wallet.shutdown();
+  await wallet.reinit(config);
+  assert.equal(calls.filter((c) => c === 'keys').length, 2);
+  assert.equal(await wallet.getAddress(), 'address');
+  await wallet.dispose();
+  assert.equal(wallet.isDisposed(), true);
+  assert.equal(
+    calls.filter((c) => Array.isArray(c) && c[0] === 'close').length,
+    2
+  );
+  await assert.rejects(wallet.getAddress(), code('WALLET_DISPOSED'));
+});
+test('rgb-lib mode rejects RLN-only calls from JavaScript and does not advertise signing', async () => {
+  const { wallet, calls } = publicWalletFixture();
+  for (const [method, args] of [
+    ['createLightningInvoice', [{ amountSats: 1 }]],
+    ['openChannel', [{}]],
+    ['getNodeInfo', []],
+    ['backupNow', []],
+    ['signMessage', ['message']],
+    ['verifyMessage', ['message', 'signature']],
+    ['createLsp', []],
+    ['checkProxyEndpoint', ['https://example.com']],
+  ]) {
+    await assert.rejects(
+      wallet[method](...args),
+      code('UNSUPPORTED_CAPABILITY')
+    );
+  }
+  assert.throws(() => wallet.getLspConfig(), code('UNSUPPORTED_CAPABILITY'));
+  assert.deepEqual(calls, []);
+  const provider = new WebRgbProvider(wallet, {
+    origin: 'https://example.com',
+    sessionApproved: true,
+    confirm: async () => true,
+  });
+  const info = await provider.getInfo();
+  assert.equal(info.protocol, 'RGB_L1');
+  assert.ok(!info.methods.includes('signMessage'));
+  await assert.rejects(
+    provider.signMessage('message'),
+    (e) => e.code === 'METHOD_NOT_SUPPORTED'
+  );
+  await wallet.dispose();
+});
+test('constructor rejects mixed backend credentials and missing RLN signer', () => {
+  const keys = { getMnemonic: async () => 'unused' };
+  for (const args of [
+    [params],
+    [{ protocol: 'RGB_L1', params, keys }, {}],
+    [{ protocol: 'RGB_L1', params, keys, signer: {} }],
+    [{ protocol: 'RGB_LN', params, keys, signer: {} }],
+    [{ protocol: 'other', params, keys }],
+    [{ protocol: 'RGB_L1', params }],
+    [{ backend: 'rgb-lib', params, keys }],
+    [{ protocol: 'RGB_L1', backend: 'rln', params, keys }],
+    [{ protocol: 'rgb-lib', params, keys }],
+  ])
+    assert.throws(() => new UTEXOWallet(...args), code('INVALID_CONFIG'));
+});
+test('protocol is immutable and WebRGB reports the same mode for either constructor', async () => {
+  let reads = 0;
+  const options = {
+    protocol: 'RGB_L1',
+    params,
+    keys: {
+      getMnemonic: async () => {
+        reads++;
+        return 'unused';
+      },
+    },
+  };
+  const rgb = new UTEXOWallet(options);
+  const legacy = new UTEXOWallet(params, {});
+  options.protocol = 'RGB_LN';
+  for (const [wallet, expected] of [
+    [rgb, 'RGB_L1'],
+    [legacy, 'RGB_LN'],
+  ]) {
+    assert.equal(wallet.protocol, expected);
+    assert.equal('backend' in wallet, false);
+    assert.throws(() => {
+      wallet.protocol = 'other';
+    }, TypeError);
+    const provider = new WebRgbProvider(wallet, {
+      origin: 'https://example.com',
+      sessionApproved: true,
+      confirm: async () => true,
+    });
+    const info = await provider.getInfo();
+    assert.equal(info.protocol, wallet.protocol);
+    assert.equal(info.methods.includes('signMessage'), expected === 'RGB_LN');
+  }
+  assert.equal(reads, 0);
+});
+test('missing native artifacts fail explicitly without loading key material', async () => {
+  let reads = 0;
+  const w = createUtexoWallet({
+    protocol: 'RGB_L1',
+    params,
+    keys: {
+      async getMnemonic() {
+        reads++;
+        return 'unused';
+      },
+    },
+  });
+  await assert.rejects(w.init(), code('NATIVE_BACKEND_UNAVAILABLE'));
+  assert.equal(reads, 0);
+});
+test('init joins concurrent requests and validates artifacts before reading keys', async () => {
+  const { wallet, calls } = fixture();
+  await Promise.all([wallet.init(), wallet.initialize(), wallet.init()]);
+  assert.equal(calls.filter((c) => c === 'keys').length, 1);
+  assert.equal(
+    calls.filter((c) => Array.isArray(c) && c[0] === 'open').length,
+    1
+  );
+  assert.deepEqual(await wallet.getWalletIdentity(), {
+    id: 'identity',
+    protocol: 'RGB_L1',
+    network: 'regtest',
+  });
+  const mismatch = fixture({
+    async getRuntimeInfo() {
+      return { ...runtime, bridgeVersion: 99 };
+    },
+  });
+  await assert.rejects(mismatch.wallet.init(), code('NATIVE_VERSION_MISMATCH'));
+  assert.deepEqual(mismatch.calls, []);
+});
+test('online methods reject before unlock; matching config is idempotent and changes require restart', async () => {
+  const { wallet, calls } = fixture();
+  await assert.rejects(wallet.getAddress(), code('WALLET_NOT_INITIALIZED'));
+  await wallet.init();
+  await assert.rejects(
+    wallet.sendBtc({ address: 'btc', amount: 1 }),
+    code('WALLET_OFFLINE')
+  );
+  await Promise.all([wallet.unlock(config), wallet.unlock({ ...config })]);
+  await wallet.unlock(config);
+  assert.equal(
+    calls.filter((c) => Array.isArray(c) && c[0] === 'online').length,
+    1
+  );
+  await assert.rejects(
+    wallet.unlock({ ...config, indexerUrl: 'http://localhost:3002' }),
+    code('WALLET_CONFIG_MISMATCH')
+  );
+});
+test('shutdown waits for accepted operations, rejects later work, and supports reopening', async () => {
+  const gate = deferred(),
+    started = deferred();
+  const { wallet, calls } = fixture({
+    async getAddress() {
+      started.resolve();
+      await gate.promise;
+      return 'address';
+    },
+  });
+  await wallet.init();
+  const read = wallet.getAddress();
+  await started.promise;
+  const close = wallet.shutdown();
+  await assert.rejects(wallet.getAddress(), code('WALLET_STOPPING'));
+  assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'close'));
+  gate.resolve();
+  assert.equal(await read, 'address');
+  await close;
+  assert.equal(wallet.isDisposed(), false);
+  await wallet.reinit(config);
+  assert.equal(
+    calls.filter((c) => Array.isArray(c) && c[0] === 'open').length,
+    2
+  );
+});
+test('dispose during init drains the created handle exactly once and permanently closes the facade', async () => {
+  const gate = deferred(),
+    started = deferred();
+  const { wallet, calls } = fixture({
+    async openWallet() {
+      started.resolve();
+      await gate.promise;
+      return 'handle-1';
+    },
+  });
+  const opening = wallet.init();
+  await started.promise;
+  const disposing = wallet.dispose();
+  const duplicate = wallet.destroy();
+  await assert.rejects(wallet.init(), code('WALLET_DISPOSED'));
+  gate.resolve();
+  await Promise.all([opening, disposing, duplicate]);
+  assert.equal(
+    calls.filter((c) => Array.isArray(c) && c[0] === 'close').length,
+    1
+  );
+  assert.equal(wallet.isDisposed(), true);
+  await assert.rejects(wallet.reinit(), code('WALLET_DISPOSED'));
+});
+test('failed cleanup retains ownership and blocks operations until cleanup succeeds', async () => {
+  let attempts = 0;
+  const { wallet } = fixture({
+    async closeWallet() {
+      if (++attempts === 1) throw new Error('close failed');
+    },
+  });
+  await wallet.init();
+  await assert.rejects(wallet.shutdown(), /close failed/);
+  await assert.rejects(wallet.getAddress(), code('WALLET_STOPPING'));
+  await wallet.shutdown();
+  await wallet.init();
+  await wallet.dispose();
+  assert.equal(attempts, 3);
+});
+test('failed native calls do not poison the queue or cause transaction retries', async () => {
+  let sends = 0;
+  const { wallet } = fixture({
+    async sendBtc() {
+      sends++;
+      throw new Error('ambiguous broadcast');
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  await assert.rejects(
+    wallet.sendBtc({ address: 'btc', amount: 1 }),
+    /ambiguous broadcast/
+  );
+  assert.equal(await wallet.getAddress(), 'address');
+  assert.equal(sends, 1);
+});
+test('queued transactions own their input even when the caller mutates the original object', async () => {
+  const gate = deferred(),
+    started = deferred();
+  const { wallet, calls } = fixture({
+    async getAddress() {
+      started.resolve();
+      await gate.promise;
+      return 'address';
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  const read = wallet.getAddress();
+  await started.promise;
+  const request = {
+    invoice: 'original',
+    amount: 7,
+    witnessData: { amountSat: 1000 },
+  };
+  const send = wallet.onchainSend(request);
+  request.amount = 99;
+  request.invoice = 'changed';
+  request.witnessData.amountSat = 99999;
+  gate.resolve();
+  await Promise.all([read, send]);
+  const sent = calls.find((c) => Array.isArray(c) && c[0] === 'send');
+  assert.equal(sent[2], 'original');
+  assert.equal(sent[4], '7');
+  assert.equal(sent[5], '1000');
+});
+test('identity validation cleans up a handle and allows init to be retried', async () => {
+  let reads = 0;
+  const { wallet, calls } = fixture({
+    async getWalletIdentity() {
+      return { id: 'id', network: ++reads === 1 ? 'mainnet' : 'regtest' };
+    },
+  });
+  await assert.rejects(wallet.init(), code('WALLET_CONFIG_MISMATCH'));
+  assert.equal(
+    calls.filter((c) => Array.isArray(c) && c[0] === 'close').length,
+    1
+  );
+  await wallet.init();
+});
+test('native operation results and full invoice reach the public API unchanged', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  await wallet.unlock(config);
+  assert.equal(await wallet.createUtxos({ num: 5 }), 3);
+  const invoice = 'rgb:full-invoice?pk=preserved&enc=required&expiry=123';
+  const result = await wallet.onchainSend({ invoice, amount: 7, feeRate: 2 });
+  assert.deepEqual(result, {
+    txid: 'txid',
+    batchTransferIdx: 17,
+    entropy: '18446744073709551615',
+  });
+  const sent = calls.find((c) => Array.isArray(c) && c[0] === 'send');
+  assert.equal(sent[2], invoice);
+  assert.equal(sent[4], '7');
+  assert.equal(sent.at(-1), 'rpc://localhost:3001/json-rpc');
+  assert.equal(
+    (await wallet.refreshTransfers()).transfers[17].updatedStatus,
+    'WaitingSafeHeight'
+  );
+});
+test('fee rates and amounts reject lossy inputs instead of silently rounding', () => {
+  assert.equal(
+    amounts.u64(18446744073709551615n, 'amount'),
+    '18446744073709551615'
+  );
+  assert.throws(
+    () => amounts.u64(Number.MAX_SAFE_INTEGER + 1, 'amount'),
+    code('INVALID_AMOUNT')
+  );
+  assert.throws(
+    () => amounts.u64('18446744073709551616', 'amount'),
+    code('INVALID_AMOUNT')
+  );
+  assert.throws(() => amounts.u64('-1', 'amount'), code('INVALID_AMOUNT'));
+  assert.throws(() => amounts.feeRate(1.5), code('FEE_RATE_UNSUPPORTED'));
+  assert.throws(
+    () =>
+      map.balance({ settled: '9007199254740993', future: '0', spendable: '0' }),
+    code('AMOUNT_OVERFLOW')
+  );
+});
+test('history preserves new statuses, mint rights, exact amounts and real batch IDs', () => {
+  const transfer = map.transfer({
+    idx: 4,
+    batchTransferIdx: 19,
+    createdAt: '100',
+    updatedAt: '101',
+    status: 'WaitingBroadcast',
+    requestedAssignment: null,
+    assignments: [
+      { type: 'Fungible', amount: '9007199254740993' },
+      { type: 'MintRight', amount: null },
+    ],
+    kind: 'Mint',
+    txid: 'txid',
+    recipientId: null,
+    receiveUtxo: null,
+    changeUtxo: null,
+    expiration: null,
+    transportEndpoints: [],
+    invoiceString: null,
+    consignmentPath: null,
+  });
+  assert.equal(transfer.batchTransferIdx, 19);
+  assert.equal(transfer.amount, undefined);
+  assert.equal(transfer.amountBaseUnits, '9007199254740993');
+  assert.equal(transfer.assignments[1].type, 'MintRight');
+  assert.throws(
+    () => map.transferStatus('new-unknown-status'),
+    code('INVALID_NATIVE_RESPONSE')
+  );
+});
+test('configuration normalizes transport URLs and compares auth independently of property order', () => {
+  const a = resolveRgbLibConfig({
+    ...config,
+    indexerUrl: undefined,
+    indexer: {
+      type: 'bitcoind',
+      url: 'http://localhost',
+      auth: { username: 'user', password: 'pass' },
+    },
+  });
+  const b = resolveRgbLibConfig({
+    ...config,
+    indexerUrl: undefined,
+    indexer: {
+      auth: { password: 'pass', username: 'user' },
+      url: 'http://localhost',
+      type: 'bitcoind',
+    },
+  });
+  assert.ok(configEquals(a, b));
+  assert.equal(a.proxyEndpoint, 'rpc://localhost:3001/json-rpc');
+  assert.throws(
+    () =>
+      resolveRgbLibConfig({
+        ...config,
+        indexer: { type: 'electrum', url: 'ssl://host:50002' },
+      }),
+    code('INVALID_CONFIG')
+  );
+});
+test('transport validation works without a browser URL implementation on React Native', () => {
+  const original = globalThis.URL;
+  try {
+    globalThis.URL = class {
+      constructor() {
+        throw new Error('No WHATWG URL polyfill');
+      }
+    };
+    const value = resolveRgbLibConfig({
+      indexerUrl: 'ssl://[::1]:50002',
+      proxyEndpoint: 'rpcs://proxy.example/json-rpc',
+    });
+    assert.equal(value.indexer.type, 'electrum');
+    assert.equal(value.proxyEndpoint, 'rpcs://proxy.example/json-rpc');
+    assert.throws(
+      () => resolveRgbLibConfig({ ...config, indexerUrl: 'tcp://host:70000' }),
+      code('INVALID_CONFIG')
+    );
+  } finally {
+    globalThis.URL = original;
+  }
+});
+test('WebRGB accepts the common wallet API and advertises only verified capabilities', async () => {
+  const { wallet } = fixture();
+  await wallet.init();
+  let prompts = 0;
+  const provider = new WebRgbProvider(wallet, {
+    origin: 'https://example.com',
+    sessionApproved: true,
+    confirm: async () => {
+      prompts++;
+      return true;
+    },
+    burn: { operations: {} },
+  });
+  const info = await provider.getInfo();
+  assert.equal(info.protocol, 'RGB_L1');
+  assert.ok(!info.methods.includes('signMessage'));
+  assert.ok(!info.methods.includes('burnAsset'));
+  assert.ok(info.methods.includes('getConsignment'));
+  assert.equal(info.burnRecipientNamespaces, undefined);
+  await assert.rejects(
+    provider.signMessage('test'),
+    code('METHOD_NOT_SUPPORTED')
+  );
+  assert.equal(prompts, 0);
+});

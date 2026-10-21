@@ -8,9 +8,17 @@ import com.facebook.react.module.model.ReactModuleInfoProvider
 import java.util.HashMap
 
 class RgbPackage : BaseReactPackage() {
+  // The optional backend is excluded from compilation until its UniFFI AAR is installed.
+  private val rgbLibClass: Class<out NativeModule>? by lazy {
+    try {
+      Class.forName("com.rgbsdkrn.RgbLibModule").asSubclass(NativeModule::class.java)
+    } catch (_: ClassNotFoundException) { null }
+  }
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
     return if (name == RgbModule.NAME) {
       RgbModule(reactContext)
+    } else if (name == "RgbLib") {
+      rgbLibClass?.getConstructor(ReactApplicationContext::class.java)?.newInstance(reactContext)
     } else {
       null
     }
@@ -27,6 +35,9 @@ class RgbPackage : BaseReactPackage() {
         false,  // isCxxModule
         true // isTurboModule
       )
+      if (rgbLibClass != null) {
+        moduleInfos["RgbLib"] = ReactModuleInfo("RgbLib", "RgbLib", false, false, false, true)
+      }
       moduleInfos
     }
   }

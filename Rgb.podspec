@@ -15,13 +15,21 @@ Pod::Spec.new do |s|
 
   s.source_files = "ios/**/*.{h,m,mm,swift,cpp}"
   s.private_header_files = "ios/**/*.h"
+  s.exclude_files = "ios/RgbLibBindings/**/*"
     
-  s.vendored_frameworks = [
-    "ios/RGBLightningNode.xcframework"
-  ]
-  s.preserve_paths = [
-    "ios/RGBLightningNode.xcframework"
-  ]
+  native_frameworks = ["ios/RGBLightningNode.xcframework"]
+  if File.file?(File.join(__dir__, "ios/RgbLibBindings/manifest.json"))
+    pin = JSON.parse(File.read(File.join(__dir__, "src/bindings/rgb-lib/manifest.json")))
+    installed = JSON.parse(File.read(File.join(__dir__, "ios/RgbLibBindings/manifest.json")))
+    %w[version sourceRevision uniffiVersion swiftModule].each do |field|
+      raise "RGB Lib bindings #{field} mismatch. Reinstall the matching mobile bundle." unless installed[field] == pin[field]
+    end
+    native_frameworks += ["ios/RgbLibBindings/RGBLib.xcframework", "ios/RgbLibBindings/rgb_libFFI.xcframework"]
+    s.libraries = "c++", "resolv"
+    s.frameworks = "Security", "SystemConfiguration"
+  end
+  s.vendored_frameworks = native_frameworks
+  s.preserve_paths = native_frameworks
 
   install_modules_dependencies(s)
 end

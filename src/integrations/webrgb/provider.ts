@@ -14,7 +14,7 @@ import type {
 } from '@utexo/webrgb';
 import { WebRgbError, walletCall } from './errors';
 import { WebRgbBurnController, type WebRgbBurnOptions } from './burn';
-import type { UTEXOWallet } from '../../wallet/utexo-wallet';
+import type { OnchainWalletApi, WalletProtocol } from '../../wallet/wallet-api';
 
 export const WEBRGB_READ_METHODS = [
   'enable',
@@ -60,7 +60,7 @@ export interface WebRgbOptions {
   burn?: WebRgbBurnOptions;
 }
 type Wallet = Pick<
-  UTEXOWallet,
+  OnchainWalletApi<unknown>,
   | 'getBfaCapabilities'
   | 'burn'
   | 'getConsignment'
@@ -71,13 +71,15 @@ type Wallet = Pick<
   | 'getAddress'
   | 'blindReceive'
   | 'witnessReceive'
-  | 'signMessage'
   | 'listAssets'
   | 'getAssetBalance'
   | 'listTransfers'
   | 'refreshWallet'
   | 'decodeRGBInvoice'
->;
+> & {
+  readonly protocol?: WalletProtocol;
+  signMessage?: (message: string) => Promise<string>;
+};
 
 function integer(
   value: unknown,
@@ -223,11 +225,17 @@ export class WebRgbProvider implements SupportedProvider {
     return {
       ready: true,
       network: this.wallet.getNetwork(),
-      protocol: 'RGB_LN',
+      protocol: this.wallet.protocol ?? 'RGB_LN',
       ...(burnMethods.includes('burnAsset') && {
         burnRecipientNamespaces: ['eip155', 'tron'],
       }),
-      methods: [...WEBRGB_READ_METHODS, 'signMessage', ...burnMethods],
+      methods: [
+        ...WEBRGB_READ_METHODS,
+        ...(this.wallet.protocol !== 'RGB_L1' && this.wallet.signMessage
+          ? ['signMessage']
+          : []),
+        ...burnMethods,
+      ],
     };
   }
   async getAddress() {
@@ -236,6 +244,16 @@ export class WebRgbProvider implements SupportedProvider {
   }
   async signMessage(message: string): Promise<RgbSignMessageResult> {
     this.requireEnabled();
+    const sign =
+      this.wallet.protocol === 'RGB_L1'
+        ? undefined
+        : this.wallet.signMessage?.bind(this.wallet);
+    if (!sign) {
+      throw new WebRgbError(
+        'METHOD_NOT_SUPPORTED',
+        'This wallet does not support message signing'
+      );
+    }
     if (typeof message !== 'string' || /[\uD800-\uDFFF]/u.test(message))
       throw new WebRgbError(
         'INVALID_PARAMS',
@@ -255,7 +273,7 @@ export class WebRgbProvider implements SupportedProvider {
     if (revision !== this.revision)
       throw new WebRgbError('NOT_ENABLED', 'Session changed');
     return {
-      signature: await walletCall(() => this.wallet.signMessage(message)),
+      signature: await walletCall(() => sign(message)),
     };
   }
   async blindReceive(
@@ -400,6 +418,15 @@ export class WebRgbProvider implements SupportedProvider {
     const raw = await walletCall(() =>
       this.wallet.decodeRGBInvoice({ invoice })
     );
+    if (
+      raw.assignment.type === 'Fungible' &&
+      raw.assignment.amount === undefined
+    ) {
+      throw new WebRgbError(
+        'INTERNAL_ERROR',
+        'Invoice amount exceeds the supported exact integer range'
+      );
+    }
     const amount =
       raw.assignment.type === 'Fungible' && raw.assignment.amount
         ? integer(raw.assignment.amount, 'invoice amount')

@@ -5,7 +5,7 @@
 > **Beta release** — APIs may change between releases. 
 > Report issues on [GitHub](https://github.com/UTEXO-Protocol/rgb-sdk-rn/issues).
 
-React Native SDK for on-device RGB assets and Lightning payments via the **RGB Lightning Node (RLN)** — a native LDK-based node that runs directly on iOS and Android.
+React Native SDK for on-device RGB assets, with a choice of **RGB Lightning Node (RLN)** or **rgb-lib-bfa**. RLN also provides Lightning payments. The existing two-argument `UTEXOWallet` constructor remains backed by RLN.
 
 [![npm version](https://img.shields.io/npm/v/@utexo/rgb-sdk-rn)](https://www.npmjs.com/package/@utexo/rgb-sdk-rn)
 [![license](https://img.shields.io/npm/l/@utexo/rgb-sdk-rn)](https://www.npmjs.com/package/@utexo/rgb-sdk-rn)
@@ -34,6 +34,14 @@ cd ios && pod install
 **Android** — the native binding (`com.utexo:rgb-lightning-node-android`) resolves from Maven Central via Gradle; no extra repository configuration needed.
 
 ## Quick start
+
+For the optional on-chain rgb-lib-bfa backend, use `new UTEXOWallet({ protocol: 'RGB_L1', params, keys })`.
+The existing `new UTEXOWallet(params, signer)` requires no changes.
+See the [backend architecture, native build, and demo migration guide](docs/rgb-lib-backend.md)
+and [session example](examples/dual-backend.ts). The pinned rgb-lib release requires
+matching UniFFI mobile artifacts before rebuilding the application. The RN SDK does not compile Rust.
+
+The following example uses RLN:
 
 ```typescript
 import {
@@ -99,7 +107,33 @@ After shutdown, restart on the same instance with `await wallet.reinit(unlockPar
 
 ## Primary Class: `UTEXOWallet`
 
-`UTEXOWallet` implements the shared `IUTEXOProtocol` contract and is backed by an on-device RLN node. It owns the node lifecycle, abstracts signer authentication, and exposes the full RGB Lightning API surface.
+`UTEXOWallet` is the shared public facade. The legacy constructor selects RLN,
+implements the shared `IUTEXOProtocol` contract, and exposes the full RGB Lightning
+API. The options constructor with `protocol: 'RGB_L1'` selects an on-chain wallet;
+TypeScript infers `UTEXOWallet<'RGB_L1'>` and disallows RLN-only calls. Plain
+`UTEXOWallet` type annotations retain their existing RLN meaning.
+
+```typescript
+// Existing RLN usage stays the same, including signer and storage.
+const rln = new UTEXOWallet(rlnParams, signer);
+
+// Optional on-chain mode; keys reads this profile's mnemonic from app storage.
+const onchain = new UTEXOWallet({ protocol: 'RGB_L1', params: rgbLibParams, keys });
+await onchain.init();
+await onchain.unlock({ indexer: { type: 'electrum', url: indexerUrl }, proxyEndpoint });
+```
+
+`wallet.protocol` is read-only and uses the same `RGB_L1 | RGB_LN` values as
+WebRGB. The legacy constructor defaults to `RGB_LN`; an explicit RLN options
+form is also available: `new UTEXOWallet({ protocol: 'RGB_LN', params, signer })`.
+`getWalletIdentity()` returns `{ id, network, protocol }`. The implementation
+name is internal; do not pass a `backend` field in constructor options.
+
+Use separate storage profiles. Selecting rgb-lib does not migrate an RLN wallet.
+Both modes satisfy `instanceof UTEXOWallet`. `createUtexoWallet` remains an optional
+shorthand. For a wallet that can use either mode, use `AnyUtexoWallet` and narrow
+`wallet.protocol` before calling Lightning methods. JavaScript RLN-only calls on
+rgb-lib reject with `UNSUPPORTED_CAPABILITY`.
 
 On **mainnet**, Lightning and LSP methods on `UTEXOWallet` reject with a `WalletError` whose `code` is `LIGHTNING_DISABLED_ON_MAINNET`. On-chain BTC/RGB operations remain available. This check applies only to `UTEXOWallet`; the lower-level manager, binding, and native node are unchanged.
 

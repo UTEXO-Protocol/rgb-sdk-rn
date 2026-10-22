@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { createWalletConnectProvider } from '@utexo/webrgb-walletconnect';
@@ -6,7 +7,11 @@ import { base64 } from '@scure/base';
 import { WebRgbBurnController } from '../lib/module/integrations/webrgb/burn.js';
 import { WebRgbProvider } from '../lib/module/integrations/webrgb/index.js';
 import { validateBurnParams } from '../lib/module/wallet/operations/validation.js';
-import { encodeEvmBurnRecipient } from '../lib/module/integrations/webrgb/index.js';
+import {
+  burnDestinationHash,
+  createBurnDestination,
+  encodeEvmBurnRecipient,
+} from '../lib/module/integrations/webrgb/index.js';
 import {
   BurnOperations,
   normalizeBurnRecord,
@@ -21,7 +26,7 @@ const args = () => ({
   feeRate: 2,
   minConfirmations: 3,
 });
-function fixture() {
+function fixture(destinationRoutes) {
   let records = [],
     enabled = true,
     approve = true;
@@ -77,7 +82,7 @@ function fixture() {
           return approve;
         },
       },
-      { operations }
+      { operations, destinationRoutes }
     );
   return {
     wallet,
@@ -608,4 +613,130 @@ test('WalletConnect exposes recipient namespaces and preserves Tron recipients o
   assert.deepEqual(result.burnRecipient, tronArgs().burnRecipient);
   assert.equal(f.calls.length, 1);
   assert.equal(f.calls[0].burnRecipient, '0'.repeat(24) + tronAccount);
+});
+
+const v1Routes = [
+  { chainId: 'eip155:42161', dstEid: 0 },
+  { chainId: 'eip155:1', dstEid: 30101 },
+  { chainId: 'tron:728126428', dstEid: 30420 },
+];
+test('V1 destination commitments match independent go-ethereum ABI vectors from utexo-bridge-fe', () => {
+  const { vectors } = JSON.parse(
+    readFileSync(
+      new URL('./fixtures/burn-destination-vectors.json', import.meta.url)
+    )
+  );
+  for (const vector of vectors)
+    assert.equal(burnDestinationHash(vector), vector.hash, vector.name);
+  const destination = createBurnDestination(args().burnRecipient, v1Routes);
+  for (const invalid of [
+    null,
+    {},
+    { ...destination, version: 2 },
+    { ...destination, destinationChainId: Number.MAX_SAFE_INTEGER + 1 },
+    { ...destination, dstEid: -1 },
+    { ...destination, dstEid: 2 ** 32 },
+    { ...destination, recipient: '0x123' },
+    { ...destination, recipient: '0x12' },
+  ])
+    assert.throws(() => burnDestinationHash(invalid));
+  assert.throws(() => createBurnDestination(args().burnRecipient, []), /route/);
+  const tron = createBurnDestination(
+    {
+      chainId: 'tron:728126428',
+      address: 'TJRabPrwbZy45sbavfcjinPJC18kjpRTv8',
+    },
+    v1Routes
+  );
+  assert.equal(tron.recipient, '0x415cbdd86a2fa8dc4bddd8a8f69dba48572eec07fb');
+});
+test('RGB_L1 advertises V1, commits the approved hash and recovers destination metadata after restart', async () => {
+  const f = fixture(v1Routes);
+  f.wallet.protocol = 'RGB_L1';
+  const provider = new WebRgbProvider(f.wallet, {
+    origin: 'https://mint.example',
+    sessionApproved: true,
+    confirm: async () => true,
+    burn: { operations: f.operations, destinationRoutes: v1Routes },
+  });
+  const info = await provider.getInfo();
+  assert.equal(info.protocol, 'RGB_L1');
+  assert.equal(info.burnDestinationVersion, 1);
+  assert.deepEqual(info.burnDestinationRoutes, v1Routes);
+  assert.ok(info.methods.includes('burnAsset'));
+  assert.ok(info.methods.includes('getConsignment'));
+  assert.ok(!info.methods.includes('signMessage'));
+  const destination = createBurnDestination(args().burnRecipient, v1Routes);
+  const result = await provider.burnAsset({
+    ...args(),
+    burnDestination: destination,
+  });
+  assert.deepEqual(result.burnDestination, destination);
+  assert.equal(
+    f.calls[0].burnRecipient,
+    burnDestinationHash(destination).slice(2)
+  );
+  const [record] = await new BurnOperations(f.wallet, f.store).records();
+  assert.deepEqual(record.metadata.burnDestination, destination);
+  assert.deepEqual(normalizeBurnRecord(record), record);
+  const status = await f.controller().getTransferStatus(txid, args().assetId);
+  assert.deepEqual(status.transfer.burnDestination, destination);
+  const altered = structuredClone(record);
+  altered.metadata.burnDestination.dstEid++;
+  assert.throws(() => normalizeBurnRecord(altered));
+  await provider.getConsignment({ assetId: args().assetId, txid });
+  assert.equal(
+    f.calls.length,
+    1,
+    'Recovery and proof reads never repeat the burn'
+  );
+});
+test('V1 rejects route or payout substitutions before approval and never silently falls back to legacy encoding', async () => {
+  const destination = createBurnDestination(args().burnRecipient, v1Routes);
+  for (const changed of [
+    { ...destination, dstEid: 1 },
+    { ...destination, destinationChainId: 1 },
+    { ...destination, recipient: `0x${'34'.repeat(20)}` },
+  ]) {
+    const f = fixture(v1Routes);
+    await assert.rejects(
+      f.controller().burnAsset({ ...args(), burnDestination: changed }),
+      { code: 'INVALID_PARAMS' }
+    );
+    assert.equal(f.prompts.length, 0);
+    assert.equal(f.calls.length, 0);
+  }
+  await assert.rejects(
+    fixture()
+      .controller()
+      .burnAsset({ ...args(), burnDestination: destination }),
+    { code: 'INVALID_PARAMS' }
+  );
+  const f = fixture(v1Routes);
+  const result = await f.controller().burnAsset(args());
+  assert.deepEqual(
+    result.burnDestination,
+    destination,
+    'Configured wallets also use V1 for local/older callers'
+  );
+});
+test('a local V1 burn exposes recovery metadata only after successful proof-sharing consent', async () => {
+  const f = fixture(v1Routes);
+  const result = await f.controller('local:wallet').burnAsset(args());
+  const bridge = f.controller();
+  assert.equal(await bridge.getTransferStatus(txid, args().assetId), null);
+  f.approve(false);
+  await assert.rejects(
+    bridge.getConsignment({ assetId: args().assetId, txid }),
+    { code: 'USER_REJECTED' }
+  );
+  assert.equal(await bridge.getTransferStatus(txid, args().assetId), null);
+  f.approve(true);
+  const proof = await bridge.getConsignment({ assetId: args().assetId, txid });
+  assert.deepEqual(base64.decode(proof.data), f.proof);
+  const status = await bridge.getTransferStatus(txid, args().assetId);
+  assert.deepEqual(status.transfer.burnDestination, result.burnDestination);
+  bridge.revoke();
+  assert.equal(await bridge.getTransferStatus(txid, args().assetId), null);
+  assert.equal(f.calls.length, 1);
 });

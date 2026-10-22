@@ -1116,9 +1116,10 @@ test('WebRGB accepts the common wallet API and advertises only verified capabili
   const info = await provider.getInfo();
   assert.equal(info.protocol, 'RGB_L1');
   assert.ok(!info.methods.includes('signMessage'));
-  assert.ok(!info.methods.includes('burnAsset'));
+  assert.ok(info.methods.includes('burnAsset'));
   assert.ok(info.methods.includes('getConsignment'));
-  assert.equal(info.burnRecipientNamespaces, undefined);
+  assert.deepEqual(info.burnRecipientNamespaces, ['eip155', 'tron']);
+  assert.equal(info.burnDestinationVersion, undefined);
   await assert.rejects(
     provider.signMessage('test'),
     code('METHOD_NOT_SUPPORTED')

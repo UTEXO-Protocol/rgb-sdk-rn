@@ -623,10 +623,19 @@ advertises `tron` only when native burn and the durable operation store are avai
 a dApp must check this field before requesting a Tron burn from an older wallet.
 EVM requests retain the `eip155:<chainId>` and `0x…` format.
 
-The native proof contains the 20 account bytes padded to 32 bytes. Tron's `41`
-version byte and checksum are not included; the destination chain is retained in
-approved journal metadata. This does not configure or verify bridge contracts.
-The bridge payout route and its contracts must be configured independently.
+For the bridge's V1 destination flow, pass deployment routes in
+`burn: { operations, destinationRoutes: [{ chainId: 'eip155:42161', dstEid: 0 }] }`.
+`getInfo()` advertises `burnDestinationVersion: 1` and these routes. The SDK
+validates the requested destination, commits its hash as the native burn reason,
+and saves it in the journal for `getTransferStatus()` recovery. Local burns can
+use `createBurnDestination()` and `burnDestinationHash()` from `/webrgb` with the
+same route configuration: pass the hash without `0x` as `burnRecipient` and save
+the destination in operation metadata. Both RGB Lib and RLN support this extension when their
+native burn and consignment capabilities are available.
+
+Without `destinationRoutes`, legacy burns keep encoding 20 account bytes padded
+to 32 bytes (Tron's `41` prefix is omitted); V1 requests are rejected. Configure
+routes to match the deployed bridge contracts.
 
 Use WebRGB and its WalletConnect adapter version `0.1.3` or newer. Payout chains
 are burn arguments; the WalletConnect session stays on `rgb:<network>`.

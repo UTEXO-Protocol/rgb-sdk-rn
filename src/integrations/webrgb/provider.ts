@@ -9,11 +9,15 @@ import type {
   RgbWitnessReceiveArgs,
   RgbWitnessReceiveResult,
   RgbSignMessageResult,
-  RgbBurnAssetArgs,
   RgbGetConsignmentArgs,
 } from '@utexo/webrgb';
 import { WebRgbError, walletCall } from './errors';
-import { WebRgbBurnController, type WebRgbBurnOptions } from './burn';
+import {
+  WebRgbBurnController,
+  type WebRgbBurnOptions,
+  type WebRgbBurnAssetArgs,
+} from './burn';
+import type { BurnDestinationRoute } from '../../wallet/operations/burn-destination';
 import type { OnchainWalletApi, WalletProtocol } from '../../wallet/wallet-api';
 
 export const WEBRGB_READ_METHODS = [
@@ -59,6 +63,10 @@ export interface WebRgbOptions {
   minConfirmations?: number;
   burn?: WebRgbBurnOptions;
 }
+export type WebRgbInfo = RgbInfo & {
+  burnDestinationVersion?: 1;
+  burnDestinationRoutes?: BurnDestinationRoute[];
+};
 type Wallet = Pick<
   OnchainWalletApi<unknown>,
   | 'getBfaCapabilities'
@@ -200,7 +208,7 @@ export class WebRgbProvider implements SupportedProvider {
       throw new WebRgbError('NOT_ENABLED', 'Connect the wallet first');
   }
 
-  async burnAsset(args: RgbBurnAssetArgs) {
+  async burnAsset(args: WebRgbBurnAssetArgs) {
     this.requireEnabled();
     if (!this.burnController)
       throw new WebRgbError(
@@ -219,7 +227,7 @@ export class WebRgbProvider implements SupportedProvider {
     return walletCall(() => this.burnController!.getConsignment(args));
   }
 
-  async getInfo(): Promise<RgbInfo> {
+  async getInfo(): Promise<WebRgbInfo> {
     this.requireEnabled();
     const burnMethods = (await this.burnController?.methods()) ?? [];
     return {
@@ -228,6 +236,7 @@ export class WebRgbProvider implements SupportedProvider {
       protocol: this.wallet.protocol ?? 'RGB_LN',
       ...(burnMethods.includes('burnAsset') && {
         burnRecipientNamespaces: ['eip155', 'tron'],
+        ...this.burnController!.destinationCapabilities(),
       }),
       methods: [
         ...WEBRGB_READ_METHODS,

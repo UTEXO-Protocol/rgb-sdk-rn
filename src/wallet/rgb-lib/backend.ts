@@ -523,6 +523,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
           params.donation ?? false,
           feeRate(params.feeRate),
           integer(params.minConfirmations ?? 1, 'minConfirmations', 1, 255),
+          // Kept for bridge compatibility; rgb-lib-bfa send has no skip-sync option.
           params.skipSync ?? false,
           this.online!.proxyEndpoint
         )

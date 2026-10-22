@@ -8,6 +8,8 @@ __changed__
 - RLN `decodeRGBInvoice()` returns `publicKey` and `encryption`. Raw `proxyRecipientId` is optional.
 - RLN `listOnchainTransfers()` reports rgb-lib-bfa `Mint` transfers as `Mint` instead of `Send`.
 - RLN `reuseAddresses: true` throws `ConfigurationError`; rgb-lib-bfa does not support address reuse.
+- RLN `onchainSend()` rejects values the bridge would truncate: `amount`, `feeRate`, `minConfirmations` and `witnessData` must be in-range integers (`ValidationError`). The default `feeRate` is now `1`. The old default `1.5` was already truncated to 1 sat/vB, so fees do not change.
+- Documented that `onchainSend()` ignores `skipSync` on both RGB_LN and RGB_L1.
 
 ## 1.0.0-beta.38
 

@@ -367,7 +367,7 @@ See [docs/lsp.md](./docs/lsp.md) for `UtexoLsp` composed flows and full examples
 | Method | Description |
 |--------|-------------|
 | `onchainReceive({ assetId?, amount?, durationSeconds?, minConfirmations?, witness? })` | RGB invoice — witness by default (`witness: true`). Pass `witness: false` for a blinded invoice |
-| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, witnessData? })` | RGB send to an invoice. The whole invoice goes to RLN, so proxy invoices keep their recipient key, encryption and expiry. `assetId` and `amount` default to the invoice values. `skipSync` is ignored on RLN |
+| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, witnessData? })` | RGB send to an invoice. The whole invoice goes to RLN, so proxy invoices keep their recipient key, encryption and expiry. `assetId` and `amount` default to the invoice values. `feeRate` is an integer in sat/vB (default 1 on RLN, 2 on RGB_L1). `skipSync` is accepted but ignored by both engines; the send always syncs |
 | `listOnchainTransfers(assetId?)` | RGB transfer history |
 
 #### RLN Extras — Node Info

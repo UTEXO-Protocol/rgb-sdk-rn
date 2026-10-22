@@ -184,6 +184,27 @@ function invoiceFungibleAmount(assignment: string): number | undefined {
   return amount;
 }
 
+/**
+ * Default on-chain RGB fee rate in sat/vB. It was 1.5, which the bridge
+ * silently truncated to 1, so 1 keeps the fee callers already paid.
+ */
+const DEFAULT_RLN_SEND_FEE_RATE = 1;
+
+/** Integer the TurboModule bridge carries without rounding or truncation. */
+function bridgeInteger(
+  value: number,
+  field: string,
+  min: number,
+  max: number
+): number {
+  if (!Number.isSafeInteger(value) || value < min || value > max)
+    throw new ValidationError(
+      `${field} must be an integer between ${min} and ${max}`,
+      field
+    );
+  return value;
+}
+
 function parseOutpoint(s: string): Outpoint {
   const i = s.lastIndexOf(':');
   return { txid: s.slice(0, i) || s, vout: Number(s.slice(i + 1)) || 0 };
@@ -1158,6 +1179,38 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     // RLN rejects proxy recipients built from decoded fields, so the whole
     // invoice goes to native. Decoding here only fills defaults. RLN syncs
     // inside the send; `skipSync` does not apply.
+    // The bridge truncates numbers to native integers, so reject anything
+    // that would change value on the way.
+    if (params.amount !== undefined)
+      bridgeInteger(params.amount, 'amount', 1, Number.MAX_SAFE_INTEGER);
+    const feeRate = bridgeInteger(
+      params.feeRate ?? DEFAULT_RLN_SEND_FEE_RATE,
+      'feeRate',
+      1,
+      Number.MAX_SAFE_INTEGER
+    );
+    const minConfirmations = bridgeInteger(
+      params.minConfirmations ?? 1,
+      'minConfirmations',
+      0,
+      255
+    );
+    const witnessData = params.witnessData ?? null;
+    if (witnessData) {
+      bridgeInteger(
+        witnessData.amountSat,
+        'witnessData.amountSat',
+        1,
+        Number.MAX_SAFE_INTEGER
+      );
+      if (witnessData.blinding !== undefined)
+        bridgeInteger(
+          witnessData.blinding,
+          'witnessData.blinding',
+          0,
+          Number.MAX_SAFE_INTEGER
+        );
+    }
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
     if (!assetId)
@@ -1176,9 +1229,9 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       assetId,
       amount,
       params.donation ?? false,
-      params.feeRate ?? 1.5,
-      params.minConfirmations ?? 1,
-      params.witnessData ?? null
+      feeRate,
+      minConfirmations,
+      witnessData
     );
   }
 

@@ -101,6 +101,51 @@ test('onchainSend rejects invoice amounts beyond the safe integer range', async 
   );
 });
 
+test('onchainSend defaults to an integer fee rate', async () => {
+  const { wallet, calls } = walletWith({
+    rlnDecodeRgbInvoice: async () => decoded(),
+    rlnSendRgbInvoice: async () => ({ txid: 'tx', batchTransferIdx: 0 }),
+  });
+  await wallet.onchainSend({
+    invoice: INVOICE,
+    witnessData: { amountSat: 1000 },
+  });
+  const [, args] = calls.find(([name]) => name === 'rlnSendRgbInvoice');
+  assert.equal(args[4], 1);
+  assert.equal(args[5], 1);
+});
+
+for (const [name, request, field] of [
+  ['fractional feeRate', { feeRate: 1.5 }, 'feeRate'],
+  ['zero feeRate', { feeRate: 0 }, 'feeRate'],
+  ['fractional amount', { amount: 2.5 }, 'amount'],
+  ['unsafe amount', { amount: 2 ** 53 }, 'amount'],
+  ['zero amount', { amount: 0 }, 'amount'],
+  ['minConfirmations above u8', { minConfirmations: 256 }, 'minConfirmations'],
+  [
+    'fractional witness amount',
+    { witnessData: { amountSat: 1000.5 } },
+    'witnessData.amountSat',
+  ],
+  [
+    'negative witness blinding',
+    { witnessData: { amountSat: 1000, blinding: -1 } },
+    'witnessData.blinding',
+  ],
+]) {
+  test(`onchainSend rejects ${name} before calling native`, async () => {
+    const { wallet, calls } = walletWith({
+      rlnDecodeRgbInvoice: async () => decoded(),
+      rlnSendRgbInvoice: async () => ({ txid: 'tx', batchTransferIdx: 0 }),
+    });
+    await assert.rejects(
+      wallet.onchainSend({ invoice: INVOICE, ...request }),
+      (error) => error instanceof ValidationError && error.field === field
+    );
+    assert.equal(calls.length, 0);
+  });
+}
+
 test('decodeRGBInvoice maps proxy invoice fields', async () => {
   const { wallet } = walletWith({
     rlnDecodeRgbInvoice: async () => decoded(),

@@ -93,6 +93,11 @@ public class RgbSwiftHelper: NSObject {
             let maxMediaUploadSizeMb = request["maxMediaUploadSizeMb"] as? NSNumber else {
         return ["error": "Invalid rlnCreateNode request"] as NSDictionary
       }
+      // Claim the engine before native creation. An RGB Lib profile must never be
+      // opened as an RLN node, including concurrent opens of an empty directory.
+      if let rejected = try RlnStorageClaim.claim(storageDirPath) {
+        return rejected
+      }
       let virtualPeerPubkeys: [String]? = (request["virtualPeerPubkeys"] as? [String]).flatMap { $0.isEmpty ? nil : $0 }
       let initReq = SdkInitRequest(
         storageDirPath: storageDirPath,

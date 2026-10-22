@@ -114,6 +114,12 @@ class RgbModule(reactContext: ReactApplicationContext) :
   ) {
     coroutineScope.launch(Dispatchers.IO) {
       try {
+        try {
+          RlnStorageClaim.claim(storageDirPath)
+        } catch (e: RlnStorageClaimError) {
+          promise.reject(e.code, e.message)
+          return@launch
+        }
         android.util.Log.d("RgbModule", "[rlnCreateNode] network=$network vssUrl=$vssUrl lspBaseUrl=$lspBaseUrl daemonPort=$daemonListeningPort ldkPort=$ldkPeerListeningPort")
         val peerPubkeysList: List<String>? = virtualPeerPubkeys?.let { arr ->
           (0 until arr.size()).map { arr.getString(it) ?: "" }.filter { it.isNotEmpty() }

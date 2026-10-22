@@ -1,5 +1,5 @@
 /**
- * Type-level conformance check — compiled, never bundled.
+ * Type-level conformance check — checked by typecheck, never published.
  *
  * The mirror of web's `contract-conformance.ts`: that file proves the carriers
  * are *present* and reachable on web, this one proves they are *absent* here
@@ -11,11 +11,29 @@
  */
 
 import type { IUTEXOProtocol } from '@utexo/rgb-sdk-core';
-import type { UTEXOWallet } from './wallet/utexo-wallet';
-import type { IRLNUnlockParams } from './binding/IRLN';
-import type { RefreshTransfersResult } from './wallet/refresh-types';
+import type { UTEXOWallet } from '../../src/wallet/utexo-wallet';
+import type { IRLNUnlockParams } from '../../src/binding/IRLN';
+import type { RefreshTransfersResult } from '../../src/wallet/refresh-types';
+import type { RlnWallet } from '../../src/wallet/rln/rln-wallet';
+import type { RgbLibWallet } from '../../src/wallet/rgb-lib/rgb-lib-wallet';
+import type { OnchainWalletApi } from '../../src/wallet/wallet-api';
+import type { RgbLibUnlockParams } from '../../src/wallet/rgb-lib/config';
 
 declare const concrete: UTEXOWallet;
+declare const onchain: UTEXOWallet<'RGB_L1'>;
+type PublicMethods<T> = Pick<
+  T,
+  {
+    [K in keyof T]: T[K] extends (...args: never[]) => unknown ? K : never;
+  }[keyof T]
+>;
+// Adding a method to either engine must also update the public facade.
+const rlnSurface: PublicMethods<RlnWallet> = concrete;
+const rgbLibSurface: PublicMethods<RgbLibWallet> = onchain;
+const onchainContract: OnchainWalletApi<RgbLibUnlockParams> = onchain;
+void rlnSurface;
+void rgbLibSurface;
+void onchainContract;
 // A consumer programming against the shared contract, not the concrete class:
 const w: IUTEXOProtocol<IRLNUnlockParams> = concrete;
 
@@ -57,7 +75,7 @@ void w.signPsbt('psbt');
 void w.createUtxosBegin({ num: 1 });
 // @ts-expect-error the imperative VSS surface is gone — use backupNow()
 void w.vssBackup();
-// @ts-expect-error rgb-lib lifecycle, deleted — use unlock(params)
+// @ts-expect-error goOnline is an RGB_L1 extension, absent from the shared contract
 void w.goOnline('http://localhost:50001');
 // @ts-expect-error rgb-lib wallet concept, deleted — use getNodeInfo()
 void w.getXpub();

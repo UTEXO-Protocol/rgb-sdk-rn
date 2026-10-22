@@ -3,7 +3,7 @@ import {
   DEFAULT_TRANSPORT_ENDPOINTS,
 } from '@utexo/rgb-sdk-core';
 import type { Network } from '@utexo/rgb-sdk-core';
-import type { IRLNUnlockParams } from '../binding/IRLN';
+import type { IRLNUnlockParams } from '../../binding/IRLN';
 
 export interface NetworkEndpoints {
   indexerUrl: string;

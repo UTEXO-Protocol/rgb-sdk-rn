@@ -3,12 +3,18 @@ import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import type { BurnParams, BurnResult } from '../types';
 import { validateBurnParams } from './validation';
 import { encodeBurnRecipient } from './recipient';
+import {
+  burnDestinationHash,
+  validateBurnDestination,
+  type BurnDestination,
+} from './burn-destination';
 
 /** Wallet-owned context, retained across transport sessions and app restarts. */
 export interface BurnOperationMetadata {
   origin: string;
   network: string;
   payout: { chainId: string; address: string };
+  burnDestination?: BurnDestination;
 }
 export interface BurnOperationRecord {
   version: 2;
@@ -74,10 +80,16 @@ export function normalizeBurnRecord(value: unknown): BurnOperationRecord {
     typeof record.metadata.payout?.chainId !== 'string'
   )
     throw new Error('Invalid burn journal record');
-  if (
-    encodeBurnRecipient(record.metadata.payout) !==
-    record.params.burnRecipient?.toLowerCase()
-  )
+  const committedRecipient =
+    record.metadata.burnDestination === undefined
+      ? encodeBurnRecipient(record.metadata.payout)
+      : burnDestinationHash(
+          validateBurnDestination(
+            record.metadata.burnDestination,
+            record.metadata.payout
+          )
+        ).slice(2);
+  if (committedRecipient !== record.params.burnRecipient?.toLowerCase())
     throw new Error('Burn journal recipient does not match payout metadata');
   if (record.state === 'complete') validateResult(record.result);
   return record;
@@ -153,7 +165,13 @@ export class BurnOperations {
   ): Promise<BurnOperationRecord> {
     // Copy before entering the queue: caller mutations cannot change approved data.
     const request = { ...params };
-    const context = { ...metadata, payout: { ...metadata.payout } };
+    const context = {
+      ...metadata,
+      payout: { ...metadata.payout },
+      ...(metadata.burnDestination && {
+        burnDestination: { ...metadata.burnDestination },
+      }),
+    };
     return this.exclusive(async () => {
       validateBurnParams(request);
       await this.flush();

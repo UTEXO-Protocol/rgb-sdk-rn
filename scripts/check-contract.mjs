@@ -106,20 +106,21 @@ describe('UniFFI 0.13 response mapping', () => {
       'WAITING_BROADCAST',
       'waitingBroadcast',
     ]) {
-      wallet.rln.rlnListTransfers = async () => [
+      wallet.engine.rln.rlnListTransfers = async () => [
         { idx: 7, status, kind: 'ReceiveWitness', assignments: [] },
       ];
       assert.equal(
         (await wallet.listTransfers('asset'))[0].status,
         'WaitingBroadcast'
       );
-      wallet.rln.rlnListTransfersByTxid = wallet.rln.rlnListTransfers;
+      wallet.engine.rln.rlnListTransfersByTxid =
+        wallet.engine.rln.rlnListTransfers;
       assert.equal(
         (await wallet.listTransfersByTxid('txid'))[0].status,
         'WaitingBroadcast'
       );
     }
-    wallet.rln.rlnListTransfers = async () => [
+    wallet.engine.rln.rlnListTransfers = async () => [
       { idx: 7, status: 'FutureStatus' },
     ];
     await assert.rejects(() => wallet.listTransfers('asset'), ValidationError);
@@ -127,7 +128,7 @@ describe('UniFFI 0.13 response mapping', () => {
 
   it('preserves false as well as true for utxo.exists', async () => {
     const wallet = createWalletSync();
-    wallet.rln.rlnListUnspents = async () =>
+    wallet.engine.rln.rlnListUnspents = async () =>
       [false, true].map((exists) => ({
         utxo: {
           outpoint: `${'a'.repeat(64)}:0`,
@@ -146,7 +147,7 @@ describe('UniFFI 0.13 response mapping', () => {
 
   it('returns refresh statuses and individual failures, including unchanged records', async () => {
     const wallet = createWalletSync();
-    wallet.rln.rlnRefreshTransfers = async (skipSync) => {
+    wallet.engine.rln.rlnRefreshTransfers = async (skipSync) => {
       assert.equal(skipSync, false);
       return {
         transfers: {
@@ -172,9 +173,9 @@ describe('UniFFI 0.13 response mapping', () => {
         9: { updatedStatus: undefined, failure: undefined },
       },
     });
-    wallet.rln.rlnRefreshTransfers = async () => ({ transfers: {} });
+    wallet.engine.rln.rlnRefreshTransfers = async () => ({ transfers: {} });
     assert.deepEqual(await wallet.refreshTransfers(), { transfers: {} });
-    wallet.rln.rlnRefreshTransfers = async () => ({
+    wallet.engine.rln.rlnRefreshTransfers = async () => ({
       transfers: { 7: { updatedStatus: 'FutureStatus' } },
     });
     await assert.rejects(() => wallet.refreshTransfers(), ValidationError);
@@ -183,7 +184,7 @@ describe('UniFFI 0.13 response mapping', () => {
   it('keeps shared refreshWallet void and forwards skipSync on the RN-specific method', async () => {
     const wallet = createWalletSync();
     const calls = [];
-    wallet.rln.rlnRefreshTransfers = async (skipSync) => {
+    wallet.engine.rln.rlnRefreshTransfers = async (skipSync) => {
       calls.push(skipSync);
       return { transfers: {} };
     };
@@ -200,7 +201,7 @@ describe('UniFFI 0.13 response mapping', () => {
       { description: null, descriptionHash: 'a'.repeat(64) },
       {},
     ]) {
-      wallet.rln.rlnDecodeLnInvoice = async () => ({
+      wallet.engine.rln.rlnDecodeLnInvoice = async () => ({
         paymentHash: 'hash',
         expirySec: 60,
         timestamp: 1,
@@ -243,7 +244,7 @@ describe('Native bridge amounts', () => {
   it('rejects invalid channel and invoice amounts before calling the native manager', async () => {
     const wallet = createWalletSync();
     let calls = 0;
-    wallet.rln = new Proxy(
+    wallet.engine.rln = new Proxy(
       {},
       {
         get: () => async () => {
@@ -307,11 +308,11 @@ describe('Native bridge amounts', () => {
     const wallet = createWalletSync();
     let channel;
     const invoices = [];
-    wallet.rln.rlnOpenChannel = async (request) => {
+    wallet.engine.rln.rlnOpenChannel = async (request) => {
       channel = request;
       return { temporaryChannelId: 'channel' };
     };
-    wallet.rln.rlnLnInvoice = async (...args) => {
+    wallet.engine.rln.rlnLnInvoice = async (...args) => {
       invoices.push(args);
       return { invoice: 'invoice' };
     };
@@ -406,7 +407,7 @@ describe('Mainnet Lightning gate', () => {
       for (const network of ['mainnet', 'bitcoin', ' MAINNET ']) {
         const wallet = createWalletSync({ network, lspBaseUrl: peer.baseUrl });
         let managerCalls = 0;
-        wallet.rln = new Proxy(
+        wallet.engine.rln = new Proxy(
           {},
           {
             get: () => () => {
@@ -446,7 +447,7 @@ describe('Mainnet Lightning gate', () => {
     ]) {
       const wallet = createWalletSync({ network });
       const reachedManager = new Error('Reached manager');
-      wallet.rln = new Proxy(
+      wallet.engine.rln = new Proxy(
         {},
         {
           get: () => async () => {
@@ -476,9 +477,9 @@ describe('Mainnet Lightning gate', () => {
     await assert.rejects(wallet.connectPeer('peer'), {
       code: 'LIGHTNING_DISABLED_ON_MAINNET',
     });
-    wallet.rln.rlnAddress = async () => ({ address: 'bc1qexample' });
-    wallet.rln.rlnSendBtc = async () => ({ txid: 'txid' });
-    wallet.rln.rlnRgbInvoice = async () => ({ invoice: 'rgb:invoice' });
+    wallet.engine.rln.rlnAddress = async () => ({ address: 'bc1qexample' });
+    wallet.engine.rln.rlnSendBtc = async () => ({ txid: 'txid' });
+    wallet.engine.rln.rlnRgbInvoice = async () => ({ invoice: 'rgb:invoice' });
     assert.equal(await wallet.getAddress(), 'bc1qexample');
     assert.equal(
       await wallet.sendBtc({
@@ -505,7 +506,7 @@ describe('BFA mapping', () => {
       addedAt: 1,
       balance: { settled: 5, future: 5, spendable: 5 },
     };
-    wallet.rln.rlnListAssets = async () => ({ bfa: [asset] });
+    wallet.engine.rln.rlnListAssets = async () => ({ bfa: [asset] });
     assert.equal((await wallet.listAssets()).bfa[0].balance.spendable, 5);
     asset.balance.spendable = Number.MAX_SAFE_INTEGER + 1;
     await assert.rejects(wallet.listAssets(), /exact integer range/);

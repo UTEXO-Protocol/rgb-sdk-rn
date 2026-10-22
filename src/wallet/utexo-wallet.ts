@@ -1,1301 +1,676 @@
-import {
-  toSafeBridgeNumber,
-  validateBurnParams,
-  validateConsignmentLookup,
-} from './operations/validation';
-import type { BurnParams, BurnResult, ListAssets, Transfer } from './types';
-import { getTransferAmount, parseTransferAssignment } from './transfer-amounts';
-import type { RefreshTransfersResult } from './refresh-types';
-import type {
-  IUTEXOProtocol,
-  WalletCapabilities,
-  CreateLnInvoiceRequest,
-  UTEXOWalletCreateParams,
-  Network,
-  BtcBalance,
-  Balance,
-  Unspent,
-  Utxo,
-  RgbAllocation,
-  Assignment,
-  AssignmentType,
-  TransactionType,
-  TransferKind,
-  Transaction,
-  Outpoint,
-  AssetNIA,
-  AssetIfa,
-  AssetUDA,
-  AssetCFA,
-  AssetBalance,
-  InvoiceRequest,
-  InvoiceReceiveData,
-  InvoiceData,
-  IssueAssetNiaRequestModel,
-  IssueAssetIfaRequestModel,
-  InflateAssetIfaRequestModel,
-  SendBtcBeginRequestModel,
-  FailTransfersRequest,
-  WalletBackupResponse,
-  LightningReceiveRequest,
-  LightningSendRequest,
-  ListLightningPaymentsResponse,
-  PayLightningInvoiceRequestModel,
-  OnchainReceiveRequestModel,
-  OnchainReceiveResponse,
-  GetFeeEstimationResponse,
-  OnchainSendRequestModel,
-  OnchainSendResponse,
-  BitcoinNetwork,
-} from '@utexo/rgb-sdk-core';
-import {
-  AssetSchema,
-  WalletError,
-  normalizeRlnNetwork,
-  normalizeTransferStatus,
-} from '@utexo/rgb-sdk-core';
+import { RlnWallet } from './rln/rln-wallet';
+import type { UTEXOWalletNodeParams } from './rln/rln-wallet';
+import { RgbLibWallet } from './rgb-lib/rgb-lib-wallet';
+import type { RgbLibUnlockParams } from './rgb-lib/config';
+import type { IRLNSigner } from './rln/rln-signers';
+import type { WalletProtocol } from './wallet-api';
+import type { WalletInit, UTEXOWalletOptions } from './wallet-options';
+import { WalletBackendError } from './wallet-errors';
+import type { BfaCapabilities, BurnParams, BurnResult } from './types';
+import { snapshot } from './runtime/snapshot';
 
-import { RLNManager, createRLNManager } from './rln-manager';
-import type { IRLNSigner } from './rln-signers';
-import type { IRLNUnlockParams, IRLNNodeCreateParams } from '../binding/IRLN';
-import { toNativeNetwork } from '../binding/Interfaces';
-import {
-  getDefaultLspBaseUrl,
-  resolveLspBaseUrl,
-  resolveUnlockParams,
-} from './network-defaults';
-import type {
-  RlnCheckIndexerUrlResponse,
-  RlnBtcBalance,
-  RlnAssetBalance,
-  RlnAssetNia,
-  RlnAssetBfa,
-  RlnAssetCfa,
-  RlnAssetIfa,
-  RlnAssetUda,
-  RlnListAssetsResponse,
-  RlnRgbInvoiceResponse,
-  RlnDecodeRgbInvoiceResponse,
-  RlnTransaction,
-  RlnTransfer,
-  RlnUnspent,
-} from '../binding/rln-types';
-import type {
-  CreateHodlInvoiceParams,
-  HodlInvoiceResult,
-  ApayNewResponse,
-  LspPeer,
-  LightningChannel,
-  LightningNodeInfo,
-  LightningPayment,
-  LightningInvoice,
-  DecodedLnInvoice,
-  OpenChannelParams,
-  OpenChannelResult,
-  LightningNetworkInfo,
-  LightningPeer,
-  SendPaymentResult,
-} from '@utexo/rgb-sdk-core';
-import type { RlnPaymentStatus, RlnInvoiceStatus } from '@utexo/rgb-sdk-core';
-import {
-  normalizeInvoiceStatus,
-  tryNormalizePaymentStatus,
-} from '@utexo/rgb-sdk-core';
-import { UtexoLsp } from '@utexo/rgb-sdk-core';
-import { UtexoLSPClient } from '@utexo/rgb-sdk-core';
-import {
-  toLightningChannel,
-  toLightningNodeInfo,
-  toLightningPayment,
-  toLightningInvoice,
-  toDecodedLnInvoice,
-  toRefreshTransfersResult,
-  toLightningNetworkInfo,
-  toLightningPeer,
-  toSendPaymentResult,
-} from '../binding/mappers';
+export type { UTEXOWalletNodeParams } from './rln/rln-wallet';
+export type { UTEXOWalletOptions } from './wallet-options';
 
-// ── Constructor params ────────────────────────────────────────────────────────
+/** A wallet with either protocol; narrow protocol before protocol-specific calls. */
+export type AnyUtexoWallet = UTEXOWallet<'RGB_LN'> | UTEXOWallet<'RGB_L1'>;
 
-/**
- * RN wallet params — the shared contract plus RN-only extras.
- *
- * `mnemonic` and `password` are deliberately Omit-ted from the shared params:
- * on RN those credentials live in the signer (a required second constructor
- * argument), not in the plain config object. Omitting them here states that
- * split in the type rather than leaving two places that could disagree.
- */
-export interface UTEXOWalletNodeParams extends Omit<
-  UTEXOWalletCreateParams,
-  'mnemonic' | 'password'
-> {
-  storageDirPath: string;
-  daemonListeningPort: number;
-  ldkPeerListeningPort: number;
-  network: BitcoinNetwork;
-  maxMediaUploadSizeMb?: number;
-  enableVirtualChannelsV0?: boolean;
-  virtualPeerPubkeys?: string[] | null;
-  vssUrl?: string | null;
-  vssAllowHttp?: boolean;
-  vssAllowEmptyRestore?: boolean;
-  lspBaseUrl?: string | null;
-  lspBearerToken?: string | null;
-  /** Reuse on-chain addresses instead of deriving a fresh one per call. Defaults to false. */
-  reuseAddresses?: boolean;
-}
+// A union generic loses the correlation between an engine and its unlock params.
+// Keep shared operations available, but require a concrete protocol to unlock.
+type ConcreteWallet<P extends WalletProtocol> = WalletProtocol extends P
+  ? never
+  : UTEXOWallet<P>;
 
-// ── Type-mapping helpers (module-private) ─────────────────────────────────────
-
-function parseAssignment(s: string): Assignment {
-  const m = s.match(/Fungible\((\d+)\)/);
-  if (m) return { type: 'Fungible', amount: Number(m[1]) };
-  const types: AssignmentType[] = [
-    'NonFungible',
-    'InflationRight',
-    'ReplaceRight',
-    'Any',
-  ];
-  for (const t of types) {
-    if (s.includes(t)) return { type: t };
-  }
-  return { type: 'Any' };
-}
-
-function parseOutpoint(s: string): Outpoint {
-  const i = s.lastIndexOf(':');
-  return { txid: s.slice(0, i) || s, vout: Number(s.slice(i + 1)) || 0 };
-}
-
-function mapBtcBalance(b: RlnBtcBalance): BtcBalance {
-  return b as unknown as BtcBalance;
-}
-
-function mapBalance(b: RlnAssetBalance): Balance {
-  return { settled: b.settled, future: b.future, spendable: b.spendable };
-}
-
-function mapAssetBalance(b: RlnAssetBalance): AssetBalance {
-  const raw = b as any;
-  return {
-    settled: b.settled,
-    future: b.future,
-    spendable: b.spendable,
-    offchainOutbound: b.offchainOutbound ?? raw.offchain_outbound,
-    offchainInbound: b.offchainInbound ?? raw.offchain_inbound,
-  };
-}
-
-function mapUtxo(u: RlnUnspent): Unspent {
-  return {
-    utxo: {
-      outpoint: parseOutpoint(u.utxo.outpoint),
-      btcAmount: u.utxo.btcAmount,
-      colorable: u.utxo.colorable,
-      exists: u.utxo.exists,
-    } as Utxo,
-    rgbAllocations: (u.rgbAllocations ?? []).map(
-      (a): RgbAllocation => ({
-        assetId: a.assetId,
-        assignment: parseAssignment(a.assignment),
-        settled: a.settled,
-      })
-    ),
-    pendingBlinded: u.pendingBlinded ?? 0,
-  };
-}
-
-function mapTransaction(t: RlnTransaction): Transaction {
-  // RLNBinding canonicalizes the native enum to SCREAMING_SNAKE; map it onto
-  // the core TransactionType vocabulary. Every RLN TransactionType variant has
-  // a counterpart, so 'User' is only the fallback for an unrecognized value.
-  const typeMap: Record<string, TransactionType> = {
-    RGB_SEND: 'RgbSend',
-    DRAIN: 'Drain',
-    CREATE_UTXOS: 'CreateUtxos',
-    SEND_BTC: 'SendBtc',
-    INCOMING: 'Incoming',
-  };
-  return {
-    txid: t.txid,
-    transactionType: typeMap[t.transactionType ?? ''] ?? 'User',
-    received: t.received ?? 0,
-    sent: t.sent ?? 0,
-    fee: t.fee ?? 0,
-    confirmationTime: t.confirmationTime,
-  };
-}
-
-const VALID_TRANSFER_KINDS: Record<TransferKind, true> = {
-  Issuance: true,
-  ReceiveBlind: true,
-  ReceiveWitness: true,
-  Send: true,
-  Inflation: true,
-  Burn: true,
+type Engine<P extends WalletProtocol> = P extends 'RGB_LN'
+  ? RlnWallet
+  : RgbLibWallet;
+type SharedMethod = {
+  [K in keyof RgbLibWallet]: RgbLibWallet[K] extends (
+    ...args: never[]
+  ) => unknown
+    ? K
+    : never;
+}[keyof RgbLibWallet] &
+  keyof RlnWallet;
+type Method<P extends WalletProtocol, K extends SharedMethod> = Extract<
+  Engine<P>[K],
+  (...args: never[]) => unknown
+>;
+// Both engines share these zero-argument signatures; the generic Method<>
+// types cannot be resolved inside the class body.
+type VirtualAliases = {
+  init(): Promise<void>;
+  destroy(): Promise<void>;
+  refreshTransfers(): Promise<unknown>;
 };
 
-function isKnown(
-  table: Record<string, true>,
-  value: string | undefined
-): boolean {
-  return value != null && Object.prototype.hasOwnProperty.call(table, value);
-}
-
-function mapTransfer(t: RlnTransfer): Transfer {
-  const transfer: Transfer = {
-    idx: t.idx,
-    batchTransferIdx: 0,
-    createdAt: t.createdAt ?? 0,
-    updatedAt: t.updatedAt ?? 0,
-    status: normalizeTransferStatus(t.status),
-    requestedAssignment:
-      t.requestedAssignment == null
-        ? undefined
-        : parseTransferAssignment(t.requestedAssignment),
-    assignments: (t.assignments ?? []).map(parseTransferAssignment),
-    kind: (isKnown(VALID_TRANSFER_KINDS, t.kind)
-      ? t.kind
-      : 'Send') as TransferKind,
-    txid: t.txid,
-    recipientId: t.recipientId,
-    receiveUtxo: t.receiveUtxo ? parseOutpoint(t.receiveUtxo) : undefined,
-    changeUtxo: t.changeUtxo ? parseOutpoint(t.changeUtxo) : undefined,
-    expiration: t.expiration,
-    transportEndpoints: (t.transportEndpoints ?? []).map((e) => ({
-      endpoint: e.endpoint,
-      transportType: e.transportType,
-      used: e.used,
-    })),
-  };
-  return { ...transfer, ...getTransferAmount(transfer) };
-}
-
-function mapAssetNia(a: RlnAssetNia): AssetNIA {
-  return {
-    assetId: a.assetId,
-    ticker: a.ticker,
-    name: a.name,
-    details: a.details,
-    precision: a.precision,
-    issuedSupply: a.issuedSupply,
-    timestamp: a.timestamp,
-    addedAt: a.addedAt,
-    balance: mapBalance(a.balance),
-    media: a.media
-      ? { filePath: a.media.filePath, mime: a.media.mime }
-      : undefined,
-  };
-}
-
-function mapAssetCfa(a: RlnAssetCfa): AssetCFA {
-  return {
-    assetId: a.assetId,
-    name: a.name,
-    details: a.details,
-    precision: a.precision,
-    issuedSupply: a.issuedSupply,
-    timestamp: a.timestamp,
-    addedAt: a.addedAt,
-    balance: mapBalance(a.balance),
-    media: a.media
-      ? { filePath: a.media.filePath, mime: a.media.mime }
-      : undefined,
-  };
-}
-
-function mapAssetIfa(a: RlnAssetIfa): AssetIfa {
-  return {
-    assetId: a.assetId,
-    ticker: a.ticker,
-    name: a.name,
-    details: a.details,
-    precision: a.precision,
-    initialSupply: a.initialSupply,
-    maxSupply: a.maxSupply,
-    knownCirculatingSupply: a.knownCirculatingSupply,
-    timestamp: a.timestamp,
-    addedAt: a.addedAt,
-    balance: mapBalance(a.balance),
-    media: a.media
-      ? { filePath: a.media.filePath, mime: a.media.mime }
-      : undefined,
-    rejectListUrl: a.rejectListUrl,
-  };
-}
-
-function mapAssetUda(a: RlnAssetUda): AssetUDA {
-  return {
-    assetId: a.assetId,
-    ticker: a.ticker,
-    name: a.name,
-    details: a.details,
-    precision: a.precision,
-    timestamp: a.timestamp,
-    addedAt: a.addedAt,
-    balance: mapBalance(a.balance),
-    token: a.token as AssetUDA['token'],
-  };
-}
-
-function mapAssetBfa(asset: RlnAssetBfa): RlnAssetBfa {
-  // The current shared SDK exposes numeric balances. Do not return rounded u64s.
-  for (const value of [
-    asset.initialSupply,
-    asset.balance.settled,
-    asset.balance.future,
-    asset.balance.spendable,
-  ]) {
-    if (!Number.isSafeInteger(value) || value < 0)
-      throw new Error(
-        'BFA supply or balance exceeds the supported exact integer range'
-      );
-  }
-  return { ...asset, balance: mapBalance(asset.balance) };
-}
-
-function mapListAssets(r: RlnListAssetsResponse): ListAssets {
-  return {
-    bfa: (r.bfa ?? []).map(mapAssetBfa),
-    nia: (r.nia ?? []).map(mapAssetNia),
-    cfa: (r.cfa ?? []).map(mapAssetCfa),
-    ifa: (r.ifa ?? []).map(mapAssetIfa),
-    uda: (r.uda ?? []).map(mapAssetUda),
-  };
-}
-
-function mapInvoiceReceiveData(r: RlnRgbInvoiceResponse): InvoiceReceiveData {
-  return {
-    invoice: r.invoice,
-    recipientId: r.recipientId ?? '',
-    expirationTimestamp: r.expirationTimestamp ?? null,
-    batchTransferIdx: r.batchTransferIdx,
-  };
-}
-
-function mapInvoiceData(
-  r: RlnDecodeRgbInvoiceResponse,
-  invoice: string
-): InvoiceData {
-  const schemaMap: Record<string, AssetSchema> = {
-    Nia: AssetSchema.Nia,
-    Uda: AssetSchema.Uda,
-    Cfa: AssetSchema.Cfa,
-  };
-  return {
-    invoice,
-    recipientId: r.recipientId,
-    assetSchema: r.assetSchema ? schemaMap[r.assetSchema] : undefined,
-    assetId: r.assetId,
-    network: normalizeRlnNetwork(r.network),
-    assignment: parseAssignment(r.assignment),
-    expirationTimestamp: r.expirationTimestamp ?? null,
-    transportEndpoints: r.transportEndpoints,
-  };
-}
-
-// ── UTEXOWallet ────────────────────────────────────────────────────────────
-
-export class UTEXOWallet implements IUTEXOProtocol<IRLNUnlockParams> {
-  /**
-   * All three optional groups are **absent** on this platform, so the carrier
-   * properties are simply not present — there is nothing to call, and the
-   * compiler says so at the call site. This replaces the previous approach of
-   * declaring the methods and throwing.
-   *
-   * The absences are architectural, not unfinished work: web bundles an rgb-lib
-   * wallet in wasm *plus* the RLN node, while this SDK has only the node. No
-   * second engine means no PSBT to hand out (`psbt`), no externally-signed
-   * begin/end flows (`beginEnd`), and one state store that the node replicates
-   * itself rather than two needing manual backup.
-   */
+/**
+ * One public wallet constructor. The legacy two-argument form always selects RLN.
+ * The options form infers the protocol, including its unlock and on-chain DTO types.
+ * Each instance owns exactly one implementation for its entire lifetime.
+ */
+export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
   readonly psbt = undefined;
   readonly beginEnd = undefined;
-
-  /** Derived from carrier presence, so it cannot drift from reality. */
-  get capabilities(): WalletCapabilities {
-    return {
-      psbtSigning: this.psbt !== undefined,
-      beginEndFlows: this.beginEnd !== undefined,
-    };
-  }
-
-  private rln: RLNManager;
-  private readonly params: UTEXOWalletNodeParams;
-  private readonly signer: IRLNSigner;
-  private disposed = false;
-  /** True once rlnCreateNode has run (init/reinit). Virtual-channel params are baked then. */
-  private nodeCreated = false;
-
-  constructor(params: UTEXOWalletNodeParams, signer: IRLNSigner) {
-    this.params = { ...params };
-    this.signer = signer;
-    this.rln = createRLNManager();
-  }
-
-  // ── RLN lifecycle (primary API) ───────────────────────────────────────────
-
-  /** First-time init: createNode + signer.initNode (writes keys to disk). */
-  async init(): Promise<void> {
-    await this.rln.rlnCreateNode(this.buildNodeParams());
-    this.nodeCreated = true;
-    await this.signer.initNode(this.rln, this.params.storageDirPath);
-  }
-
-  /** Unlock the node (every start). Accepts the same params as IRLNUnlockParams. */
-  async unlock(params: IRLNUnlockParams): Promise<void> {
-    await this.signer.unlockNode(
-      this.rln,
-      resolveUnlockParams(this.params.network, params),
-      this.params.storageDirPath
-    );
-  }
-
-  /**
-   * Restart after shutdown: recreates the internal RLNManager (old one's rlnNodeId
-   * would block rlnCreateNode), then calls createNode (bridge detects SHUTDOWN → INITIALIZED).
-   * Call shutdown() before this on the same instance.
-   */
-  async reinit(params?: IRLNUnlockParams): Promise<void> {
-    this.rln = createRLNManager();
-    await this.rln.rlnCreateNode(this.buildNodeParams());
-    this.nodeCreated = true;
-    if (params)
-      await this.signer.unlockNode(
-        this.rln,
-        resolveUnlockParams(this.params.network, params),
-        this.params.storageDirPath
-      );
-  }
-
-  /** Stop the node. Bridge marks the entry as SHUTDOWN (restartable via reinit). */
-  async shutdown(): Promise<void> {
-    await this.rln.rlnShutdown();
-  }
-
-  /** Full cleanup: shutdown + destroyNode + signer.dispose. */
-  async destroy(): Promise<void> {
-    try {
-      await this.rln.rlnShutdown();
-    } catch {}
-    try {
-      await this.rln.rlnDestroyNode();
-    } catch {}
-    await this.signer.dispose?.(this.rln);
-    this.disposed = true;
-  }
-
-  // ── Initialization & Lifecycle ───────────────────────────
-
-  /** Backward-compat alias for init(). */
-  async initialize(): Promise<void> {
-    return this.init();
-  }
-
-  // `goOnline` and `getXpub` are gone, not stubbed: the first was rgb-lib
-  // lifecycle superseded by `unlock(params)`, the second an rgb-lib wallet
-  // concept with no meaning on an RLN node (`getNodeInfo()` covers the real
-  // need).
-
-  getNetwork(): Network {
-    return this.params.network as Network;
-  }
-
-  async dispose(): Promise<void> {
-    return this.destroy();
-  }
-
-  isDisposed(): boolean {
-    return this.disposed;
-  }
-
-  // ── Balance & Address ────────────────────────────────────
-
-  async getBtcBalance(): Promise<BtcBalance> {
-    return mapBtcBalance(await this.rln.rlnBtcBalance(false));
-  }
-
-  async getAddress(): Promise<string> {
-    return (await this.rln.rlnAddress()).address;
-  }
-
-  /**
-   * Derives a fresh on-chain address, matching getAddress()'s vanilla (BTC)
-   * wallet. Platform extra — address rotation left the shared contract because
-   * the *coloured* variant threw on both platforms.
-   */
-  async rotateVanillaAddress(): Promise<string> {
-    return (await this.rln.rlnRotateAddress()).address;
-  }
-
-  // ── UTXO Management ───────────────────────────────────────────────────────
-
-  async listUnspents(): Promise<Unspent[]> {
-    return (await this.rln.rlnListUnspents(false)).map(mapUtxo);
-  }
-
-  // `createUtxosBegin`/`createUtxosEnd` belong to the `beginEnd` carrier, which
-  // this wallet does not expose — the node creates UTXOs atomically and signs
-  // internally, so there is no PSBT to hand out. `createUtxos()` below is the
-  // whole operation.
-
-  async createUtxos(params: {
-    upTo?: boolean;
-    num?: number;
-    size?: number;
-    feeRate?: number;
-  }): Promise<number> {
-    await this.rln.rlnCreateUtxos(
-      params.upTo ?? true,
-      params.num ?? null,
-      params.size ?? null,
-      params.feeRate ?? 1.5,
-      false
-    );
-    return params.num ?? 0;
-  }
-
-  async getBfaCapabilities() {
-    const native = await this.rln.rlnBfaCapabilities();
-    return {
-      ...native,
-      burn: native.burn && this.signer.supportsBurn === true,
-    };
-  }
-  /** Irreversible. This low-level method does not retry or deduplicate burns. */
-  async burn(params: BurnParams): Promise<BurnResult> {
-    validateBurnParams(params);
-    if (!(await this.getBfaCapabilities()).burn)
-      throw new Error('Burn is unsupported by this native build or signer');
-    return this.rln.rlnBurn(params);
-  }
-  /** Standard Base64 of the saved consignment bytes. No regeneration. */
-  async getConsignment(assetId: string, txid: string): Promise<string> {
-    validateConsignmentLookup(assetId, txid);
-    return this.rln.rlnGetConsignment(assetId, txid);
-  }
-  /** Local sandbox path. Never expose it to a dApp. */
-  async getConsignmentPath(assetId: string, txid: string): Promise<string> {
-    validateConsignmentLookup(assetId, txid);
-    return this.rln.rlnGetConsignmentPath(assetId, txid);
-  }
-
-  // ── Asset Operations ────────────────────────────────────
-
-  async listAssets(): Promise<ListAssets> {
-    return mapListAssets(await this.rln.rlnListAssets([]));
-  }
-
-  async getAssetBalance(asset_id: string): Promise<AssetBalance> {
-    return mapAssetBalance(await this.rln.rlnAssetBalance(asset_id));
-  }
-
-  async issueAssetNia(params: IssueAssetNiaRequestModel): Promise<AssetNIA> {
-    const raw = await this.rln.rlnIssueAssetNia(
-      params.ticker,
-      params.name,
-      params.precision,
-      params.amounts
-    );
-    return mapAssetNia(raw);
-  }
-
-  /** Issue an inflatable (IFA) asset — mapped like `listAssets().ifa` entries. */
-  async issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<AssetIfa> {
-    return mapAssetIfa(
-      await this.rln.rlnIssueAssetIfa(
-        params.ticker,
-        params.name,
-        params.precision,
-        params.amounts,
-        params.inflationAmounts,
-        params.rejectListUrl
-      )
-    );
-  }
-
-  /**
-   * Atomic IFA inflation.
-   *
-   * The node signs internally, so there is no begin/end pair here and no
-   * `mnemonic` parameter — contrast rgb-sdk-web, which has an rgb-lib wallet
-   * and therefore both. `inflateBegin`/`inflateEnd` live on the `beginEnd`
-   * carrier, which this wallet does not expose: a genuine platform difference,
-   * not a gap.
-   *
-   * Returns only a `txid`: the uniffi `InflateResponse` carries no
-   * `batchTransferIdx` (inflation is not a batch transfer), so none is
-   * invented here.
-   */
-  async inflate(
-    params: InflateAssetIfaRequestModel
-  ): Promise<{ txid: string }> {
-    const res = await this.rln.rlnInflate(
-      params.assetId,
-      params.inflationAmounts,
-      params.feeRate ?? 1.5,
-      params.minConfirmations ?? 1
-    );
-    return { txid: res.txid };
-  }
-
-  // The `send`/`sendBegin`/`sendEnd` trio is gone. `sendBegin`/`sendEnd` were
-  // stubs, and web had already dropped the names in favour of `onchainSend*` —
-  // dead surface on both platforms. `onchainSend()` below is the one spelling.
-
-  // ── Sending BTC ───────────────────────────────────────────────────────────
-  //
-  // `sendBtcBegin`/`sendBtcEnd` belong to the `beginEnd` carrier, absent here.
-
-  async sendBtc(params: SendBtcBeginRequestModel): Promise<string> {
-    const resp = await this.rln.rlnSendBtc(
-      params.amount,
-      params.address,
-      params.feeRate,
-      params.skipSync ?? false
-    );
-    return resp.txid;
-  }
-
-  // ── Receiving Assets ────────────────────────────────────
-
-  async blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    return mapInvoiceReceiveData(
-      await this.rln.rlnRgbInvoice(
-        params.assetId ?? null,
-        params.amount ?? null,
-        params.durationSeconds ?? null,
-        params.minConfirmations ?? 0,
-        false
-      )
-    );
-  }
-
-  async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    return mapInvoiceReceiveData(
-      await this.rln.rlnRgbInvoice(
-        params.assetId ?? null,
-        params.amount ?? null,
-        params.durationSeconds ?? null,
-        params.minConfirmations ?? 0,
-        true
-      )
-    );
-  }
-
-  async decodeRGBInvoice(params: { invoice: string }): Promise<InvoiceData> {
-    return mapInvoiceData(
-      await this.rln.rlnDecodeRgbInvoice(params.invoice),
-      params.invoice
-    );
-  }
-
-  // ── Transactions & Transfers ─────────────────────────────
-
-  async listTransactions(): Promise<Transaction[]> {
-    return (await this.rln.rlnListTransactions(false)).map(mapTransaction);
-  }
-
-  /** Transactions filtered to a single txid — avoids listing the whole wallet history. */
-  async listTransactionsByTxid(
-    txid: string,
-    skipSync: boolean = false
-  ): Promise<Transaction[]> {
-    return (await this.rln.rlnListTransactionsByTxid(txid, skipSync)).map(
-      mapTransaction
-    );
-  }
-
-  async listTransfers(asset_id?: string): Promise<Transfer[]> {
-    return (await this.rln.rlnListTransfers(asset_id ?? '')).map(mapTransfer);
-  }
-
-  /** Transfers filtered to a single txid, across all assets. */
-  async listTransfersByTxid(txid: string): Promise<Transfer[]> {
-    return (await this.rln.rlnListTransfersByTxid(txid)).map(mapTransfer);
-  }
-
-  async failTransfers(params: FailTransfersRequest): Promise<boolean> {
-    const resp = await this.rln.rlnFailTransfers(
-      params.batchTransferIdx ?? null,
-      params.noAssetOnly ?? false,
-      params.skipSync ?? false
-    );
-    return resp.transfersChanged;
-  }
-
-  async refreshWallet(): Promise<void> {
-    await this.refreshTransfers();
-  }
-
-  async refreshTransfers(skipSync = false): Promise<RefreshTransfersResult> {
-    return toRefreshTransfersResult(
-      await this.rln.rlnRefreshTransfers(skipSync)
-    );
-  }
-
-  async syncWallet(): Promise<void> {
-    return this.rln.rlnSync();
-  }
-
-  // ── VSS ───────────────────────────────────────────────────────────────────
-  //
-  // The imperative VSS methods belong to the `vss` carrier, which this wallet
-  // does not expose. That is not a gap: the node replicates its single state
-  // store automatically, so there is nothing to drive from JS. web needs the
-  // carrier because it has *two* stores — the rgb-lib wallet and the node —
-  // and must back the wallet up manually.
-  //
-  // `vssClearFence` below stays on the shared contract: taking over another
-  // device's single-writer fence is a deliberate act, never automatic.
-
-  // ── Fee Estimation ────────────────────────────────────────────────────────
-
-  async estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
-    const resp = await this.rln.rlnEstimateFee(blocks);
-    return { feeRate: resp.feeRate };
-  }
-
-  // `estimateFee(psbt)` is on the `psbt` carrier — it estimates for a *PSBT*,
-  // which this platform never produces.
-
-  // ── Backup ────────────────────────────────────────────────────────────────
-
-  async createBackup(params: {
-    backupPath: string;
-    password: string;
-  }): Promise<WalletBackupResponse> {
-    await this.rln.rlnBackup(params.backupPath, params.password);
-    return {
-      message: 'Backup created successfully',
-      backupPath: params.backupPath,
-    };
-  }
-
-  // ── Cryptographic Operations ──────────────────────────────────────────────
-  //
-  // `signPsbt` is on the `psbt` carrier, absent here. bdk-rn was removed and
-  // the node signs internally; `NativeExternalRLNSigner` does not restore it,
-  // since it signs channel/LDK operations inside the node rather than
-  // arbitrary PSBTs handed in from JS.
-
-  /** Signs with the node's own key — the counterpart to verifyMessage(). */
-  async signMessage(message: string): Promise<string> {
-    return (await this.rln.rlnSignMessage(message)).signedMessage;
-  }
-
-  /**
-   * Verifies against this node's own key. No `accountXpub` parameter —
-   * verification on an RLN node is always against the node key.
-   */
-  async verifyMessage(message: string, signature: string): Promise<boolean> {
-    return (await this.rln.rlnVerifyMessage(message, signature)).valid;
-  }
-
-  // ── IUTEXOProtocol — Lightning ────────────────────────────────────────────
-
-  /**
-   * Takes the narrowed {@link CreateLnInvoiceRequest}, plus two rn-only extras.
-   *
-   * `paymentHash` was dropped: it made this method a second way to create a
-   * HODL invoice, and web declared it while silently discarding it (its wasm
-   * live-invoice API takes four arguments). `createHodlInvoice` is now the only
-   * spelling on both platforms.
-   *
-   * `minFinalCltvExpiryDelta` and `descriptionHash` remain **rn platform
-   * extras** — the web node cannot accept them. Both names already exist in
-   * core's LSP types, so they are reused rather than reinvented.
-   */
-  async createLightningInvoice(
-    params: CreateLnInvoiceRequest & {
-      minFinalCltvExpiryDelta?: number | null;
-      /** BOLT11 `h` tag — required by LNURL-pay to commit to the metadata. */
-      descriptionHash?: string | null;
-    }
-  ): Promise<LightningReceiveRequest> {
-    this.assertLightningEnabled();
-    const amtMsat =
-      params.amountSats != null
-        ? toSafeBridgeNumber(params.amountSats * 1000, 'amountSats')
-        : null;
-    const assetId = params.asset?.assetId || null;
-    const assetAmount = assetId
-      ? toSafeBridgeNumber(params.asset?.amount, 'asset.amount')
-      : null;
-    const resp = await this.rln.rlnLnInvoice(
-      amtMsat,
-      params.expirySeconds ?? 3600,
-      assetId,
-      assetAmount,
-      null,
-      params.minFinalCltvExpiryDelta ?? null,
-      params.descriptionHash ?? null
-    );
-    return { lnInvoice: resp.invoice };
-  }
-
-  async createHodlInvoice(
-    params: CreateHodlInvoiceParams & {
-      /** BOLT11 `h` tag — required by LNURL-pay to commit to the metadata. */
-      descriptionHash?: string | null;
-    }
-  ): Promise<LightningInvoice> {
-    this.assertLightningEnabled();
-    const resp = await this.rln.rlnLnInvoice(
-      params.amtMsat != null
-        ? toSafeBridgeNumber(params.amtMsat, 'amtMsat')
-        : null,
-      params.expirySec,
-      params.assetId ?? null,
-      params.assetAmount != null
-        ? toSafeBridgeNumber(params.assetAmount, 'assetAmount')
-        : null,
-      params.paymentHash,
-      params.minFinalCltvExpiryDelta ?? null,
-      params.descriptionHash ?? null
-    );
-    return toLightningInvoice(resp, {
-      paymentHash: params.paymentHash,
-      expirySeconds: params.expirySec,
-      amtMsat: params.amtMsat,
-      assetId: params.assetId,
-      assetAmount: params.assetAmount,
-    });
-  }
-
-  async claimHodlInvoice(
-    paymentHash: string,
-    preimage: string
-  ): Promise<HodlInvoiceResult> {
-    this.assertLightningEnabled();
-    const resp = await this.rln.rlnClaimHodlInvoice(paymentHash, preimage);
-    return { changed: resp.changed };
-  }
-
-  async cancelHodlInvoice(paymentHash: string): Promise<HodlInvoiceResult> {
-    this.assertLightningEnabled();
-    await this.rln.rlnCancelHodlInvoice(paymentHash);
-    return { changed: true };
-  }
-
-  /** Payments in the canonical domain shape (part of the shared contract). */
-  async listPayments(): Promise<LightningPayment[]> {
-    this.assertLightningEnabled();
-    return (await this.rln.rlnListPayments()).map(toLightningPayment);
-  }
-
-  async apayNew(hostNodeId: string): Promise<ApayNewResponse> {
-    this.assertLightningEnabled();
-    const raw = await this.rln.rlnApayNew(hostNodeId);
-    return {
-      requestId: raw.requestId,
-      hostNodeId: raw.hostNodeId,
-      protocolVersion: raw.protocolVersion,
-      orderId: raw.orderId,
-      status: raw.status,
-      acceptedThroughIndex: raw.acceptedThroughIndex,
-      nextIndexExpected: raw.nextIndexExpected,
-      unusedHashes: raw.unusedHashes,
-      refillBatchSize: raw.refillBatchSize,
-      firstHashIndex: raw.firstHashIndex,
-      lastHashIndex: raw.lastHashIndex,
-      hashes: raw.hashes,
-    };
-  }
-
-  /**
-   * Register an async-payment hash pool bound to a Lightning Address.
-   *
-   * Same as {@link apayNew} but additionally signs an address attestation
-   * (username + domain) so the LSP can prove the address is owned by this node
-   * — required for APay hash-substitution resistance.
-   */
-  async apayNewWithAddress(
-    hostNodeId: string,
-    username: string,
-    domain: string
-  ): Promise<ApayNewResponse> {
-    this.assertLightningEnabled();
-    const raw = await this.rln.rlnApayNewWithAddress(
-      hostNodeId,
-      username,
-      domain
-    );
-    return {
-      requestId: raw.requestId,
-      hostNodeId: raw.hostNodeId,
-      protocolVersion: raw.protocolVersion,
-      orderId: raw.orderId,
-      status: raw.status,
-      acceptedThroughIndex: raw.acceptedThroughIndex,
-      nextIndexExpected: raw.nextIndexExpected,
-      unusedHashes: raw.unusedHashes,
-      refillBatchSize: raw.refillBatchSize,
-      firstHashIndex: raw.firstHashIndex,
-      lastHashIndex: raw.lastHashIndex,
-      hashes: raw.hashes,
-    };
-  }
-
-  // ── LSP ──────────────────────────────────────────────────────────────────────
-
-  /**
-   * Create an UtexoLsp instance for composed LSP flows.
-   *
-   * No-arg form — auto-discovers peer info from the wallet's lspBaseUrl:
-   *   const lsp = await wallet.createLsp();
-   *   // pubkey, host and port all from GET /get_info
-   *
-   * An LSP that publishes no address falls back to the HTTP hostname and the
-   * `peerPort` argument.
-   *
-   * Explicit form — use when you already have the peer details:
-   *   const lsp = await wallet.createLsp({ baseUrl, peerPubkey, peerHost, peerPort });
-   */
-  async createLsp(peer?: LspPeer, peerPort = 9735): Promise<UtexoLsp> {
-    this.assertLightningEnabled();
-    if (peer) return new UtexoLsp(this, peer);
-
-    const baseUrl = resolveLspBaseUrl(
-      this.params.network,
-      this.params.lspBaseUrl
-    );
-
-    const http = new UtexoLSPClient({
-      baseUrl,
-      bearerToken: this.params.lspBearerToken ?? undefined,
-    });
-    const info = await http.getInfo();
-    this.enableVirtualChannelsForPeer(info.pubkey);
-
-    return new UtexoLsp(this, {
-      baseUrl,
-      peerPubkey: info.pubkey,
-      peerHost: info.host ?? new URL(baseUrl).hostname,
-      peerPort: info.port ?? peerPort,
-      bearerToken: this.params.lspBearerToken ?? undefined,
-    });
-  }
-
-  /**
-   * Turns on virtual channels v0 for the given LSP peer by mutating the node-create params.
-   *
-   * These params (enableVirtualChannelsV0, virtualPeerPubkeys) are consumed by rlnCreateNode
-   * and cannot be changed after the node exists, so this must run before init()/reinit().
-   * Throws if the node was already created.
-   */
-  private enableVirtualChannelsForPeer(peerPubkey: string): void {
-    if (this.nodeCreated) {
-      throw new Error(
-        'createLsp() must be called before init()/reinit(): virtual-channel params ' +
-          '(enableVirtualChannelsV0, virtualPeerPubkeys) are baked into the node at init time ' +
-          'and cannot be changed afterwards.'
+  private readonly engine: RlnWallet | RgbLibWallet;
+
+  constructor(
+    params: [TProtocol] extends ['RGB_LN'] ? UTEXOWalletNodeParams : never,
+    signer: IRLNSigner
+  );
+  constructor(options: UTEXOWalletOptions<TProtocol>);
+  constructor(input: UTEXOWalletNodeParams | WalletInit, signer?: IRLNSigner) {
+    if (!input || typeof input !== 'object') {
+      throw new WalletBackendError(
+        'INVALID_CONFIG',
+        'Wallet configuration is required'
       );
     }
-    this.params.enableVirtualChannelsV0 = true;
-    const existing = this.params.virtualPeerPubkeys ?? [];
-    this.params.virtualPeerPubkeys = existing.includes(peerPubkey)
-      ? existing
-      : [...existing, peerPubkey];
-  }
-
-  /**
-   * Returns the lspBaseUrl and bearer token this node was initialized with.
-   * Useful for confirming APay config matches the UtexoLsp peer config.
-   */
-  getLspConfig(): { baseUrl: string | null; bearerToken: string | null } {
-    return {
-      baseUrl: this.params.lspBaseUrl ?? null,
-      bearerToken: this.params.lspBearerToken ?? null,
-    };
-  }
-
-  /**
-   * Canonical inbound LN status, in the node's own vocabulary.
-   *
-   * Lightning and RGB on-chain statuses are deliberately separate: an invoice
-   * is never reported as `WaitingCounterparty`/`Settled` (RGB consignment
-   * states with no Lightning meaning). Apps that want one unified column fold
-   * these in their own UI layer.
-   */
-  async getLightningReceiveStatus(id: string): Promise<RlnInvoiceStatus> {
-    this.assertLightningEnabled();
-    return normalizeInvoiceStatus(await this.rln.rlnInvoiceStatus(id));
-  }
-
-  /**
-   * Canonical outbound LN status. `null` when the payment hash is unknown to
-   * the node.
-   */
-  async getLightningSendStatus(id: string): Promise<RlnPaymentStatus | null> {
-    this.assertLightningEnabled();
-    const payment = await this.rln.rlnGetPayment(id);
-    if (!payment?.status) return null;
-    return tryNormalizePaymentStatus(payment.status);
-  }
-
-  // No local `& { assetAmount?: number }` intersection — core's
-  // `PayLightningInvoiceRequestModel` already declares `assetAmount`, and
-  // re-declaring core fields would make the two platforms look divergent when
-  // they are not.
-  async payLightningInvoice(
-    params: PayLightningInvoiceRequestModel
-  ): Promise<LightningSendRequest> {
-    this.assertLightningEnabled();
-    const amtMsat = params.amount != null ? params.amount * 1000 : null;
-    const resp = await this.rln.rlnSendPayment(
-      params.lnInvoice,
-      amtMsat,
-      params.assetId ?? null,
-      params.assetAmount ?? null
-    );
-    return { txid: resp.paymentHash ?? resp.paymentId, status: resp.status };
-  }
-
-  async listLightningPayments(): Promise<ListLightningPaymentsResponse> {
-    this.assertLightningEnabled();
-    const payments = await this.rln.rlnListPayments();
-    return {
-      payments: payments.map((p) => ({
-        txid: p.paymentHash,
-        status: p.status,
-      })),
-    };
-  }
-
-  // ── IUTEXOProtocol — Onchain ──────────────────────────────────────────────
-
-  async onchainReceive(
-    params: OnchainReceiveRequestModel
-  ): Promise<OnchainReceiveResponse> {
-    const resp = await this.rln.rlnRgbInvoice(
-      params.assetId ?? null,
-      params.amount ?? null,
-      params.durationSeconds ?? null,
-      params.minConfirmations ?? 0,
-      params.witness ?? true
-    );
-    // Full receive data — the node already returns it; the older shape
-    // discarded everything but the invoice.
-    return {
-      invoice: resp.invoice,
-      recipientId: resp.recipientId,
-      expirationTimestamp: resp.expirationTimestamp ?? null,
-      batchTransferIdx: resp.batchTransferIdx,
-    };
-  }
-
-  // `onchainSendBegin`/`onchainSendEnd` are on the `beginEnd` carrier, absent
-  // here — the node sends atomically and signs internally.
-
-  async onchainSend(
-    params: OnchainSendRequestModel
-  ): Promise<OnchainSendResponse> {
-    const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
-    const assetId = params.assetId ?? decoded.assetId;
-    if (!assetId) throw new Error('UTEXOWallet.onchainSend: assetId required');
-    if (params.amount === undefined)
-      throw new Error('UTEXOWallet.onchainSend: amount required');
-    return this.rln.rlnSendRgb(
-      params.donation ?? false,
-      params.feeRate ?? 1.5,
-      params.minConfirmations ?? 1,
-      params.skipSync ?? false,
-      assetId,
-      decoded.recipientId,
-      params.amount,
-      decoded.transportEndpoints,
-      params.witnessData ?? null
-    );
-  }
-
-  async listOnchainTransfers(asset_id?: string): Promise<Transfer[]> {
-    return (await this.rln.rlnListTransfers(asset_id ?? '')).map(mapTransfer);
-  }
-
-  // ── RLN-specific extras ───────────────────────────────────────────────────
-
-  async getNodeInfo(): Promise<LightningNodeInfo> {
-    return toLightningNodeInfo(await this.rln.rlnNodeInfo());
-  }
-
-  async getNetworkInfo(): Promise<LightningNetworkInfo> {
-    return toLightningNetworkInfo(await this.rln.rlnNetworkInfo());
-  }
-
-  async connectPeer(peerPubkeyAndAddr: string): Promise<void> {
-    this.assertLightningEnabled();
-    return this.rln.rlnConnectPeer(peerPubkeyAndAddr);
-  }
-
-  async listPeers(): Promise<LightningPeer[]> {
-    this.assertLightningEnabled();
-    return (await this.rln.rlnListPeers()).map(toLightningPeer);
-  }
-
-  async disconnectPeer(peerPubkey: string): Promise<void> {
-    this.assertLightningEnabled();
-    return this.rln.rlnDisconnectPeer(peerPubkey);
-  }
-
-  async listChannels(): Promise<LightningChannel[]> {
-    this.assertLightningEnabled();
-    return (await this.rln.rlnListChannels()).map(toLightningChannel);
-  }
-
-  /**
-   * Open a channel.
-   *
-   * The extras below are **rn-only** and declared here rather than in core: the
-   * wasm node takes no argument for any of them, and virtual mode is a
-   * node-wide setting on web.
-   */
-  async openChannel(
-    params: OpenChannelParams & {
-      /** Msat pushed to the peer at open. Default 0. */
-      pushMsat?: number | bigint;
-      /** Open an anchor-outputs channel. Default true. */
-      withAnchors?: boolean;
-      feeBaseMsat?: number | null;
-      feeProportionalMillionths?: number | null;
-      /** Caller-supplied temporary channel id (advanced). */
-      temporaryChannelId?: string | null;
-      pushAssetAmount?: number | bigint | null;
-      virtualOpenMode?: string | null;
+    if ('backend' in input) {
+      throw new WalletBackendError(
+        'INVALID_CONFIG',
+        'Use protocol: RGB_L1 or RGB_LN to select the wallet mode'
+      );
     }
-  ): Promise<OpenChannelResult> {
-    this.assertLightningEnabled();
-    const resp = await this.rln.rlnOpenChannel({
-      peerPubkeyAndOptAddr: params.peerPubkey,
-      capacitySat: toSafeBridgeNumber(params.capacitySat, 'capacitySat')!,
-      pushMsat: toSafeBridgeNumber(params.pushMsat ?? 0, 'pushMsat')!,
-      public: params.isPublic,
-      withAnchors: params.withAnchors ?? true,
-      feeBaseMsat: params.feeBaseMsat ?? null,
-      feeProportionalMillionths: params.feeProportionalMillionths ?? null,
-      temporaryChannelId: params.temporaryChannelId ?? null,
-      assetId: params.assetId ?? null,
-      assetAmount: toSafeBridgeNumber(
-        params.assetLocalAmount,
-        'assetLocalAmount'
-      ),
-      pushAssetAmount: toSafeBridgeNumber(
-        params.pushAssetAmount,
-        'pushAssetAmount'
-      ),
-      virtualOpenMode: params.virtualOpenMode ?? null,
-    });
-    return { temporaryChannelId: resp.temporaryChannelId };
+    if ('protocol' in input) {
+      if (signer !== undefined) {
+        throw new WalletBackendError(
+          'INVALID_CONFIG',
+          'Pass credentials inside the protocol options'
+        );
+      }
+      if (input.protocol === 'RGB_L1') {
+        if (input.signer !== undefined) {
+          throw new WalletBackendError(
+            'INVALID_CONFIG',
+            'RGB Lib requires a key provider',
+            undefined,
+            'RGB_L1'
+          );
+        }
+        this.engine = new RgbLibWallet(input.params, input.keys);
+      } else if (input.protocol === 'RGB_LN') {
+        if (input.keys !== undefined || !input.signer) {
+          throw new WalletBackendError(
+            'INVALID_CONFIG',
+            'RLN requires an RLN signer',
+            undefined,
+            'RGB_LN'
+          );
+        }
+        this.engine = new RlnWallet(input.params, input.signer);
+      } else {
+        throw new WalletBackendError(
+          'INVALID_CONFIG',
+          'Unknown wallet protocol'
+        );
+      }
+    } else {
+      if (!signer) {
+        throw new WalletBackendError(
+          'INVALID_CONFIG',
+          'RLN requires an RLN signer',
+          undefined,
+          'RGB_LN'
+        );
+      }
+      this.engine = new RlnWallet(input, signer);
+    }
   }
 
-  async closeChannel(
-    channelId: string,
-    peerPubkey: string,
-    force: boolean
+  get protocol(): TProtocol {
+    return this.engine.protocol as TProtocol;
+  }
+
+  get capabilities() {
+    return this.engine.capabilities;
+  }
+
+  private invoke<K extends SharedMethod>(
+    method: K,
+    ...args: Parameters<Method<TProtocol, K>>
+  ): ReturnType<Method<TProtocol, K>> {
+    // The constructor ties TProtocol to this implementation. Both implementations
+    // are checked against the common on-chain contract; no native data is cast here.
+    const call = this.engine[method] as (
+      ...args: Parameters<Method<TProtocol, K>>
+    ) => ReturnType<Method<TProtocol, K>>;
+    return call.apply(this.engine, args);
+  }
+
+  private requireRln(operation: string): RlnWallet {
+    if (this.engine.protocol !== 'RGB_LN') {
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        operation + ' requires the RGB_LN protocol',
+        operation,
+        this.engine.protocol
+      );
+    }
+    return this.engine;
+  }
+
+  getWalletIdentity(
+    ...args: Parameters<Method<TProtocol, 'getWalletIdentity'>>
+  ): ReturnType<Method<TProtocol, 'getWalletIdentity'>> {
+    return this.invoke('getWalletIdentity', ...args);
+  }
+
+  init(
+    ...args: Parameters<Method<TProtocol, 'init'>>
+  ): ReturnType<Method<TProtocol, 'init'>> {
+    return this.invoke('init', ...args);
+  }
+
+  unlock(
+    this: ConcreteWallet<TProtocol>,
+    ...args: Parameters<Method<TProtocol, 'unlock'>>
+  ): ReturnType<Method<TProtocol, 'unlock'>> {
+    return this.invoke('unlock', ...args);
+  }
+
+  /** Connect an initialized RGB_L1 wallet; alias for unlock(params). */
+  async goOnline(
+    this: UTEXOWallet<'RGB_L1'>,
+    params: RgbLibUnlockParams
   ): Promise<void> {
-    this.assertLightningEnabled();
-    return this.rln.rlnCloseChannel(channelId, peerPubkey, force);
+    if (this.engine.protocol !== 'RGB_L1') {
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        'goOnline requires the RGB_L1 protocol',
+        'goOnline',
+        this.engine.protocol
+      );
+    }
+    return this.unlock(params);
   }
 
-  async getChannelId(temporaryChannelId: string): Promise<string> {
-    this.assertLightningEnabled();
-    return this.rln.rlnGetChannelId(temporaryChannelId);
+  reinit(
+    this: ConcreteWallet<TProtocol>,
+    ...args: Parameters<Method<TProtocol, 'reinit'>>
+  ): ReturnType<Method<TProtocol, 'reinit'>> {
+    return this.invoke('reinit', ...args);
   }
 
-  async keysend(
-    destPubkey: string,
-    amtMsat: number,
-    assetId?: string,
-    assetAmount?: number
-  ): Promise<SendPaymentResult> {
-    this.assertLightningEnabled();
-    return toSendPaymentResult(
-      await this.rln.rlnKeysend(
-        destPubkey,
-        amtMsat,
-        assetId ?? null,
-        assetAmount ?? null
-      )
+  shutdown(
+    ...args: Parameters<Method<TProtocol, 'shutdown'>>
+  ): ReturnType<Method<TProtocol, 'shutdown'>> {
+    return this.invoke('shutdown', ...args);
+  }
+
+  destroy(
+    ...args: Parameters<Method<TProtocol, 'destroy'>>
+  ): ReturnType<Method<TProtocol, 'destroy'>> {
+    return this.invoke('destroy', ...args);
+  }
+
+  /** Backward-compat alias for init(); dispatches through `this` so subclass overrides run. */
+  async initialize(): Promise<void> {
+    return (this as unknown as VirtualAliases).init();
+  }
+
+  getNetwork(
+    ...args: Parameters<Method<TProtocol, 'getNetwork'>>
+  ): ReturnType<Method<TProtocol, 'getNetwork'>> {
+    return this.invoke('getNetwork', ...args);
+  }
+
+  /** Backward-compat alias for destroy(); dispatches through `this` so subclass overrides run. */
+  async dispose(): Promise<void> {
+    return (this as unknown as VirtualAliases).destroy();
+  }
+
+  isDisposed(
+    ...args: Parameters<Method<TProtocol, 'isDisposed'>>
+  ): ReturnType<Method<TProtocol, 'isDisposed'>> {
+    return this.invoke('isDisposed', ...args);
+  }
+
+  getBtcBalance(
+    ...args: Parameters<Method<TProtocol, 'getBtcBalance'>>
+  ): ReturnType<Method<TProtocol, 'getBtcBalance'>> {
+    return this.invoke('getBtcBalance', ...args);
+  }
+
+  getAddress(
+    ...args: Parameters<Method<TProtocol, 'getAddress'>>
+  ): ReturnType<Method<TProtocol, 'getAddress'>> {
+    return this.invoke('getAddress', ...args);
+  }
+
+  rotateVanillaAddress(
+    ...args: Parameters<Method<TProtocol, 'rotateVanillaAddress'>>
+  ): ReturnType<Method<TProtocol, 'rotateVanillaAddress'>> {
+    return this.invoke('rotateVanillaAddress', ...args);
+  }
+
+  listUnspents(
+    ...args: Parameters<Method<TProtocol, 'listUnspents'>>
+  ): ReturnType<Method<TProtocol, 'listUnspents'>> {
+    return this.invoke('listUnspents', ...args);
+  }
+
+  createUtxos(
+    ...args: Parameters<Method<TProtocol, 'createUtxos'>>
+  ): ReturnType<Method<TProtocol, 'createUtxos'>> {
+    return this.invoke('createUtxos', ...args);
+  }
+
+  getBfaCapabilities(): Promise<BfaCapabilities> {
+    return this.engine.getBfaCapabilities();
+  }
+
+  async burn(params: BurnParams): Promise<BurnResult> {
+    // Preserve the request while an application's capability override awaits.
+    const owned = snapshot(params);
+    if (
+      this.getBfaCapabilities !== UTEXOWallet.prototype.getBfaCapabilities &&
+      !(await this.getBfaCapabilities()).burn
+    ) {
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        'Burn is disabled by this wallet',
+        'burn',
+        this.engine.protocol
+      );
+    }
+    return this.engine.burn(owned);
+  }
+
+  getConsignment(
+    ...args: Parameters<Method<TProtocol, 'getConsignment'>>
+  ): ReturnType<Method<TProtocol, 'getConsignment'>> {
+    return this.invoke('getConsignment', ...args);
+  }
+
+  getConsignmentPath(
+    ...args: Parameters<Method<TProtocol, 'getConsignmentPath'>>
+  ): ReturnType<Method<TProtocol, 'getConsignmentPath'>> {
+    return this.invoke('getConsignmentPath', ...args);
+  }
+
+  listAssets(
+    ...args: Parameters<Method<TProtocol, 'listAssets'>>
+  ): ReturnType<Method<TProtocol, 'listAssets'>> {
+    return this.invoke('listAssets', ...args);
+  }
+
+  getAssetBalance(
+    ...args: Parameters<Method<TProtocol, 'getAssetBalance'>>
+  ): ReturnType<Method<TProtocol, 'getAssetBalance'>> {
+    return this.invoke('getAssetBalance', ...args);
+  }
+
+  issueAssetNia(
+    ...args: Parameters<Method<TProtocol, 'issueAssetNia'>>
+  ): ReturnType<Method<TProtocol, 'issueAssetNia'>> {
+    return this.invoke('issueAssetNia', ...args);
+  }
+
+  issueAssetIfa(
+    ...args: Parameters<Method<TProtocol, 'issueAssetIfa'>>
+  ): ReturnType<Method<TProtocol, 'issueAssetIfa'>> {
+    return this.invoke('issueAssetIfa', ...args);
+  }
+
+  inflate(
+    ...args: Parameters<Method<TProtocol, 'inflate'>>
+  ): ReturnType<Method<TProtocol, 'inflate'>> {
+    return this.invoke('inflate', ...args);
+  }
+
+  sendBtc(
+    ...args: Parameters<Method<TProtocol, 'sendBtc'>>
+  ): ReturnType<Method<TProtocol, 'sendBtc'>> {
+    return this.invoke('sendBtc', ...args);
+  }
+
+  blindReceive(
+    ...args: Parameters<Method<TProtocol, 'blindReceive'>>
+  ): ReturnType<Method<TProtocol, 'blindReceive'>> {
+    return this.invoke('blindReceive', ...args);
+  }
+
+  witnessReceive(
+    ...args: Parameters<Method<TProtocol, 'witnessReceive'>>
+  ): ReturnType<Method<TProtocol, 'witnessReceive'>> {
+    return this.invoke('witnessReceive', ...args);
+  }
+
+  decodeRGBInvoice(
+    ...args: Parameters<Method<TProtocol, 'decodeRGBInvoice'>>
+  ): ReturnType<Method<TProtocol, 'decodeRGBInvoice'>> {
+    return this.invoke('decodeRGBInvoice', ...args);
+  }
+
+  listTransactions(
+    ...args: Parameters<Method<TProtocol, 'listTransactions'>>
+  ): ReturnType<Method<TProtocol, 'listTransactions'>> {
+    return this.invoke('listTransactions', ...args);
+  }
+
+  listTransactionsByTxid(
+    ...args: Parameters<Method<TProtocol, 'listTransactionsByTxid'>>
+  ): ReturnType<Method<TProtocol, 'listTransactionsByTxid'>> {
+    return this.invoke('listTransactionsByTxid', ...args);
+  }
+
+  listTransfers(
+    ...args: Parameters<Method<TProtocol, 'listTransfers'>>
+  ): ReturnType<Method<TProtocol, 'listTransfers'>> {
+    return this.invoke('listTransfers', ...args);
+  }
+
+  listTransfersByTxid(
+    ...args: Parameters<Method<TProtocol, 'listTransfersByTxid'>>
+  ): ReturnType<Method<TProtocol, 'listTransfersByTxid'>> {
+    return this.invoke('listTransfersByTxid', ...args);
+  }
+
+  failTransfers(
+    ...args: Parameters<Method<TProtocol, 'failTransfers'>>
+  ): ReturnType<Method<TProtocol, 'failTransfers'>> {
+    return this.invoke('failTransfers', ...args);
+  }
+
+  /** Refreshes transfers through `this` so a subclass refreshTransfers() override runs. */
+  async refreshWallet(): Promise<void> {
+    await (this as unknown as VirtualAliases).refreshTransfers();
+  }
+
+  refreshTransfers(
+    ...args: Parameters<Method<TProtocol, 'refreshTransfers'>>
+  ): ReturnType<Method<TProtocol, 'refreshTransfers'>> {
+    return this.invoke('refreshTransfers', ...args);
+  }
+
+  syncWallet(
+    ...args: Parameters<Method<TProtocol, 'syncWallet'>>
+  ): ReturnType<Method<TProtocol, 'syncWallet'>> {
+    return this.invoke('syncWallet', ...args);
+  }
+
+  estimateFeeRate(
+    ...args: Parameters<Method<TProtocol, 'estimateFeeRate'>>
+  ): ReturnType<Method<TProtocol, 'estimateFeeRate'>> {
+    return this.invoke('estimateFeeRate', ...args);
+  }
+
+  createBackup(
+    ...args: Parameters<Method<TProtocol, 'createBackup'>>
+  ): ReturnType<Method<TProtocol, 'createBackup'>> {
+    return this.invoke('createBackup', ...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async signMessage(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['signMessage']>
+  ): ReturnType<RlnWallet['signMessage']> {
+    return this.requireRln('signMessage').signMessage(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async verifyMessage(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['verifyMessage']>
+  ): ReturnType<RlnWallet['verifyMessage']> {
+    return this.requireRln('verifyMessage').verifyMessage(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async createLightningInvoice(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['createLightningInvoice']>
+  ): ReturnType<RlnWallet['createLightningInvoice']> {
+    return this.requireRln('createLightningInvoice').createLightningInvoice(
+      ...args
     );
   }
 
-  async decodeLnInvoice(invoice: string): Promise<DecodedLnInvoice> {
-    this.assertLightningEnabled();
-    return toDecodedLnInvoice(await this.rln.rlnDecodeLnInvoice(invoice));
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async createHodlInvoice(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['createHodlInvoice']>
+  ): ReturnType<RlnWallet['createHodlInvoice']> {
+    return this.requireRln('createHodlInvoice').createHodlInvoice(...args);
   }
 
-  /** Canonical invoice status (PascalCase) — normalized from the wire enum. */
-  async invoiceStatus(invoice: string): Promise<RlnInvoiceStatus> {
-    this.assertLightningEnabled();
-    return normalizeInvoiceStatus(await this.rln.rlnInvoiceStatus(invoice));
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async claimHodlInvoice(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['claimHodlInvoice']>
+  ): ReturnType<RlnWallet['claimHodlInvoice']> {
+    return this.requireRln('claimHodlInvoice').claimHodlInvoice(...args);
   }
 
-  checkIndexerUrl(url: string): Promise<RlnCheckIndexerUrlResponse> {
-    return this.rln.rlnCheckIndexerUrl(url);
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async cancelHodlInvoice(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['cancelHodlInvoice']>
+  ): ReturnType<RlnWallet['cancelHodlInvoice']> {
+    return this.requireRln('cancelHodlInvoice').cancelHodlInvoice(...args);
   }
 
-  checkProxyEndpoint(endpoint: string): Promise<void> {
-    return this.rln.rlnCheckProxyEndpoint(endpoint);
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async listPayments(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['listPayments']>
+  ): ReturnType<RlnWallet['listPayments']> {
+    return this.requireRln('listPayments').listPayments(...args);
   }
 
-  // ── VSS ───────────────────────────────────────────────────────────────────
-
-  /**
-   * Clears the VSS single-writer fence lock. Call this while the node is
-   * locked (before unlock) to recover from an unclean shutdown that left a
-   * stale fence blocking re-initialization.
-   */
-  vssClearFence(password?: string): Promise<void> {
-    // Optional in the shared contract (web's node-internal fence takes none);
-    // the native module requires one, so fail loudly rather than pass undefined.
-    if (password == null) {
-      throw new Error(
-        'UTEXOWallet.vssClearFence: password is required on React Native'
-      );
-    }
-    return this.rln.rlnVssClearFence(password);
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async apayNew(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['apayNew']>
+  ): ReturnType<RlnWallet['apayNew']> {
+    return this.requireRln('apayNew').apayNew(...args);
   }
 
-  /**
-   * Replicate wallet state to VSS now; returns the new backup version.
-   *
-   * The node also backs up on its own — this is the "don't wait" call. There
-   * is no configure/disable pair to go with it: the node owns its single state
-   * store and its VSS client is configured at `init()` from `vssUrl`.
-   */
-  backupNow(): Promise<number> {
-    return this.rln.rlnVssBackup();
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async apayNewWithAddress(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['apayNewWithAddress']>
+  ): ReturnType<RlnWallet['apayNewWithAddress']> {
+    return this.requireRln('apayNewWithAddress').apayNewWithAddress(...args);
   }
 
-  // ── Private helpers ───────────────────────────────────────────────────────
-
-  private assertLightningEnabled(): void {
-    if (normalizeRlnNetwork(this.params.network) === 'mainnet') {
-      throw new WalletError(
-        'Lightning is disabled on mainnet. Only on-chain operations are supported.',
-        'LIGHTNING_DISABLED_ON_MAINNET'
-      );
-    }
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async createLsp(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['createLsp']>
+  ): ReturnType<RlnWallet['createLsp']> {
+    return this.requireRln('createLsp').createLsp(...args);
   }
 
-  private buildNodeParams(): IRLNNodeCreateParams {
-    return {
-      storageDirPath: this.params.storageDirPath,
-      daemonListeningPort: this.params.daemonListeningPort,
-      ldkPeerListeningPort: this.params.ldkPeerListeningPort,
-      network: toNativeNetwork(this.params.network as BitcoinNetwork),
-      maxMediaUploadSizeMb: this.params.maxMediaUploadSizeMb ?? 20,
-      enableVirtualChannelsV0: this.params.enableVirtualChannelsV0 ?? null,
-      virtualPeerPubkeys: this.params.virtualPeerPubkeys ?? null,
-      vssUrl: this.params.vssUrl ?? null,
-      vssAllowHttp: this.params.vssAllowHttp ?? false,
-      vssAllowEmptyRestore: this.params.vssAllowEmptyRestore ?? false,
-      lspBaseUrl:
-        this.params.lspBaseUrl ??
-        getDefaultLspBaseUrl(this.params.network) ??
-        null,
-      lspBearerToken: this.params.lspBearerToken ?? null,
-      reuseAddresses: this.params.reuseAddresses ?? false,
-    };
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  getLspConfig(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['getLspConfig']>
+  ): ReturnType<RlnWallet['getLspConfig']> {
+    return this.requireRln('getLspConfig').getLspConfig(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async getLightningReceiveStatus(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['getLightningReceiveStatus']>
+  ): ReturnType<RlnWallet['getLightningReceiveStatus']> {
+    return this.requireRln(
+      'getLightningReceiveStatus'
+    ).getLightningReceiveStatus(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async getLightningSendStatus(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['getLightningSendStatus']>
+  ): ReturnType<RlnWallet['getLightningSendStatus']> {
+    return this.requireRln('getLightningSendStatus').getLightningSendStatus(
+      ...args
+    );
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async payLightningInvoice(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['payLightningInvoice']>
+  ): ReturnType<RlnWallet['payLightningInvoice']> {
+    return this.requireRln('payLightningInvoice').payLightningInvoice(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async listLightningPayments(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['listLightningPayments']>
+  ): ReturnType<RlnWallet['listLightningPayments']> {
+    return this.requireRln('listLightningPayments').listLightningPayments(
+      ...args
+    );
+  }
+
+  onchainReceive(
+    ...args: Parameters<Method<TProtocol, 'onchainReceive'>>
+  ): ReturnType<Method<TProtocol, 'onchainReceive'>> {
+    return this.invoke('onchainReceive', ...args);
+  }
+
+  onchainSend(
+    ...args: Parameters<Method<TProtocol, 'onchainSend'>>
+  ): ReturnType<Method<TProtocol, 'onchainSend'>> {
+    return this.invoke('onchainSend', ...args);
+  }
+
+  listOnchainTransfers(
+    ...args: Parameters<Method<TProtocol, 'listOnchainTransfers'>>
+  ): ReturnType<Method<TProtocol, 'listOnchainTransfers'>> {
+    return this.invoke('listOnchainTransfers', ...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async getNodeInfo(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['getNodeInfo']>
+  ): ReturnType<RlnWallet['getNodeInfo']> {
+    return this.requireRln('getNodeInfo').getNodeInfo(...args);
+  }
+
+  getNetworkInfo(
+    ...args: Parameters<Method<TProtocol, 'getNetworkInfo'>>
+  ): ReturnType<Method<TProtocol, 'getNetworkInfo'>> {
+    return this.invoke('getNetworkInfo', ...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async connectPeer(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['connectPeer']>
+  ): ReturnType<RlnWallet['connectPeer']> {
+    return this.requireRln('connectPeer').connectPeer(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async listPeers(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['listPeers']>
+  ): ReturnType<RlnWallet['listPeers']> {
+    return this.requireRln('listPeers').listPeers(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async disconnectPeer(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['disconnectPeer']>
+  ): ReturnType<RlnWallet['disconnectPeer']> {
+    return this.requireRln('disconnectPeer').disconnectPeer(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async listChannels(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['listChannels']>
+  ): ReturnType<RlnWallet['listChannels']> {
+    return this.requireRln('listChannels').listChannels(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async openChannel(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['openChannel']>
+  ): ReturnType<RlnWallet['openChannel']> {
+    return this.requireRln('openChannel').openChannel(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async closeChannel(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['closeChannel']>
+  ): ReturnType<RlnWallet['closeChannel']> {
+    return this.requireRln('closeChannel').closeChannel(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async getChannelId(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['getChannelId']>
+  ): ReturnType<RlnWallet['getChannelId']> {
+    return this.requireRln('getChannelId').getChannelId(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async keysend(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['keysend']>
+  ): ReturnType<RlnWallet['keysend']> {
+    return this.requireRln('keysend').keysend(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async decodeLnInvoice(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['decodeLnInvoice']>
+  ): ReturnType<RlnWallet['decodeLnInvoice']> {
+    return this.requireRln('decodeLnInvoice').decodeLnInvoice(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async invoiceStatus(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['invoiceStatus']>
+  ): ReturnType<RlnWallet['invoiceStatus']> {
+    return this.requireRln('invoiceStatus').invoiceStatus(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async checkIndexerUrl(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['checkIndexerUrl']>
+  ): ReturnType<RlnWallet['checkIndexerUrl']> {
+    return this.requireRln('checkIndexerUrl').checkIndexerUrl(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async checkProxyEndpoint(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['checkProxyEndpoint']>
+  ): ReturnType<RlnWallet['checkProxyEndpoint']> {
+    return this.requireRln('checkProxyEndpoint').checkProxyEndpoint(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async vssClearFence(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['vssClearFence']>
+  ): ReturnType<RlnWallet['vssClearFence']> {
+    return this.requireRln('vssClearFence').vssClearFence(...args);
+  }
+
+  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
+  async backupNow(
+    this: UTEXOWallet<'RGB_LN'>,
+    ...args: Parameters<RlnWallet['backupNow']>
+  ): ReturnType<RlnWallet['backupNow']> {
+    return this.requireRln('backupNow').backupNow(...args);
   }
 }

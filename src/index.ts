@@ -2,21 +2,49 @@
 export { createWallet } from './wallet/wallet-manager';
 
 // RLN node manager
-export { RLNManager, createRLNManager } from './wallet/rln-manager';
+export { RLNManager, createRLNManager } from './wallet/rln/rln-manager';
 
-// UTEXO wallet — implements the shared IUTEXOProtocol contract, backed by RLN.
+// UTEXO wallet — legacy RLN constructor plus an optional on-chain rgb-lib mode.
 export { UTEXOWallet } from './wallet/utexo-wallet';
-export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
+export type {
+  UTEXOWalletNodeParams,
+  UTEXOWalletOptions,
+  AnyUtexoWallet,
+} from './wallet/utexo-wallet';
+export { restoreRgbLibBackup } from './wallet/rgb-lib/restore';
+export type {
+  WalletInit,
+  RlnWalletInit,
+  RgbLibWalletInit,
+} from './wallet/wallet-options';
+export type {
+  RgbLibWalletParams,
+  RgbLibUnlockParams,
+  RgbLibIndexer,
+} from './wallet/rgb-lib/config';
+export { CallbackRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
+export type { IRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
+export type {
+  WalletProtocol,
+  WalletIdentity,
+  OnchainWalletApi,
+  WalletTransfer,
+  WalletAssignment,
+  WalletInvoiceData,
+  WalletUnspent,
+} from './wallet/wallet-api';
+export { WalletBackendError } from './wallet/wallet-errors';
+export type { WalletBackendErrorCode } from './wallet/wallet-errors';
 export {
   getNetworkDefaults,
   resolveUnlockParams,
-} from './wallet/network-defaults';
-export type { NetworkEndpoints } from './wallet/network-defaults';
+} from './wallet/rln/network-defaults';
+export type { NetworkEndpoints } from './wallet/rln/network-defaults';
 export {
   PasswordRLNSigner,
   NativeExternalRLNSigner,
-} from './wallet/rln-signers';
-export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln-signers';
+} from './wallet/rln/rln-signers';
+export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln/rln-signers';
 
 // Binding and signer (for advanced / testing use)
 export { RLNBinding } from './binding/RLNBinding';

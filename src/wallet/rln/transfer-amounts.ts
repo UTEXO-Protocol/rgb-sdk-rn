@@ -1,5 +1,5 @@
 import { ValidationError } from '@utexo/rgb-sdk-core';
-import type { Transfer, TransferAmount, TransferAssignment } from './types';
+import type { Transfer, TransferAmount, TransferAssignment } from '../types';
 
 const MAX_U64 = 18_446_744_073_709_551_615n;
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);

@@ -6,6 +6,7 @@ import {
 import type { BurnParams, BurnResult, ListAssets, Transfer } from '../types';
 import { getTransferAmount, parseTransferAssignment } from './transfer-amounts';
 import type { RefreshTransfersResult } from '../refresh-types';
+import type { WalletInvoiceData } from '../wallet-api';
 import type {
   IUTEXOProtocol,
   WalletCapabilities,
@@ -50,6 +51,8 @@ import type {
 } from '@utexo/rgb-sdk-core';
 import {
   AssetSchema,
+  ConfigurationError,
+  ValidationError,
   WalletError,
   normalizeRlnNetwork,
   normalizeTransferStatus,
@@ -144,7 +147,10 @@ export interface UTEXOWalletNodeParams extends Omit<
   vssAllowEmptyRestore?: boolean;
   lspBaseUrl?: string | null;
   lspBearerToken?: string | null;
-  /** Reuse on-chain addresses instead of deriving a fresh one per call. Defaults to false. */
+  /**
+   * Must be `false` or omitted. RLN on rgb-lib-bfa rejects address reuse;
+   * `true` throws `ConfigurationError` from the constructor.
+   */
   reuseAddresses?: boolean;
 }
 
@@ -163,6 +169,19 @@ function parseAssignment(s: string): Assignment {
     if (s.includes(t)) return { type: t };
   }
   return { type: 'Any' };
+}
+
+/** Amount of a `Fungible(n)` invoice; `undefined` when the invoice has none. */
+function invoiceFungibleAmount(assignment: string): number | undefined {
+  const m = assignment.match(/^Fungible\((\d+)\)$/);
+  if (!m || m[1] === '0') return undefined;
+  const amount = Number(m[1]);
+  if (!Number.isSafeInteger(amount))
+    throw new ValidationError(
+      'Invoice amount exceeds the supported exact integer range',
+      'amount'
+    );
+  return amount;
 }
 
 function parseOutpoint(s: string): Outpoint {
@@ -229,13 +248,18 @@ function mapTransaction(t: RlnTransaction): Transaction {
   };
 }
 
-const VALID_TRANSFER_KINDS: Record<TransferKind, true> = {
+/**
+ * `Mint` comes from rgb-lib-bfa and is not in core `TransferKind` yet. It is
+ * passed through, as RGB_L1 does, so a mint is not reported as a send.
+ */
+const VALID_TRANSFER_KINDS: Record<TransferKind | 'Mint', true> = {
   Issuance: true,
   ReceiveBlind: true,
   ReceiveWitness: true,
   Send: true,
   Inflation: true,
   Burn: true,
+  Mint: true,
 };
 
 function isKnown(
@@ -376,10 +400,26 @@ function mapInvoiceReceiveData(r: RlnRgbInvoiceResponse): InvoiceReceiveData {
   };
 }
 
+type RlnInvoiceData = InvoiceData &
+  Pick<WalletInvoiceData, 'publicKey' | 'encryption'>;
+
+const INVOICE_ENCRYPTION: Record<
+  NonNullable<WalletInvoiceData['encryption']>,
+  true
+> = { Required: true, Optional: true, Unsupported: true };
+
+function tryNormalizeInvoiceEncryption(
+  value: string | null | undefined
+): WalletInvoiceData['encryption'] {
+  return value != null && isKnown(INVOICE_ENCRYPTION, value)
+    ? (value as WalletInvoiceData['encryption'])
+    : undefined;
+}
+
 function mapInvoiceData(
   r: RlnDecodeRgbInvoiceResponse,
   invoice: string
-): InvoiceData {
+): RlnInvoiceData {
   const schemaMap: Record<string, AssetSchema> = {
     Nia: AssetSchema.Nia,
     Uda: AssetSchema.Uda,
@@ -394,6 +434,8 @@ function mapInvoiceData(
     assignment: parseAssignment(r.assignment),
     expirationTimestamp: r.expirationTimestamp ?? null,
     transportEndpoints: r.transportEndpoints,
+    publicKey: r.publicKey ?? undefined,
+    encryption: tryNormalizeInvoiceEncryption(r.encryption),
   };
 }
 
@@ -440,6 +482,12 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   private nodeCreated = false;
 
   constructor(params: UTEXOWalletNodeParams, signer: IRLNSigner) {
+    if (params.reuseAddresses === true) {
+      throw new ConfigurationError(
+        'reuseAddresses is not supported by RLN on rgb-lib-bfa',
+        'reuseAddresses'
+      );
+    }
     this.params = { ...params };
     this.signer = signer;
     this.rln = createRLNManager();
@@ -699,7 +747,7 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     );
   }
 
-  async decodeRGBInvoice(params: { invoice: string }): Promise<InvoiceData> {
+  async decodeRGBInvoice(params: { invoice: string }): Promise<RlnInvoiceData> {
     return mapInvoiceData(
       await this.rln.rlnDecodeRgbInvoice(params.invoice),
       params.invoice
@@ -1107,20 +1155,29 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   async onchainSend(
     params: OnchainSendRequestModel
   ): Promise<OnchainSendResponse> {
+    // RLN rejects proxy recipients built from decoded fields, so the whole
+    // invoice goes to native. Decoding here only fills defaults. RLN syncs
+    // inside the send; `skipSync` does not apply.
     const decoded = await this.rln.rlnDecodeRgbInvoice(params.invoice);
     const assetId = params.assetId ?? decoded.assetId;
-    if (!assetId) throw new Error('UTEXOWallet.onchainSend: assetId required');
-    if (params.amount === undefined)
-      throw new Error('UTEXOWallet.onchainSend: amount required');
-    return this.rln.rlnSendRgb(
+    if (!assetId)
+      throw new ValidationError(
+        'UTEXOWallet.onchainSend: assetId required',
+        'assetId'
+      );
+    const amount = params.amount ?? invoiceFungibleAmount(decoded.assignment);
+    if (amount === undefined)
+      throw new ValidationError(
+        'UTEXOWallet.onchainSend: amount required',
+        'amount'
+      );
+    return this.rln.rlnSendRgbInvoice(
+      params.invoice,
+      assetId,
+      amount,
       params.donation ?? false,
       params.feeRate ?? 1.5,
       params.minConfirmations ?? 1,
-      params.skipSync ?? false,
-      assetId,
-      decoded.recipientId,
-      params.amount,
-      decoded.transportEndpoints,
       params.witnessData ?? null
     );
   }

@@ -288,7 +288,8 @@ export interface RlnRgbInvoiceResponse {
 
 export interface RlnDecodeRgbInvoiceResponse {
   recipientId: string;
-  proxyRecipientId: string;
+  /** Not set by rgb-lib-bfa invoices. */
+  proxyRecipientId?: string;
   recipientType: string;
   assetSchema?: string;
   assetId?: string;
@@ -297,6 +298,10 @@ export interface RlnDecodeRgbInvoiceResponse {
   /** **Unix seconds** (not JS milliseconds). */
   expirationTimestamp?: number;
   transportEndpoints: string[];
+  /** Recipient x-only public key (64 hex chars); required by proxy invoices. */
+  publicKey?: string;
+  /** Rust `Debug` of the invoice encryption mode, e.g. `Required`. */
+  encryption: string;
 }
 
 // ── Transfers / transactions / unspents ───────────────────────────────────────

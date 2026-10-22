@@ -75,7 +75,8 @@
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public",
     "check:contract": "bob build && node --experimental-loader ./tests/support/rn-stub-loader.mjs scripts/check-contract.mjs",
-    "test": "npm run typecheck && npm run check:contract && npm run test:rgb-lib && npm run test:webrgb",
+    "test": "npm run typecheck && npm run check:contract && npm run test:rgb-lib && npm run test:rln && npm run test:webrgb",
+    "test:rln": "bob build && node --experimental-loader ./tests/support/rn-stub-loader.mjs --test tests/rln-wallet.test.mjs",
     "test:webrgb": "bob build && node --test tests/webrgb.test.mjs tests/webrgb-burn.test.mjs",
     "bindings:rgb-lib": "node scripts/setup-rgb-lib-bindings.mjs"
   },

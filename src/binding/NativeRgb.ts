@@ -238,6 +238,22 @@ export interface Spec extends TurboModule {
     witnessAmountSat: number | null,
     witnessBlinding: number | null
   ): Promise<object>;
+  /**
+   * Invoice-first fungible send. RLN keeps the invoice's recipient key,
+   * encryption mode and expiry; `rlnSendRgb` drops them, so RLN rejects
+   * proxy recipients sent that way.
+   */
+  rlnSendRgbInvoice(
+    nodeId: number,
+    invoice: string,
+    assetId: string,
+    amount: number,
+    witnessAmountSat: number | null,
+    witnessBlinding: number | null,
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number
+  ): Promise<object>;
   rlnShutdown(nodeId: number): Promise<void>;
   rlnSync(nodeId: number): Promise<void>;
   rlnSignMessage(nodeId: number, message: string): Promise<object>;

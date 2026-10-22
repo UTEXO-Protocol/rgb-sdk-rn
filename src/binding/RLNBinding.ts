@@ -789,6 +789,30 @@ export class RLNBinding implements IRLN {
     ) as Promise<RlnSendRgbResponse>;
   }
 
+  async rlnSendRgbInvoice(
+    invoice: string,
+    assetId: string,
+    amount: number,
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number,
+    witnessData?: { amountSat: number; blinding?: number } | null
+  ): Promise<RlnSendRgbResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnSendRgbInvoice(
+        nodeId,
+        invoice,
+        assetId,
+        amount,
+        witnessData?.amountSat ?? null,
+        witnessData?.blinding ?? null,
+        donation,
+        feeRate,
+        minConfirmations
+      )
+    ) as Promise<RlnSendRgbResponse>;
+  }
+
   async rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]> {
     const raw = (await this.withNodeOperation((nodeId) =>
       Rgb.rlnListTransactions(nodeId, skipSync)

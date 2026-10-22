@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+__changed__
+
+- RLN `onchainSend()` sends through the new native `sendrgbinvoice` call ([rgb-lightning-node#212](https://github.com/UTEXO-Protocol/rgb-lightning-node/pull/212)). RLN now rejects proxy recipients built from decoded invoice fields. `amount` defaults to a fungible invoice amount, and a different explicit amount is rejected. `skipSync` is ignored.
+- RLN `decodeRGBInvoice()` returns `publicKey` and `encryption`. Raw `proxyRecipientId` is optional.
+- RLN `listOnchainTransfers()` reports rgb-lib-bfa `Mint` transfers as `Mint` instead of `Send`.
+- RLN `reuseAddresses: true` throws `ConfigurationError`; rgb-lib-bfa does not support address reuse.
+
 ## 1.0.0-beta.38
 
 __changed__

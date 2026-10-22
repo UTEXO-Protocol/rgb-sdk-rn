@@ -293,6 +293,21 @@ export interface IRLN {
     transportEndpoints: string[],
     witnessData?: { amountSat: number; blinding?: number } | null
   ): Promise<RlnSendRgbResponse>;
+  /**
+   * Sends a fungible amount to an RGB invoice without dropping its proxy
+   * fields (recipient key, encryption, expiry). RLN requires this path for
+   * invoices that carry transport endpoints. The amount must match a
+   * fungible invoice amount when the invoice states one.
+   */
+  rlnSendRgbInvoice(
+    invoice: string,
+    assetId: string,
+    amount: number,
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number,
+    witnessData?: { amountSat: number; blinding?: number } | null
+  ): Promise<RlnSendRgbResponse>;
   rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]>;
   rlnListTransactionsByTxid(
     txid: string,

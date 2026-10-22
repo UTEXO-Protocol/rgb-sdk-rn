@@ -446,6 +446,26 @@ export class RLNManager implements IRLN {
     );
   }
 
+  rlnSendRgbInvoice(
+    invoice: string,
+    assetId: string,
+    amount: number,
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number,
+    witnessData?: { amountSat: number; blinding?: number } | null
+  ): Promise<RlnSendRgbResponse> {
+    return this.rlnBinding.rlnSendRgbInvoice(
+      invoice,
+      assetId,
+      amount,
+      donation,
+      feeRate,
+      minConfirmations,
+      witnessData
+    );
+  }
+
   rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]> {
     return this.rlnBinding.rlnListTransactions(skipSync);
   }

@@ -95,7 +95,18 @@ int main(void) {
       @"amount":@"5", @"expirationTimestamp":expiry,
       @"transportEndpoints":@[], @"minConfirmations":@1
     });
+    // JS maps the public "utexo" deployment to native "signet" before openWallet.
+    check([foreign[@"invoice"] containsString:@"/sb:"], "Standard signet invoice must use sb, not sbc");
+    check([call(@"decodeInvoice", @{@"handle":signet, @"invoice":foreign[@"invoice"]})[@"network"] isEqual:@"signet"], "Signet invoice decoded as another network");
     call(@"closeWallet", @{@"handle":signet});
+    // Old custom-signet profiles must not be silently reopened on standard signet.
+    NSMutableDictionary *legacyUtexoParams = [params mutableCopy];
+    legacyUtexoParams[@"dataDir"] = [base stringByAppendingPathComponent:@"legacy-utexo"];
+    legacyUtexoParams[@"network"] = @"utexo";
+    NSString *legacyUtexo = call(@"openWallet", legacyUtexoParams);
+    call(@"closeWallet", @{@"handle":legacyUtexo});
+    legacyUtexoParams[@"network"] = @"signet";
+    check([[RgbLibSwiftHelper execute:@"openWallet" params:legacyUtexoParams][@"error"][@"code"] isEqual:@"WALLET_PROFILE_MISMATCH"], "Custom signet storage was silently reused on standard signet");
     check([rejected(@{@"invoice":foreign[@"invoice"], @"amount":@"5"})[@"message"] isEqual:@"Invoice network does not match wallet"], "send accepted an invoice for another network");
     NSString *backup = [base stringByAppendingPathComponent:@"backup.rgb"];
     call(@"backup", @{@"handle":handle, @"backupPath":backup, @"password":@"smoke-test-password"});

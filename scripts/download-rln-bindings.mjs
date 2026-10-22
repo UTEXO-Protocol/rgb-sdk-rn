@@ -1,7 +1,8 @@
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
-const { execFileSync } = require('child_process');
+import https from 'node:https';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 // iOS xcframework is downloaded from the pinned GitHub release.
 // Android AAR is resolved from Maven Central by Gradle — no download needed here.
@@ -9,7 +10,7 @@ const { execFileSync } = require('child_process');
 const VERSION = '0.17.0-beta.3';
 const BASE_URL = `https://github.com/UTEXO-Protocol/rgb-lightning-node/releases/download/v${VERSION}`;
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const IOS_DIR = path.join(ROOT, 'ios');
 const IOS_ZIP = path.join(IOS_DIR, 'rgb-lightning-node-swift.zip');
 const IOS_FRAMEWORK_DIR = path.join(IOS_DIR, 'RGBLightningNode.xcframework');

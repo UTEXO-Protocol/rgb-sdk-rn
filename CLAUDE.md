@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`@utexo/rgb-sdk-rn` is a React Native SDK for the Bitcoin RGB Protocol. It supports an on-device RGB Lightning Node (RLN) and an optional on-chain rgb-lib-bfa wallet through one `UTEXOWallet` facade. Both engines use upstream UniFFI bindings on iOS and Android; this SDK does not build a Rust adapter. The library uses the React Native new architecture (TurboModules + Codegen).
+`@utexo/rgb-sdk-rn` is a React Native SDK for the Bitcoin RGB Protocol. It supports on-chain operations via rgb-lib and Lightning payments via the on-device RGB Lightning Node (RLN) through one `UTEXOWallet` facade. RLN also supports on-chain operations. Both engines use upstream UniFFI bindings on iOS and Android; this SDK does not build a Rust adapter. The library uses the React Native new architecture (TurboModules + Codegen).
 
 ## Commands
 
@@ -34,10 +34,12 @@ yarn clean
 cd ios && pod install
 
 # Download/refresh iOS xcframework (runs automatically on postinstall; Android AAR comes from Maven Central via Gradle)
-node scripts/download-rln-bindings.js
+node scripts/download-rln-bindings.mjs
 ```
 
 Tests use Node's built-in test runner. Run `npm test` for typecheck, runtime contract checks, rgb-lib tests and WebRGB tests. `tests/types/` contains compile-only API regressions (including facade method coverage); `tests/*.test.mjs` contains JavaScript tests. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run the native smoke sources in `tests/native/`. The Android script uses the host JVM; it is not an emulator test. Existing Android instrumentation tests remain in `android/src/androidTest/`.
+
+Use `.mjs` (ES modules) for Node scripts, runtime tests and ESLint config. `babel.config.cjs` stays CommonJS for synchronous config loading. SDK source stays TypeScript; generated JavaScript in `lib/` is managed by Bob.
 
 Publishing bumps version, pushes a tag, and publishes to npm:
 ```bash
@@ -72,7 +74,7 @@ The existing `new UTEXOWallet(params, signer)` constructor selects RLN and satis
 
 Use `AnyUtexoWallet` for a wallet that can have either protocol and narrow `wallet.protocol` before unlock/reinit or Lightning calls. A wide `UTEXOWallet<WalletProtocol>` cannot safely call unlock/reinit. Protocol selects the engine; runtime capabilities still determine whether operations such as burn are supported.
 
-The facade owns public aliases and subclass dispatch. Keep `initialize()` calling `this.init()`, `dispose()` calling `this.destroy()`, and `refreshWallet()` calling `this.refreshTransfers()`. The implementation classes own lifecycle and mapping. Web-only PSBT and begin/end carriers are absent.
+The facade owns public aliases and subclass dispatch. Keep `initialize()` calling `this.init()`, `dispose()` calling `this.destroy()`, and `refreshWallet()` calling `this.refreshTransfers()`. For `RGB_L1`, prefer `init()` followed by `goOnline(params)`; `goOnline()` guards the protocol and calls `this.unlock(params)` so subclass overrides run. Existing `unlock(params)` calls remain supported. The implementation classes own lifecycle and mapping. Web-only PSBT and begin/end carriers are absent.
 
 **RLN node lifecycle:**
 1. `init()` — `rlnCreateNode` + `signer.initNode` (writes keys to `storageDirPath`)
@@ -100,7 +102,7 @@ The signer is created with a disk-backed VLS store (`NativeExternalSigner.newWit
 
 **Android**: `RgbModule.kt` extends the codegen-generated `NativeRgbSpec`, dispatches each bridge call via Kotlin coroutines (`Dispatchers.IO`). The Android binding (`com.utexo:rgb-lightning-node-android:0.17.0-beta.3`) is resolved from Maven Central. JNA (`net.java.dev.jna:jna:5.17.0@aar`) is required for UniFFI.
 
-**iOS native framework**: `RGBLightningNode.xcframework` is downloaded from GitHub releases during `postinstall` (`scripts/download-rln-bindings.js`). It is not committed. Version is pinned at `0.17.0-beta.3`; `ios/.rln-ios-version` tracks the installed release so older or unversioned frameworks are replaced. Only the pinned release is used; local archives and environment overrides are not supported.
+**iOS native framework**: `RGBLightningNode.xcframework` is downloaded from GitHub releases during `postinstall` (`scripts/download-rln-bindings.mjs`). It is not committed. Version is pinned at `0.17.0-beta.3`; `ios/.rln-ios-version` tracks the installed release so older or unversioned frameworks are replaced. Only the pinned release is used; local archives and environment overrides are not supported.
 
 ### Type mapping
 

@@ -21,7 +21,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const kotlinc = process.env.KOTLINC ?? 'kotlinc';
 const java = process.env.JAVA ?? 'java';
 const requireNative = process.argv.includes('--require-native');
-const src = (name) => path.join(root, 'android/src/main/java/com/rgbsdkrn', name);
+const src = (name) =>
+  path.join(root, 'android/src/main/java/com/rgbsdkrn', name);
 const native = (name) => path.join(root, 'tests/native', name);
 const run = (command, args) => {
   const result = spawnSync(command, args, { stdio: 'inherit' });

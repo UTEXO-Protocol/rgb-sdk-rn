@@ -22,20 +22,27 @@ const runtimeGlobals = {
   globalThis: 'readonly',
 };
 
-// CommonJS Node globals for build/postinstall scripts and tool configs.
+// Node globals for scripts, tests and tool configs.
 const nodeGlobals = {
   ...runtimeGlobals,
+  process: 'readonly',
+  setImmediate: 'readonly',
+  clearImmediate: 'readonly',
+  structuredClone: 'readonly',
+};
+
+const commonJsGlobals = {
+  ...nodeGlobals,
   require: 'readonly',
   module: 'writable',
   exports: 'writable',
-  process: 'readonly',
   __dirname: 'readonly',
   __filename: 'readonly',
 };
 
 export default [
   {
-    files: ['**/*.{js,ts,tsx}'],
+    files: ['**/*.{js,mjs,cjs,ts,tsx}'],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
@@ -54,10 +61,17 @@ export default [
     },
   },
   {
-    files: ['scripts/**/*.js', '*.config.js', 'babel.config.js'],
+    files: ['scripts/**/*.mjs', 'tests/**/*.mjs', '*.config.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: nodeGlobals,
+    },
+  },
+  {
+    files: ['**/*.cjs'],
     languageOptions: {
       sourceType: 'commonjs',
-      globals: nodeGlobals,
+      globals: commonJsGlobals,
     },
   },
   {

@@ -1,3 +1,4 @@
+// Babel loads this config synchronously, so keep it explicitly CommonJS.
 module.exports = {
   overrides: [
     {

@@ -75,7 +75,7 @@ void w.signPsbt('psbt');
 void w.createUtxosBegin({ num: 1 });
 // @ts-expect-error the imperative VSS surface is gone — use backupNow()
 void w.vssBackup();
-// @ts-expect-error rgb-lib lifecycle, deleted — use unlock(params)
+// @ts-expect-error goOnline is an RGB_L1 extension, absent from the shared contract
 void w.goOnline('http://localhost:50001');
 // @ts-expect-error rgb-lib wallet concept, deleted — use getNodeInfo()
 void w.getXpub();

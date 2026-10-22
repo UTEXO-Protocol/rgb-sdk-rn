@@ -1,6 +1,7 @@
 import type { Network, InvoiceRequest } from '@utexo/rgb-sdk-core';
 import { getRgbLibBinding, assertRuntime } from './native';
 import type { NativeRuntimeInfo, Spec } from '../../binding/NativeRgbLib';
+import { toNativeNetwork } from '../../binding/Interfaces';
 import type { IRgbLibKeyProvider } from './key-provider';
 import type { OnchainWalletBackend, WalletIdentity } from '../wallet-api';
 import { WalletBackendError } from '../wallet-errors';
@@ -113,7 +114,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       if (requiresOnline && !this.online) {
         throw new WalletBackendError(
           'WALLET_OFFLINE',
-          'Call unlock() before this operation',
+          'Call goOnline() or unlock() before this operation',
           operation,
           'RGB_L1'
         );
@@ -147,6 +148,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       const native = guardNative(this.loadBinding());
       const runtime = await native.getRuntimeInfo();
       assertRuntime(runtime);
+      // Keep the public deployment name, but use the same chain mapping as RLN.
+      // Passing "utexo" directly selects custom signet (sbc) in these bindings.
+      const nativeNetwork = toNativeNetwork(this.params.network);
       let mnemonic: string | undefined = await this.keys.getMnemonic();
       if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
         throw new WalletBackendError(
@@ -160,7 +164,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       try {
         handle = await native.openWallet(
           this.params.storageDirPath,
-          this.params.network,
+          nativeNetwork,
           mnemonic,
           this.params.witnessVersion ?? 'taproot',
           this.params.maxAllocationsPerUtxo ?? 5,
@@ -173,7 +177,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       this.handle = handle;
       try {
         const identity = await native.getWalletIdentity(handle);
-        if (!identity.id || identity.network !== this.params.network) {
+        if (!identity.id || identity.network !== nativeNetwork) {
           throw new WalletBackendError(
             'WALLET_CONFIG_MISMATCH',
             'Native wallet identity does not match the profile',

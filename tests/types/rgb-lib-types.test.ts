@@ -73,7 +73,16 @@ export async function constructorTypes(
   const onchain: OnchainWalletApi<RgbLibUnlockParams> = rgb;
   const transfers: WalletTransfer[] = await rgb.listTransfers();
   await rgb.unlock(unlock);
+  await rgb.goOnline(unlock);
   await legacy.unlock({});
+  // @ts-expect-error goOnline is specific to RGB_L1; RLN keeps unlock.
+  void legacy.goOnline(unlock);
+  // @ts-expect-error Explicit RLN options also exclude goOnline.
+  void explicitRln.goOnline(unlock);
+  // @ts-expect-error goOnline requires the same complete config as unlock.
+  void rgb.goOnline({});
+  // @ts-expect-error A URL alone is not an RGB Lib connection config.
+  void rgb.goOnline('tcp://localhost:50001');
   await explicitRln.createLightningInvoice({ amountSats: 1 });
   // @ts-expect-error A new RGB Lib instance has no default endpoints.
   void rgb.unlock({});
@@ -116,6 +125,7 @@ export async function constructorTypes(
     await mixed.unlock({});
   } else {
     await mixed.unlock(unlock);
+    await mixed.goOnline(unlock);
     // @ts-expect-error Discriminant narrowing preserves the on-chain restriction.
     void mixed.createLightningInvoice({ amountSats: 1 });
   }
@@ -154,6 +164,10 @@ export function wideProtocolTypes(
   void wide.unlock(rlnUnlock);
   // @ts-expect-error RGB Lib params are equally unsafe on a wide generic.
   void wide.unlock(rgbUnlock);
+  // @ts-expect-error goOnline requires a concrete RGB_L1 wallet.
+  void wide.goOnline(rgbUnlock);
+  // @ts-expect-error A union must be narrowed before calling goOnline.
+  void mixed.goOnline(rgbUnlock);
   // @ts-expect-error Reinit also accepts protocol-specific params.
   void wide.reinit(rlnUnlock);
   // @ts-expect-error Reinit must not silently default a wide type to RGB Lib.
@@ -168,8 +182,11 @@ export function wideProtocolTypes(
     void mixed.reinit(rlnUnlock);
   } else {
     void mixed.unlock(rgbUnlock);
+    void mixed.goOnline(rgbUnlock);
     void mixed.reinit(rgbUnlock);
     // @ts-expect-error Narrowing preserves the RGB Lib unlock requirements.
     void mixed.unlock(rlnUnlock);
+    // @ts-expect-error goOnline cannot accept RLN unlock params either.
+    void mixed.goOnline(rlnUnlock);
   }
 }

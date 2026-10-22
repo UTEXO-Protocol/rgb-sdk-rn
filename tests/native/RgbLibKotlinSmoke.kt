@@ -68,6 +68,14 @@ fun main() {
         "transportEndpoints" to emptyList<String>(), "minConfirmations" to 1.0
       )) as Map<String, Any?>
     } finally { store.execute("closeWallet", mapOf("handle" to signet)) }
+    // JS maps the public "utexo" deployment to native "signet" before openWallet.
+    check((foreign["invoice"] as String).contains("/sb:")) { "Standard signet invoice must use sb, not sbc" }
+    check((call("decodeInvoice", mapOf("invoice" to foreign["invoice"])) as Map<*, *>)["network"] == "signet")
+    // Old custom-signet profiles must not be silently reopened on standard signet.
+    val legacyParams = params + mapOf("dataDir" to root.resolve("legacy-utexo").path, "network" to "utexo")
+    val legacy = store.execute("openWallet", legacyParams) as String
+    store.execute("closeWallet", mapOf("handle" to legacy))
+    check((runCatching { store.execute("openWallet", legacyParams + ("network" to "signet")) }.exceptionOrNull() as RgbLibBridgeError).code == "WALLET_PROFILE_MISMATCH")
     val network = rejected(mapOf("invoice" to foreign["invoice"], "amount" to "5"))
     check(network.code == "INVALID_CONFIG" && network.message == "Invoice network does not match wallet")
     val backup = root.resolve("backup.rgb").path

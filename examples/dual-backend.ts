@@ -11,7 +11,7 @@ type SessionConfig =
   | (RlnWalletInit & { unlock: IRLNUnlockParams })
   | (RgbLibWalletInit & { unlock: RgbLibUnlockParams });
 
-async function start(wallet: AnyUtexoWallet, unlock: () => Promise<void>) {
+async function start(wallet: AnyUtexoWallet, connect: () => Promise<void>) {
   try {
     await wallet.init();
   } catch (error) {
@@ -23,7 +23,7 @@ async function start(wallet: AnyUtexoWallet, unlock: () => Promise<void>) {
       throw error;
     }
   }
-  await unlock();
+  await connect();
   return {
     identity: await wallet.getWalletIdentity(),
     address: await wallet.getAddress(),
@@ -40,7 +40,7 @@ export function createDemoSession(config: SessionConfig) {
     const wallet = new UTEXOWallet(config);
     return {
       wallet,
-      start: () => start(wallet, () => wallet.unlock(config.unlock)),
+      start: () => start(wallet, () => wallet.goOnline(config.unlock)),
     };
   }
   const wallet = new UTEXOWallet(config);

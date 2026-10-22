@@ -1,6 +1,7 @@
 import { RlnWallet } from './rln/rln-wallet';
 import type { UTEXOWalletNodeParams } from './rln/rln-wallet';
 import { RgbLibWallet } from './rgb-lib/rgb-lib-wallet';
+import type { RgbLibUnlockParams } from './rgb-lib/config';
 import type { IRLNSigner } from './rln/rln-signers';
 import type { WalletProtocol } from './wallet-api';
 import type { WalletInit, UTEXOWalletOptions } from './wallet-options';
@@ -166,6 +167,22 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     ...args: Parameters<Method<TProtocol, 'unlock'>>
   ): ReturnType<Method<TProtocol, 'unlock'>> {
     return this.invoke('unlock', ...args);
+  }
+
+  /** Connect an initialized RGB_L1 wallet; alias for unlock(params). */
+  async goOnline(
+    this: UTEXOWallet<'RGB_L1'>,
+    params: RgbLibUnlockParams
+  ): Promise<void> {
+    if (this.engine.protocol !== 'RGB_L1') {
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        'goOnline requires the RGB_L1 protocol',
+        'goOnline',
+        this.engine.protocol
+      );
+    }
+    return this.unlock(params);
   }
 
   reinit(

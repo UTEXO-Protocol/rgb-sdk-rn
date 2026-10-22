@@ -1,7 +1,8 @@
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+import https from 'node:https';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 // Set to false when rgb_libFFI.xcframework should be fetched again on postinstall.
 const DISABLE_RGB_LIB_FFI_DOWNLOAD = true;
@@ -12,7 +13,10 @@ if (DISABLE_RGB_LIB_FFI_DOWNLOAD) {
 
 const URL =
   'https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/download/0.3.0-beta.18/rgb_libFFI.xcframework.zip';
-const IOS_DIR = path.join(__dirname, '..', 'ios');
+const IOS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../ios'
+);
 const ZIP_FILE = path.join(IOS_DIR, 'rgb_libFFI.xcframework.zip');
 const XCFRAMEWORK_DIR = path.join(IOS_DIR, 'rgb_libFFI.xcframework');
 

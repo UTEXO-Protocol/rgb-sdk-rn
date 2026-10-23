@@ -120,7 +120,7 @@ The TurboModule spec is `src/binding/NativeRgb.ts` (module name `'Rgb'`, package
 
 For rgb-lib, edit `src/binding/NativeRgbLib.ts`, run `npm run codegen:rgb-lib`, and implement native behavior in the platform session helpers. The generated bridge and DTO files are checked by `npm test`. Keep them in the current native locations: the podspec uses a nonrecursive `ios/*` source glob, and Android reflection uses the module's existing fully qualified name.
 
-`src/bindings/rgb-lib/manifest.json` pins the upstream artifacts. `npm run bindings:rgb-lib -- --from /path/to/mobile-bundle` installs a matching bundle; the optional postinstall only installs it when `RGB_LIB_BINDINGS_DIR` is set. Rebuild the application after changing native artifacts.
+`src/bindings/rgb-lib/manifest.json` pins the upstream artifacts. On iOS, `scripts/setup-rgb-lib-bindings.mjs` (run by `postinstall`, or `npm run bindings:rgb-lib`) downloads the pinned rgb-lib-swift release, verifies its SHA-256 and `version.json`, and builds `ios/RgbLibBindings/` (a dynamic `rgb_libFFI` wrapper of the release library plus the `RGBLib` Swift module). On Android, Gradle resolves `com.utexo:rgb-lib-bfa-android` from Maven Central. When bumping rgb-lib, update the manifest and the version constants in `config.ts`, `RgbLibSwiftHelper.swift` and `RgbLibSessionStore.kt` together. Rebuild the application after changing native artifacts.
 
 ### Build output
 

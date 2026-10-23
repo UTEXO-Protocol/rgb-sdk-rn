@@ -281,7 +281,7 @@ internal class RgbLibSessionStore {
   companion object {
     private const val PROFILE="rgb-sdk-profile.json"
     private const val LOCK=".rgb-sdk.lock"
-    private const val VERSION="v0.3.0-beta.7-upstream-dev-bfa.1"
-    private const val REVISION="ad87acb673262dbc0f2270b5b2e2f0d3db74a65a"
+    private const val VERSION="v0.3.0-beta.7-upstream-dev-bfa.2"
+    private const val REVISION="668151e290ddf859858cb74024e6b148535ebec9"
   }
 }

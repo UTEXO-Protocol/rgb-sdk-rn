@@ -28,6 +28,10 @@ __fixed__
 
 __changed__
 
+- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.1` (`ad87acb`) to `v0.3.0-beta.7-upstream-dev-bfa.2` (`668151e`). It is no longer installed from a local bundle:
+  - **iOS:** `postinstall` downloads the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.2-bfa), verifies it and builds the frameworks.
+  - **Android:** Gradle resolves `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.2-bfa` from Maven Central.
+  - `--from` and `RGB_LIB_BINDINGS_DIR` are removed. RGB_L1 now needs iOS 16.0; on Android it is available on `arm64-v8a` and `x86_64` only.
 - Readme: documented how backup differs between protocols. `createBackup()` is RGB_L1 only. `vssAllowEmptyRestore` means start empty when the VSS restore fails, which is unsafe with channels; the old description was wrong.
 - RGB Lib bridge version is `3` (new operations and parameters). Rebuild the app so the native module matches the JS SDK.
 - RLN `onchainSend()` sends through the new native `sendrgbinvoice` call ([rgb-lightning-node#212](https://github.com/UTEXO-Protocol/rgb-lightning-node/pull/212)). RLN now rejects proxy recipients built from decoded invoice fields. `amount` defaults to a fungible invoice amount, and a different explicit amount is rejected. `skipSync` is ignored.

@@ -34,41 +34,33 @@ RLN bindings are installed by default: `postinstall` downloads
 
 ### rgb-lib (`RGB_L1`)
 
-To enable on-chain mode, supply a **local prebuilt UniFFI mobile bundle** matching
-[the SDK's pinned release](src/bindings/rgb-lib/manifest.json). The current installer
-does not download rgb-lib or compile Rust. From your application's root directory:
+rgb-lib bindings are also installed by default, at the version pinned in
+[`src/bindings/rgb-lib/manifest.json`](src/bindings/rgb-lib/manifest.json):
+
+| Platform | Source | Integration |
+|----------|--------|-------------|
+| iOS | [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases) | `postinstall` downloads the release, checks its SHA-256 and `version.json`, and builds `RGBLib.xcframework` and `rgb_libFFI.xcframework` in `ios/RgbLibBindings/`. The podspec includes them |
+| Android | `com.utexo:rgb-lib-bfa-android` on Maven Central | Gradle resolves it; no install step |
+
+The iOS step needs macOS with Xcode and takes about a minute. The release
+contains the Rust library and the generated `RgbLib.swift`, but no compiled
+Swift module. The installer compiles `RgbLib.swift` into the `RGBLib` module,
+and wraps the Rust library, unchanged, in a dynamic `rgb_libFFI` framework.
+That framework exports only the UniFFI symbols, so it can be linked next to
+RLN, which contains its own copy of rgb-lib.
+
+If the iOS step fails during `postinstall`, `npm install` still succeeds, but
+RGB_L1 is unavailable on iOS. Run it again, or force a rebuild, with:
 
 ```bash
-node node_modules/@utexo/rgb-sdk-rn/scripts/setup-rgb-lib-bindings.mjs \
-  --from /absolute/path/to/mobile-bundle --platform all
+npm run bindings:rgb-lib            # from the SDK package directory
+npm run bindings:rgb-lib -- --force
 ```
 
-Use `--platform ios` or `--platform android` for a single platform.
+Set `RGB_LIB_SKIP_IOS=1` to skip the iOS step, for example in JavaScript-only CI.
 
-| Platform | Installed bindings | Integration |
-|----------|--------------------|-------------|
-| iOS | `RGBLib.xcframework` and `rgb_libFFI.xcframework` | The SDK's podspec includes them from `ios/RgbLibBindings/` |
-| Android | `rgb-lib-bfa.aar` | Gradle resolves `com.utexo:rgb-lib-bfa-android` from the SDK's local Maven repository |
-
-<details>
-<summary>Bundle format and postinstall option</summary>
-
-The bundle contains `manifest.json`, `ios/RGBLib.xcframework/`,
-`ios/rgb_libFFI.xcframework/` and `android/rgb-lib-bfa.aar` (only the selected
-platform's artifacts are required). Its manifest includes matching `version`,
-`sourceRevision`, `uniffiVersion`, `swiftModule` and `kotlinPackage` fields, and
-`checksums` mapping bundle-relative file paths to SHA-256 hashes.
-
-To install the bundle during `postinstall` instead:
-
-```bash
-RGB_LIB_BINDINGS_DIR=/absolute/path/to/mobile-bundle npm install @utexo/rgb-sdk-rn
-```
-
-This installs both platforms on macOS and Android on other systems. Make the
-bundle available in CI and reinstall matching bindings after SDK upgrades.
-
-</details>
+Minimum platforms for RGB_L1: iOS 16.0 (the release is built for 16.0).
+On Android, the AAR includes `arm64-v8a` and `x86_64` only.
 
 After native setup, run CocoaPods on iOS and rebuild the application:
 

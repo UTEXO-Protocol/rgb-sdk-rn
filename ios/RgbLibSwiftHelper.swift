@@ -258,7 +258,7 @@ public final class RgbLibSwiftHelper: NSObject {
   }
   private static func call(_ operation: String, _ p: RgbParams) throws -> Any {
     switch operation {
-    case "getRuntimeInfo": return ["version": "v0.3.0-beta.7-upstream-dev-bfa.1", "sourceRevision": "ad87acb673262dbc0f2270b5b2e2f0d3db74a65a", "bridgeVersion": 3, "burn": true, "consignment": true, "bfa": true]
+    case "getRuntimeInfo": return ["version": "v0.3.0-beta.7-upstream-dev-bfa.2", "sourceRevision": "668151e290ddf859858cb74024e6b148535ebec9", "bridgeVersion": 3, "burn": true, "consignment": true, "bfa": true]
     case "openWallet": return try open(p)
     case "restoreBackup": try restore(p); return NSNull()
     default: break

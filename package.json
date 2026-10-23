@@ -52,7 +52,6 @@
     "!src/bindings/**/*.zip",
     "!ios/*.zip",
     "!ios/RgbLibBindings/**",
-    "!android/rgb-lib-maven/**",
     "!android/src/test/**",
     "!android/src/androidTest/**"
   ],

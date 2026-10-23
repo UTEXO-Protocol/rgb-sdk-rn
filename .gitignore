@@ -61,10 +61,7 @@ graphify-out/
 # Claude Code local settings
 .claude/
 
-# Optional prebuilt rgb-lib UniFFI mobile artifacts
+# rgb-lib iOS frameworks built by scripts/setup-rgb-lib-bindings.mjs
 ios/RgbLibBindings/
 ios/RgbLibBindings.pending/
 ios/RgbLibBindings.previous/
-android/rgb-lib-maven/
-android/rgb-lib-maven.pending/
-android/rgb-lib-maven.previous/

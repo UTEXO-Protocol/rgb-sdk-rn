@@ -412,3 +412,45 @@ test('payment types are normalized on both platform spellings', async () => {
     delete globalThis.__RN_NATIVE__;
   }
 });
+
+test('onchainSend sends the request it validated even if the caller mutates it', async () => {
+  let release;
+  const decodeStarted = new Promise((resolve) => {
+    release = resolve;
+  });
+  let finishDecode;
+  const { wallet, calls } = walletWith({
+    rlnDecodeRgbInvoice: () => {
+      release();
+      return new Promise((resolve) => {
+        finishDecode = () => resolve(decoded());
+      });
+    },
+    rlnSendRgbInvoice: async () => ({ txid: 'tx', batchTransferIdx: 1 }),
+  });
+  const request = {
+    invoice: INVOICE,
+    amount: 5,
+    witnessData: { amountSat: 1000 },
+  };
+  const sending = wallet.onchainSend(request);
+  await decodeStarted;
+  request.invoice = 'rgb:other-invoice';
+  request.amount = -1;
+  request.assetId = 'rgb:other-asset';
+  request.witnessData.amountSat = 0.5;
+  finishDecode();
+  await sending;
+  const decode = calls.find(([name]) => name === 'rlnDecodeRgbInvoice');
+  assert.deepEqual(decode[1], [INVOICE]);
+  const send = calls.find(([name]) => name === 'rlnSendRgbInvoice');
+  assert.deepEqual(send[1], [
+    INVOICE,
+    ASSET,
+    5,
+    false,
+    1,
+    1,
+    { amountSat: 1000 },
+  ]);
+});

@@ -28,7 +28,7 @@ export function getRgbLibBinding(): Spec {
   if (!NativeRgbLib) {
     throw new WalletBackendError(
       'NATIVE_BACKEND_UNAVAILABLE',
-      'RGB Lib native bindings are not installed. Build/install RGB Lib artifacts and rebuild the app.',
+      'RGB Lib native module is not linked. On iOS run `npm run bindings:rgb-lib` in the SDK package, then rebuild the app.',
       undefined,
       'RGB_L1'
     );

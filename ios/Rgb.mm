@@ -427,23 +427,6 @@ feeProportionalMillionths:(NSNumber *)feeProportionalMillionths
     });
 }
 
-- (void)rlnBackup:(double)nodeId
-        backupPath:(NSString *)backupPath
-          password:(NSString *)password
-           resolve:(RCTPromiseResolveBlock)resolve
-            reject:(RCTPromiseRejectBlock)reject
-{
-    EXEC_ASYNC({
-        NSDictionary *result = [RgbSwiftHelper _rlnBackup:@(nodeId) backupPath:backupPath password:password];
-        NSString *errorMessage = result[@"error"];
-        if (errorMessage != nil) {
-            reject(result[@"errorCode"] ?: @"RLN_BACKUP_ERROR", errorMessage, nil);
-        } else {
-            resolve(nil);
-        }
-    });
-}
-
 - (void)rlnBtcBalance:(double)nodeId
              skipSync:(BOOL)skipSync
               resolve:(RCTPromiseResolveBlock)resolve

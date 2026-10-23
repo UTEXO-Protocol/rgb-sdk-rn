@@ -7,7 +7,10 @@ import uniffi.rgb_lib.RgbLibException
 
 @ReactModule(name = RgbLibModule.NAME)
 class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context) {
-  private val store = RgbLibSessionStore()
+  // The AAR ships its provenance as an asset; getRuntimeInfo reports it.
+  private val store = RgbLibSessionStore {
+    runCatching { context.assets.open("rgb-lib-bfa-version.json").bufferedReader().use { it.readText() } }.getOrNull()
+  }
   // Per-handle queues, adoption and invalidation live in RgbLibDispatcher.
   private val dispatcher = RgbLibDispatcher(store::execute, this::rejection)
   override fun getName() = NAME
@@ -15,7 +18,7 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
   private fun rejection(error: Throwable): Pair<String, String?> = when (error) {
     is RgbLibBridgeError -> error.code to error.message
     is RgbLibException -> rgbLibErrorCode(error) to error.message
-    is UnsatisfiedLinkError -> "NATIVE_BACKEND_UNAVAILABLE" to "Build RGB Lib native artifacts and rebuild the app"
+    is UnsatisfiedLinkError -> "NATIVE_BACKEND_UNAVAILABLE" to "RGB Lib native library failed to load; rebuild the app"
     // Do not include request data or credentials in a bridge error.
     else -> "NATIVE_BRIDGE_ERROR" to "RGB Lib native bridge operation failed"
   }

@@ -566,3 +566,41 @@ test('RLN issuance converts file:// URIs and rejects other schemes before upload
     [['/data/my logo.png']]
   );
 });
+
+test('RGB_LN createBackup rejects with UNSUPPORTED_CAPABILITY without calling native', async () => {
+  const { wallet, calls } = walletWith({});
+  await assert.rejects(
+    wallet.createBackup({ backupPath: '/b', password: 'pw' }),
+    (error) =>
+      error.code === 'UNSUPPORTED_CAPABILITY' && error.protocol === 'RGB_LN'
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('BTC balance must be the structured record both bridges return', async () => {
+  const { RLNBinding } = await import('../lib/module/binding/RLNBinding.js');
+  const sub = { settled: 1, future: 2, spendable: 3 };
+  let reply = { vanilla: sub, colored: sub };
+  globalThis.__RN_NATIVE__ = {
+    Rgb: {
+      rlnCreateNode: async () => 7,
+      rlnBtcBalance: async () => reply,
+    },
+  };
+  try {
+    const binding = new RLNBinding();
+    await binding.rlnCreateNode({ storageDirPath: '/tmp', network: 'regtest' });
+    assert.deepEqual(await binding.rlnBtcBalance(false), reply);
+    // The old Rust Display string is no longer parsed, nor replaced by zeros.
+    reply = {
+      vanilla: 'BtcBalance(settled=1, future=2, spendable=3)',
+      colored: sub,
+    };
+    await assert.rejects(
+      binding.rlnBtcBalance(false),
+      /Invalid native BTC balance: vanilla/
+    );
+  } finally {
+    delete globalThis.__RN_NATIVE__;
+  }
+});

@@ -356,10 +356,6 @@ export interface IRLN {
     skipSync: boolean
   ): Promise<number>;
 
-  // ── Backup ───────────────────────────────────────────────────────────────────
-
-  rlnBackup(backupPath: string, password: string): Promise<void>;
-
   // ── VSS ──────────────────────────────────────────────────────────────────────
 
   rlnVssClearFence(password: string): Promise<void>;

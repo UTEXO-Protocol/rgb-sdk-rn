@@ -133,11 +133,6 @@ export interface Spec extends TurboModule {
   rlnAddress(nodeId: number): Promise<object>;
   rlnRotateAddress(nodeId: number): Promise<object>;
   rlnAssetBalance(nodeId: number, assetId: string): Promise<object>;
-  rlnBackup(
-    nodeId: number,
-    backupPath: string,
-    password: string
-  ): Promise<void>;
   rlnBtcBalance(nodeId: number, skipSync: boolean): Promise<object>;
   rlnCheckIndexerUrl(nodeId: number, indexerUrl: string): Promise<object>;
   rlnCheckProxyEndpoint(nodeId: number, proxyEndpoint: string): Promise<void>;

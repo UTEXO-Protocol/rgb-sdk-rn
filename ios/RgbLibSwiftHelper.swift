@@ -73,6 +73,14 @@ private func rgbReceiveAssignment(_ kind: String?, _ amount: UInt64?) throws -> 
   default: throw rgbInvalid("Unknown assignment kind")
   }
 }
+/// Provenance of the linked RGBLib framework, copied from the release's
+/// version.json by scripts/setup-rgb-lib-bindings.mjs. Empty when missing.
+private func rgbArtifactInfo() -> [String: Any] {
+  guard let url = Bundle(for: RGBLib.Wallet.self).url(forResource: "rgb-lib-bfa-version", withExtension: "json"),
+        let data = try? Data(contentsOf: url),
+        let info = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [:] }
+  return info
+}
 private func rgbNetworkFromName(_ name: String) throws -> RGBLib.BitcoinNetwork {
   switch name {
   case "mainnet": return .mainnet
@@ -258,7 +266,9 @@ public final class RgbLibSwiftHelper: NSObject {
   }
   private static func call(_ operation: String, _ p: RgbParams) throws -> Any {
     switch operation {
-    case "getRuntimeInfo": return ["version": "v0.3.0-beta.7-upstream-dev-bfa.1", "sourceRevision": "ad87acb673262dbc0f2270b5b2e2f0d3db74a65a", "bridgeVersion": 3, "burn": true, "consignment": true, "bfa": true]
+    case "getRuntimeInfo":
+      let artifact = rgbArtifactInfo()
+      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 3, "burn": true, "consignment": true, "bfa": true]
     case "openWallet": return try open(p)
     case "restoreBackup": try restore(p); return NSNull()
     default: break

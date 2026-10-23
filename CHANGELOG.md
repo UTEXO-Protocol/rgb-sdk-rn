@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+__added__
+
+- `issueAssetCfa()` and `issueAssetUda()` on both protocols. RGB_LN uploads `filePath` / `mediaFilePath` / `attachmentsFilePaths` to the node and issues with their digests; RGB_L1 passes the paths to rgb-lib.
+- `getAssetMetadata(assetId)` on both protocols; supplies are exact u64 decimal strings.
+- RGB_L1 `restoreFromBackup({ backupFilePath, password, dataDir })` restores a `createBackup()` file into an empty directory before `init()`. It has the name and shape of the function removed in `1.0.0-beta.10`, and now also passes `dataDir` to native (the old version ignored it). It returns `{ message }`.
+- `checkIndexerUrl(url)` is shared (was RGB_LN only) and returns a lowercase `indexerProtocol` on both.
+- RGB_L1 only: `drainTo({ address, feeRate? })` and `deleteTransfers({ batchTransferIdx?, noAssetOnly? })`.
+- `assignmentKind` for `blindReceive()`, `witnessReceive()` and `onchainReceive()` (`Fungible`, `NonFungible`, `InflationRight`, `MintRight`, `Any`). Both engines validate it the same way; `MintRight` is RGB_L1 only.
+- `listAssets({ filterAssetSchemas })`, and `{ skipSync }` for `getBtcBalance()`, `listUnspents()`, `listTransactions()` and `createUtxos()` on both protocols.
+- RLN `createLightningInvoice()` / `createHodlInvoice()` accept `description`.
+- RLN `getNodeInfo()` returns the channel and HTLC limits, network graph size, `eventualCloseFeesSat`, `pendingOutboundPaymentsSat` and account xpubs. Both bridges used to drop them.
+- RLN `decodeLnInvoice()` returns `minFinalCltvExpiryDelta`.
+
+__fixed__
+
+- Android `getPayment()` / `getLightningReceiveStatus()` now find inbound payments; they searched outbound payments only.
+- RLN payments report `paymentType` and `inbound` correctly. Neither platform's native spelling matched the wire type, so every payment was reported as inbound.
+- RLN `createUtxos()` returns the number of UTXOs it created instead of echoing `num`. The reads and the create run as one native-queue operation, so concurrent calls do not count each other's UTXOs.
+- RLN `issueAssetNia()`, `issueAssetCfa()` and `issueAssetIfa()` reject a total supply (with inflation) above `Number.MAX_SAFE_INTEGER` with `AMOUNT_OVERFLOW` before any native call, like RGB_L1.
+- Issuance file fields (`filePath`, `mediaFilePath`, `attachmentsFilePaths`) accept an absolute path or a `file://` URI on both protocols. URIs are decoded (for example `%20`) in JS; other schemes and relative paths are rejected with `ValidationError`. RGB_L1 used to pass URIs to rgb-lib, which rejected them.
+- RLN numeric inputs (`createUtxos`, `inflate`, `sendBtc`, issuance, receive, `failTransfers`, `estimateFeeRate`, `keysend`, `payLightningInvoice`) are rejected with `ValidationError` when the bridge would truncate them. Default `feeRate` for `createUtxos()` and `inflate()` is `1` (the old `1.5` was already truncated to 1).
+- RLN `estimateFeeRate()` rounds up to an integer, like RGB_L1.
+- `NativeExternalRLNSigner` unlock passes `ethRpcUrl` to RLN and rejects `gossipRgsServerUrl` instead of dropping it.
+
+__changed__
+
+- Readme: documented how backup differs between protocols. `createBackup()` is RGB_L1 only. `vssAllowEmptyRestore` means start empty when the VSS restore fails, which is unsafe with channels; the old description was wrong.
+- RGB Lib bridge version is `3` (new operations and parameters). Rebuild the app so the native module matches the JS SDK.
+- RLN `onchainSend()` sends through the new native `sendrgbinvoice` call ([rgb-lightning-node#212](https://github.com/UTEXO-Protocol/rgb-lightning-node/pull/212)). RLN now rejects proxy recipients built from decoded invoice fields. `amount` defaults to a fungible invoice amount, and a different explicit amount is rejected. `skipSync` is ignored.
+- RLN `decodeRGBInvoice()` returns `publicKey` and `encryption`. Raw `proxyRecipientId` is optional.
+- RLN `listOnchainTransfers()` reports rgb-lib-bfa `Mint` transfers as `Mint` instead of `Send`.
+- RLN `reuseAddresses: true` throws `ConfigurationError`; rgb-lib-bfa does not support address reuse.
+- RLN `onchainSend()` rejects values the bridge would truncate: `amount`, `feeRate`, `minConfirmations` and `witnessData` must be in-range integers (`ValidationError`). The default `feeRate` is now `1`. The old default `1.5` was already truncated to 1 sat/vB, so fees do not change.
+- Documented that `onchainSend()` ignores `skipSync` on both RGB_LN and RGB_L1.
+- RLN `onchainSend()` copies the request before decoding the invoice, so the invoice and amounts sent to native are the ones it validated even if the caller changes the object meanwhile.
+
 ## 1.0.0-beta.38
 
 __changed__

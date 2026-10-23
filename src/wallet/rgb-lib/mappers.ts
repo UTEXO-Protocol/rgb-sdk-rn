@@ -2,6 +2,8 @@ import { AssetSchema } from '@utexo/rgb-sdk-core';
 import type {
   AssetNIA,
   AssetIfa,
+  AssetCFA,
+  AssetUDA,
   Transaction,
   TransferStatus,
   TransactionType,
@@ -9,6 +11,7 @@ import type {
 } from '@utexo/rgb-sdk-core';
 import type {
   NativeAsset,
+  NativeAssetMetadata,
   NativeAssignment,
   NativeBalance,
   NativeInvoice,
@@ -18,7 +21,7 @@ import type {
   NativeTransfer,
   NativeUnspent,
 } from '../../binding/NativeRgbLib';
-import type { ListAssets } from '../types';
+import type { AssetMetadata, ListAssets } from '../types';
 import type {
   WalletAssignment,
   WalletInvoiceData,
@@ -236,6 +239,50 @@ export function ifa(value: NativeAsset): AssetIfa {
     rejectListUrl: value.rejectListUrl ?? undefined,
   };
 }
+export function cfa(value: NativeAsset): AssetCFA {
+  known(value.schema, ['Cfa'], 'asset schema');
+  return {
+    ...baseAsset(value),
+    issuedSupply: safeAmount(
+      required(value.issuedSupply, 'issuedSupply'),
+      'issuedSupply'
+    ),
+  };
+}
+export function uda(value: NativeAsset): AssetUDA {
+  known(value.schema, ['Uda'], 'asset schema');
+  return {
+    ...baseAsset(value),
+    ticker: required(value.ticker, 'ticker'),
+    token: value.token
+      ? {
+          ...value.token,
+          ticker: value.token.ticker ?? undefined,
+          name: value.token.name ?? undefined,
+          details: value.token.details ?? undefined,
+          media: value.token.media ?? undefined,
+        }
+      : undefined,
+  };
+}
+export function assetMetadata(value: NativeAssetMetadata): AssetMetadata {
+  return {
+    assetSchema: known(
+      value.assetSchema,
+      ['Nia', 'Ifa', 'Cfa', 'Uda', 'Bfa'] as const,
+      'asset schema'
+    ),
+    name: value.name,
+    precision: value.precision,
+    ticker: value.ticker ?? undefined,
+    details: value.details ?? undefined,
+    timestamp: safeNumber(value.timestamp, 'timestamp'),
+    initialSupply: value.initialSupply,
+    maxSupply: value.maxSupply,
+    knownCirculatingSupply: value.knownCirculatingSupply,
+    rejectListUrl: value.rejectListUrl ?? undefined,
+  };
+}
 export function assets(values: NativeAsset[]): ListAssets {
   const result: ListAssets = { nia: [], ifa: [], cfa: [], uda: [], bfa: [] };
   for (const value of values) {
@@ -253,13 +300,7 @@ export function assets(values: NativeAsset[]): ListAssets {
         result.ifa.push(ifa(value));
         break;
       case 'Cfa':
-        result.cfa.push({
-          ...base,
-          issuedSupply: safeAmount(
-            required(value.issuedSupply, 'issuedSupply'),
-            'issuedSupply'
-          ),
-        });
+        result.cfa.push(cfa(value));
         break;
       case 'Bfa':
         result.bfa.push({
@@ -273,19 +314,7 @@ export function assets(values: NativeAsset[]): ListAssets {
         });
         break;
       case 'Uda':
-        result.uda.push({
-          ...base,
-          ticker: required(value.ticker, 'ticker'),
-          token: value.token
-            ? {
-                ...value.token,
-                ticker: value.token.ticker ?? undefined,
-                name: value.token.name ?? undefined,
-                details: value.token.details ?? undefined,
-                media: value.token.media ?? undefined,
-              }
-            : undefined,
-        });
+        result.uda.push(uda(value));
         break;
     }
   }

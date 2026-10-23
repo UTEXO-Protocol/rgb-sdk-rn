@@ -6,6 +6,7 @@ import type {
   WalletHistory,
   WalletBackup,
   WalletBfa,
+  WalletMaintenance,
 } from '../wallet-api';
 
 import { RgbLibWalletBackend } from './backend';
@@ -14,7 +15,9 @@ import type { IRgbLibKeyProvider } from './key-provider';
 import { getRgbLibBinding } from './native';
 
 /** Internal on-chain adapter; the backend owns native sessions and serialization. */
-export class RgbLibWallet implements OnchainWalletApi<RgbLibUnlockParams> {
+export class RgbLibWallet
+  implements OnchainWalletApi<RgbLibUnlockParams>, WalletMaintenance
+{
   readonly psbt = undefined;
   readonly beginEnd = undefined;
   readonly messageSigning = undefined;
@@ -71,8 +74,8 @@ export class RgbLibWallet implements OnchainWalletApi<RgbLibUnlockParams> {
     return this.ports.network.getWalletIdentity();
   }
 
-  getBtcBalance() {
-    return this.ports.bitcoin.getBtcBalance();
+  getBtcBalance(...args: Parameters<WalletBitcoin['getBtcBalance']>) {
+    return this.ports.bitcoin.getBtcBalance(...args);
   }
   getAddress() {
     return this.ports.bitcoin.getAddress();
@@ -80,8 +83,19 @@ export class RgbLibWallet implements OnchainWalletApi<RgbLibUnlockParams> {
   rotateVanillaAddress() {
     return this.ports.bitcoin.rotateVanillaAddress();
   }
-  listUnspents() {
-    return this.ports.bitcoin.listUnspents();
+  listUnspents(...args: Parameters<WalletBitcoin['listUnspents']>) {
+    return this.ports.bitcoin.listUnspents(...args);
+  }
+  checkIndexerUrl(...args: Parameters<WalletBitcoin['checkIndexerUrl']>) {
+    return this.ports.bitcoin.checkIndexerUrl(...args);
+  }
+  /** RGB_L1 only. */
+  drainTo(...args: Parameters<WalletMaintenance['drainTo']>) {
+    return this.ports.maintenance.drainTo(...args);
+  }
+  /** RGB_L1 only. */
+  deleteTransfers(...args: Parameters<WalletMaintenance['deleteTransfers']>) {
+    return this.ports.maintenance.deleteTransfers(...args);
   }
   createUtxos(...args: Parameters<WalletBitcoin['createUtxos']>) {
     return this.ports.bitcoin.createUtxos(...args);
@@ -93,8 +107,17 @@ export class RgbLibWallet implements OnchainWalletApi<RgbLibUnlockParams> {
     return this.ports.bitcoin.estimateFeeRate(...args);
   }
 
-  listAssets() {
-    return this.ports.rgb.listAssets();
+  listAssets(...args: Parameters<WalletRgb['listAssets']>) {
+    return this.ports.rgb.listAssets(...args);
+  }
+  getAssetMetadata(...args: Parameters<WalletRgb['getAssetMetadata']>) {
+    return this.ports.rgb.getAssetMetadata(...args);
+  }
+  issueAssetCfa(...args: Parameters<WalletRgb['issueAssetCfa']>) {
+    return this.ports.rgb.issueAssetCfa(...args);
+  }
+  issueAssetUda(...args: Parameters<WalletRgb['issueAssetUda']>) {
+    return this.ports.rgb.issueAssetUda(...args);
   }
   getAssetBalance(...args: Parameters<WalletRgb['getAssetBalance']>) {
     return this.ports.rgb.getAssetBalance(...args);
@@ -127,8 +150,8 @@ export class RgbLibWallet implements OnchainWalletApi<RgbLibUnlockParams> {
     return this.ports.rgb.failTransfers(...args);
   }
 
-  listTransactions() {
-    return this.ports.history.listTransactions();
+  listTransactions(...args: Parameters<WalletHistory['listTransactions']>) {
+    return this.ports.history.listTransactions(...args);
   }
   listTransactionsByTxid(
     ...args: Parameters<WalletHistory['listTransactionsByTxid']>

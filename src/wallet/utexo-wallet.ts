@@ -150,6 +150,18 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     return this.engine;
   }
 
+  private requireRgbLib(operation: string): RgbLibWallet {
+    if (this.engine.protocol !== 'RGB_L1') {
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        operation + ' requires the RGB_L1 protocol',
+        operation,
+        this.engine.protocol
+      );
+    }
+    return this.engine;
+  }
+
   getWalletIdentity(
     ...args: Parameters<Method<TProtocol, 'getWalletIdentity'>>
   ): ReturnType<Method<TProtocol, 'getWalletIdentity'>> {
@@ -311,6 +323,46 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     ...args: Parameters<Method<TProtocol, 'issueAssetIfa'>>
   ): ReturnType<Method<TProtocol, 'issueAssetIfa'>> {
     return this.invoke('issueAssetIfa', ...args);
+  }
+
+  issueAssetCfa(
+    ...args: Parameters<Method<TProtocol, 'issueAssetCfa'>>
+  ): ReturnType<Method<TProtocol, 'issueAssetCfa'>> {
+    return this.invoke('issueAssetCfa', ...args);
+  }
+
+  issueAssetUda(
+    ...args: Parameters<Method<TProtocol, 'issueAssetUda'>>
+  ): ReturnType<Method<TProtocol, 'issueAssetUda'>> {
+    return this.invoke('issueAssetUda', ...args);
+  }
+
+  getAssetMetadata(
+    ...args: Parameters<Method<TProtocol, 'getAssetMetadata'>>
+  ): ReturnType<Method<TProtocol, 'getAssetMetadata'>> {
+    return this.invoke('getAssetMetadata', ...args);
+  }
+
+  checkIndexerUrl(
+    ...args: Parameters<Method<TProtocol, 'checkIndexerUrl'>>
+  ): ReturnType<Method<TProtocol, 'checkIndexerUrl'>> {
+    return this.invoke('checkIndexerUrl', ...args);
+  }
+
+  /** RGB_L1 only; narrow a mixed wallet with wallet.protocol before calling. */
+  async drainTo(
+    this: UTEXOWallet<'RGB_L1'>,
+    ...args: Parameters<RgbLibWallet['drainTo']>
+  ): ReturnType<RgbLibWallet['drainTo']> {
+    return this.requireRgbLib('drainTo').drainTo(...args);
+  }
+
+  /** RGB_L1 only; narrow a mixed wallet with wallet.protocol before calling. */
+  async deleteTransfers(
+    this: UTEXOWallet<'RGB_L1'>,
+    ...args: Parameters<RgbLibWallet['deleteTransfers']>
+  ): ReturnType<RgbLibWallet['deleteTransfers']> {
+    return this.requireRgbLib('deleteTransfers').deleteTransfers(...args);
   }
 
   inflate(
@@ -640,14 +692,6 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     ...args: Parameters<RlnWallet['invoiceStatus']>
   ): ReturnType<RlnWallet['invoiceStatus']> {
     return this.requireRln('invoiceStatus').invoiceStatus(...args);
-  }
-
-  /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */
-  async checkIndexerUrl(
-    this: UTEXOWallet<'RGB_LN'>,
-    ...args: Parameters<RlnWallet['checkIndexerUrl']>
-  ): ReturnType<RlnWallet['checkIndexerUrl']> {
-    return this.requireRln('checkIndexerUrl').checkIndexerUrl(...args);
   }
 
   /** RLN only; narrow a mixed wallet with wallet.protocol before calling. */

@@ -73,6 +73,18 @@ const records = {
     media: 'record?',
     reserves: 'bool',
   },
+  Metadata: {
+    assetSchema: 'enum',
+    initialSupply: 'decimal',
+    maxSupply: 'decimal',
+    knownCirculatingSupply: 'decimal',
+    timestamp: 'decimal',
+    name: 'string',
+    precision: 'number',
+    ticker: 'string?',
+    details: 'string?',
+    rejectListUrl: 'string?',
+  },
   InvoiceData: {
     recipientId: 'string',
     assetSchema: 'enum?',

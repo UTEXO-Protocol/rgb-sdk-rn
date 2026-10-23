@@ -3,7 +3,7 @@ import type {
   RlnBurnParams,
   RlnBurnResult,
 } from './rln-types';
-import { WalletError } from '@utexo/rgb-sdk-core';
+import { ValidationError, WalletError } from '@utexo/rgb-sdk-core';
 import Rgb from './NativeRgb';
 import type {
   IRLN,
@@ -17,7 +17,9 @@ import type {
   RlnPeer,
   RlnChannel,
   RlnOpenChannelResponse,
+  RlnAssetMetadata,
   RlnPayment,
+  RlnPaymentType,
   RlnSendPaymentResponse,
   RlnKeysendResponse,
   RlnInvoiceStatusWire,
@@ -86,6 +88,21 @@ function canonicalEnum(v: unknown): string | undefined {
   const s = String(v);
   if (/^[A-Z0-9_]+$/.test(s)) return s; // already canonical (Android)
   return s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+}
+
+const PAYMENT_TYPES: Record<string, RlnPaymentType> = {
+  OUTBOUND: 'Outbound',
+  INBOUND_AUTO_CLAIM: 'InboundAutoClaim',
+  INBOUND_HODL: 'InboundHodl',
+};
+
+/**
+ * Android sends `INBOUND_AUTO_CLAIM`, iOS `inboundAutoClaim`; the wire type is
+ * PascalCase. An unknown value becomes `undefined` so `inbound` stays unset.
+ */
+function normalizePaymentType(p: RlnPayment): RlnPayment {
+  const key = canonicalEnum(p.paymentType);
+  return { ...p, paymentType: key ? PAYMENT_TYPES[key] : undefined };
 }
 
 export class RLNBinding implements IRLN {
@@ -283,6 +300,12 @@ export class RLNBinding implements IRLN {
     signerId: number,
     request: IRLNUnlockParams
   ): Promise<void> {
+    // RLN's external-signer unlock has no RGS setting; do not drop it silently.
+    if (request.gossipRgsServerUrl != null)
+      throw new ValidationError(
+        'gossipRgsServerUrl is not supported with NativeExternalRLNSigner',
+        'gossipRgsServerUrl'
+      );
     await this.withNodeQueue(async () => {
       const nodeId = this.requireNodeId();
       this.assertRegularOpsAllowed();
@@ -303,7 +326,7 @@ export class RLNBinding implements IRLN {
           request.proxyEndpoint ?? null,
           request.announceAddresses ?? [],
           request.announceAlias ?? null,
-          request.gossipRgsServerUrl ?? null
+          request.ethRpcUrl ?? null
         );
 
       const maxConflictRetries = 4;
@@ -453,15 +476,18 @@ export class RLNBinding implements IRLN {
   // ── Payments ─────────────────────────────────────────────────────────────────
 
   async rlnListPayments(): Promise<RlnPayment[]> {
-    return this.withNodeOperation((nodeId) =>
+    const raw = (await this.withNodeOperation((nodeId) =>
       Rgb.rlnListPayments(nodeId)
-    ) as Promise<RlnPayment[]>;
+    )) as RlnPayment[];
+    return raw.map(normalizePaymentType);
   }
 
   async rlnGetPayment(paymentHash: string): Promise<RlnPayment> {
-    return this.withNodeOperation((nodeId) =>
-      Rgb.rlnGetPayment(nodeId, paymentHash)
-    ) as Promise<RlnPayment>;
+    return normalizePaymentType(
+      (await this.withNodeOperation((nodeId) =>
+        Rgb.rlnGetPayment(nodeId, paymentHash)
+      )) as RlnPayment
+    );
   }
 
   async rlnInvoiceStatus(invoice: string): Promise<RlnInvoiceStatusWire> {
@@ -482,7 +508,9 @@ export class RLNBinding implements IRLN {
     assetAmount: number | null,
     paymentHash?: string | null,
     minFinalCltvExpiryDelta?: number | null,
-    descriptionHash?: string | null
+    descriptionHash?: string | null,
+    /** BOLT11 `d` tag; mutually exclusive with `descriptionHash`. */
+    description?: string | null
   ): Promise<RlnLnInvoiceResponse> {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnLnInvoice(
@@ -493,7 +521,8 @@ export class RLNBinding implements IRLN {
         assetAmount,
         paymentHash ?? null,
         minFinalCltvExpiryDelta ?? null,
-        descriptionHash ?? null
+        descriptionHash ?? null,
+        description ?? null
       )
     ) as Promise<RlnLnInvoiceResponse>;
   }
@@ -639,6 +668,18 @@ export class RLNBinding implements IRLN {
     return this.withNodeOperation((nodeId) =>
       Rgb.rlnIssueAssetNia(nodeId, ticker, name, precision, amounts)
     );
+  }
+
+  async rlnPostAssetMedia(filePath: string): Promise<string> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnPostAssetMedia(nodeId, filePath)
+    );
+  }
+
+  async rlnAssetMetadata(assetId: string): Promise<RlnAssetMetadata> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnAssetMetadata(nodeId, assetId)
+    ) as Promise<RlnAssetMetadata>;
   }
 
   async rlnIssueAssetCfa(
@@ -789,6 +830,30 @@ export class RLNBinding implements IRLN {
     ) as Promise<RlnSendRgbResponse>;
   }
 
+  async rlnSendRgbInvoice(
+    invoice: string,
+    assetId: string,
+    amount: number,
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number,
+    witnessData?: { amountSat: number; blinding?: number } | null
+  ): Promise<RlnSendRgbResponse> {
+    return this.withNodeOperation((nodeId) =>
+      Rgb.rlnSendRgbInvoice(
+        nodeId,
+        invoice,
+        assetId,
+        amount,
+        witnessData?.amountSat ?? null,
+        witnessData?.blinding ?? null,
+        donation,
+        feeRate,
+        minConfirmations
+      )
+    ) as Promise<RlnSendRgbResponse>;
+  }
+
   async rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]> {
     const raw = (await this.withNodeOperation((nodeId) =>
       Rgb.rlnListTransactions(nodeId, skipSync)
@@ -888,6 +953,33 @@ export class RLNBinding implements IRLN {
     await this.withNodeOperation((nodeId) =>
       Rgb.rlnCreateUtxos(nodeId, upTo, num, size, feeRate, skipSync)
     );
+  }
+
+  /**
+   * Creates UTXOs and returns how many new colorable ones appeared. The reads
+   * before and after run in the same queue entry as the create, so concurrent
+   * calls cannot count each other's UTXOs.
+   */
+  async rlnCreateUtxosCounted(
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<number> {
+    return this.withNodeOperation(async (nodeId) => {
+      // The baseline read performs the sync the caller asked for.
+      const before = new Set(
+        ((await Rgb.rlnListUnspents(nodeId, skipSync)) as RlnUnspent[]).map(
+          (u) => u.utxo.outpoint
+        )
+      );
+      await Rgb.rlnCreateUtxos(nodeId, upTo, num, size, feeRate, true);
+      const after = (await Rgb.rlnListUnspents(nodeId, true)) as RlnUnspent[];
+      return after.filter(
+        (u) => u.utxo.colorable && !before.has(u.utxo.outpoint)
+      ).length;
+    });
   }
 
   // ── Backup ───────────────────────────────────────────────────────────────────

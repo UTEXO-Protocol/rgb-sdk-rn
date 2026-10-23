@@ -27,7 +27,7 @@ int main(void) {
     check(status.code == 0, "RLN healthcheck failed");
     ffi_rgb_lightning_node_rustbuffer_free(health, &status);
     check(status.code == 0, "RLN buffer cleanup failed");
-    check([call(@"getRuntimeInfo", @{})[@"bridgeVersion"] isEqual:@2], "Wrong bridge version");
+    check([call(@"getRuntimeInfo", @{})[@"bridgeVersion"] isEqual:@3], "Wrong bridge version");
 
     NSString *base = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
     NSString *root = [base stringByAppendingPathComponent:@"source"];
@@ -43,7 +43,12 @@ int main(void) {
     NSDictionary *busy = [RgbLibSwiftHelper execute:@"openWallet" params:params];
     check([busy[@"error"][@"code"] isEqual:@"WALLET_STORAGE_IN_USE"], "Storage lease did not reject a second wallet");
     check([[RlnStorageClaim claimForTesting:root][@"errorCode"] isEqual:@"WALLET_PROFILE_MISMATCH"], "RLN claimed an open RGB Lib wallet");
-    check([call(@"listAssets", @{@"handle":handle}) count] == 0, "Unexpected assets");
+    check([call(@"listAssets", @{@"handle":handle, @"filterAssetSchemas":@[]}) count] == 0, "Unexpected assets");
+    check([call(@"listAssets", @{@"handle":handle, @"filterAssetSchemas":@[@"Cfa", @"Uda"]}) count] == 0, "Schema filter returned assets");
+    check([[RgbLibSwiftHelper execute:@"listAssets" params:@{@"handle":handle, @"filterAssetSchemas":@[@"Rgb20"]}][@"error"][@"code"] isEqual:@"INVALID_CONFIG"], "Unknown schema filter was accepted");
+    NSDictionary *noMetadata = [RgbLibSwiftHelper execute:@"getAssetMetadata" params:@{@"handle":handle, @"assetId":@"rgb:smoke-asset"}];
+    check([noMetadata[@"error"][@"code"] isEqual:@"RGB_LIB_AssetNotFound"], "Unknown asset metadata did not map to RGB_LIB_AssetNotFound");
+    check([call(@"deleteTransfers", @{@"handle":handle, @"batchTransferIdx":NSNull.null, @"noAssetOnly":@NO}) isEqual:@NO], "deleteTransfers changed an empty wallet");
     NSDictionary *missing = [RgbLibSwiftHelper execute:@"getAssetBalance" params:@{@"handle":handle, @"assetId":@"rgb:smoke-asset"}];
     check([missing[@"error"][@"code"] isEqual:@"RGB_LIB_AssetNotFound"], "Unknown asset did not map to RGB_LIB_AssetNotFound");
     NSDictionary *balance = call(@"getBtcBalance", @{@"handle":handle, @"skipSync":@YES});
@@ -55,6 +60,20 @@ int main(void) {
       @"amount":@"9007199254740993", @"expirationTimestamp":expiry,
       @"transportEndpoints":@[], @"minConfirmations":@1
     });
+    NSString *nftExpiry = [NSString stringWithFormat:@"%llu", (unsigned long long)NSDate.date.timeIntervalSince1970 + 86400];
+    // rgb-lib only accepts an amount without a schema, so this proves the kind reached it.
+    NSDictionary *nft = [RgbLibSwiftHelper execute:@"receive" params:@{
+      @"handle":handle, @"witness":@YES, @"assetId":NSNull.null,
+      @"amount":NSNull.null, @"expirationTimestamp":nftExpiry,
+      @"transportEndpoints":@[], @"minConfirmations":@1, @"assignmentKind":@"NonFungible"
+    }];
+    check([nft[@"error"][@"code"] isEqual:@"RGB_LIB_InvalidAssignment"], "assignmentKind did not reach rgb-lib");
+    NSDictionary *noAmount = [RgbLibSwiftHelper execute:@"receive" params:@{
+      @"handle":handle, @"witness":@YES, @"assetId":NSNull.null,
+      @"amount":NSNull.null, @"expirationTimestamp":nftExpiry,
+      @"transportEndpoints":@[], @"minConfirmations":@1, @"assignmentKind":@"Fungible"
+    }];
+    check([noAmount[@"error"][@"code"] isEqual:@"INVALID_CONFIG"], "Fungible receive without amount was accepted");
     NSDictionary *invoice = call(@"decodeInvoice", @{@"handle":handle, @"invoice":receive[@"invoice"]});
     check([invoice[@"assignment"][@"amount"] isEqual:@"9007199254740993"], "Invoice amount was rounded");
     check([invoice[@"encryption"] isEqual:@"Required"], "Invoice encryption changed");

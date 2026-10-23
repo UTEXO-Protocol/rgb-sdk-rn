@@ -1,5 +1,8 @@
 import type {
+  AssetCFA,
+  AssetUDA,
   AssignmentType,
+  BtcBalance,
   IBitcoinWallet,
   IRgbAssets,
   IOnchainTransfers,
@@ -12,10 +15,17 @@ import type {
   WalletCapabilities,
 } from '@utexo/rgb-sdk-core';
 import type {
+  AssetMetadata,
+  AssetSchemaName,
   BfaCapabilities,
   BurnParams,
   BurnResult,
+  IssueAssetCfaParams,
+  IssueAssetUdaParams,
   ListAssets,
+  OnchainReceiveParams,
+  ReadOptions,
+  ReceiveParams,
   Transfer,
 } from './types';
 import type { RefreshTransfersResult } from './refresh-types';
@@ -63,7 +73,9 @@ export interface WalletHistory {
   listTransfers(assetId?: string): Promise<WalletTransfer[]>;
   listTransfersByTxid(txid: string): Promise<WalletTransfer[]>;
   listOnchainTransfers(assetId?: string): Promise<WalletTransfer[]>;
-  listTransactions: IRgbAssets['listTransactions'];
+  listTransactions(
+    options?: ReadOptions
+  ): ReturnType<IRgbAssets['listTransactions']>;
   listTransactionsByTxid(
     txid: string,
     skipSync?: boolean
@@ -84,18 +96,54 @@ export interface WalletBfa {
   getConsignment(assetId: string, txid: string): Promise<string>;
   getConsignmentPath(assetId: string, txid: string): Promise<string>;
 }
-export interface WalletBitcoin extends Omit<IBitcoinWallet, 'listUnspents'> {
-  listUnspents(): Promise<WalletUnspent[]>;
+export interface WalletBitcoin extends Omit<
+  IBitcoinWallet,
+  'getBtcBalance' | 'listUnspents' | 'createUtxos'
+> {
+  getBtcBalance(options?: ReadOptions): Promise<BtcBalance>;
+  listUnspents(options?: ReadOptions): Promise<WalletUnspent[]>;
+  createUtxos(
+    params: Parameters<IBitcoinWallet['createUtxos']>[0] & ReadOptions
+  ): Promise<number>;
   rotateVanillaAddress(): Promise<string>;
+  /** Detects the indexer protocol behind `url`. */
+  checkIndexerUrl(url: string): Promise<{ indexerProtocol: string }>;
+}
+/** rgb-lib operations RLN has no equivalent for. Not part of the shared contract. */
+export interface WalletMaintenance {
+  /** Sends the whole vanilla BTC balance to `address`; returns the txid. */
+  drainTo(params: { address: string; feeRate?: number }): Promise<string>;
+  /** Removes failed transfers from the local database. */
+  deleteTransfers(params?: {
+    batchTransferIdx?: number;
+    noAssetOnly?: boolean;
+  }): Promise<boolean>;
 }
 export interface WalletRgb
   extends
     Omit<
       IRgbAssets,
-      'listAssets' | 'listTransfers' | 'listTransactions' | 'decodeRGBInvoice'
+      | 'listAssets'
+      | 'listTransfers'
+      | 'listTransactions'
+      | 'decodeRGBInvoice'
+      | 'blindReceive'
+      | 'witnessReceive'
     >,
-    Pick<IOnchainTransfers, 'onchainReceive' | 'onchainSend'> {
-  listAssets(): Promise<ListAssets>;
+    Pick<IOnchainTransfers, 'onchainSend'> {
+  listAssets(options?: {
+    filterAssetSchemas?: AssetSchemaName[];
+  }): Promise<ListAssets>;
+  getAssetMetadata(assetId: string): Promise<AssetMetadata>;
+  issueAssetCfa(params: IssueAssetCfaParams): Promise<AssetCFA>;
+  issueAssetUda(params: IssueAssetUdaParams): Promise<AssetUDA>;
+  blindReceive(params: ReceiveParams): ReturnType<IRgbAssets['blindReceive']>;
+  witnessReceive(
+    params: ReceiveParams
+  ): ReturnType<IRgbAssets['witnessReceive']>;
+  onchainReceive(
+    params: OnchainReceiveParams
+  ): ReturnType<IOnchainTransfers['onchainReceive']>;
   decodeRGBInvoice(params: { invoice: string }): Promise<WalletInvoiceData>;
 }
 export interface WalletNetwork {
@@ -131,4 +179,5 @@ export interface OnchainWalletBackend<T> {
   backup: WalletBackup;
   bfa: WalletBfa;
   network: WalletNetwork;
+  maintenance: WalletMaintenance;
 }

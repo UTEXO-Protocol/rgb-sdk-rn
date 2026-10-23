@@ -10,6 +10,8 @@ import {
   type IRLNSigner,
   type UTEXOWalletNodeParams,
   type WalletProtocol,
+  restoreFromBackup,
+  type WalletRestoreResponse,
 } from '../../src';
 import type { RgbInfo } from '@utexo/webrgb';
 import { WebRgbProvider } from '../../src/integrations/webrgb/provider';
@@ -190,3 +192,13 @@ export function wideProtocolTypes(
     void mixed.goOnline(rlnUnlock);
   }
 }
+
+// The pre-beta.10 restore shape is the public one again.
+export const restoreShape: Promise<WalletRestoreResponse> = restoreFromBackup({
+  backupFilePath: '/backups/w.rgb',
+  password: 'pw',
+  dataDir: '/wallets/restored',
+});
+const renamed = { backupPath: '/b', password: 'pw', storageDirPath: '/w' };
+// @ts-expect-error The old field names are required.
+void restoreFromBackup(renamed);

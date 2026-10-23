@@ -49,6 +49,30 @@ private struct RgbParams {
     return n
   }
 }
+private func rgbSchema(_ name: String) throws -> RGBLib.AssetSchema {
+  switch name {
+  case "Nia": return .nia
+  case "Uda": return .uda
+  case "Cfa": return .cfa
+  case "Ifa": return .ifa
+  case "Bfa": return .bfa
+  default: throw rgbInvalid("Unknown asset schema")
+  }
+}
+private func rgbReceiveAssignment(_ kind: String?, _ amount: UInt64?) throws -> RGBLib.Assignment {
+  switch kind ?? (amount == nil ? "Any" : "Fungible") {
+  case "Fungible":
+    guard let amount else { throw rgbInvalid("Fungible receive requires an amount") }
+    return .fungible(amount: amount)
+  case "InflationRight":
+    guard let amount else { throw rgbInvalid("InflationRight receive requires an amount") }
+    return .inflationRight(amount: amount)
+  case "NonFungible", "MintRight", "Any":
+    guard amount == nil else { throw rgbInvalid("This assignment kind takes no amount") }
+    return kind == "NonFungible" ? .nonFungible : kind == "MintRight" ? .mintRight : .any
+  default: throw rgbInvalid("Unknown assignment kind")
+  }
+}
 private func rgbNetworkFromName(_ name: String) throws -> RGBLib.BitcoinNetwork {
   switch name {
   case "mainnet": return .mainnet
@@ -234,7 +258,7 @@ public final class RgbLibSwiftHelper: NSObject {
   }
   private static func call(_ operation: String, _ p: RgbParams) throws -> Any {
     switch operation {
-    case "getRuntimeInfo": return ["version": "v0.3.0-beta.7-upstream-dev-bfa.1", "sourceRevision": "ad87acb673262dbc0f2270b5b2e2f0d3db74a65a", "bridgeVersion": 2, "burn": true, "consignment": true, "bfa": true]
+    case "getRuntimeInfo": return ["version": "v0.3.0-beta.7-upstream-dev-bfa.1", "sourceRevision": "ad87acb673262dbc0f2270b5b2e2f0d3db74a65a", "bridgeVersion": 3, "burn": true, "consignment": true, "bfa": true]
     case "openWallet": return try open(p)
     case "restoreBackup": try restore(p); return NSNull()
     default: break
@@ -289,14 +313,15 @@ public final class RgbLibSwiftHelper: NSObject {
       return s.profile["cachedAddress"]!
     case "getBtcBalance": return try rgbDto(w.getBtcBalance(online: s.online, skipSync: p.bool("skipSync")))
     case "getAssetBalance": return try rgbDto(w.getAssetBalance(assetId: p.string("assetId")))
-    case "listAssets": return try rgbDto(w.listAssets(filterAssetSchemas: []))
+    case "listAssets": return try rgbDto(w.listAssets(filterAssetSchemas: p.strings("filterAssetSchemas").map(rgbSchema)))
+    case "getAssetMetadata": return try rgbDto(w.getAssetMetadata(assetId: p.string("assetId")))
     case "listUnspents": return try w.listUnspents(online: s.online, settledOnly: false, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransactions": return try w.listTransactions(online: s.online, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransfers": return try w.listTransfers(assetFilter: p.optional("assetId").map { .id(assetId: $0) } ?? .anyOrNone, txid: p.optional("txid")).map { rgbDto($0) }
     case "createUtxos": return try w.createUtxos(online: s.requireOnline(), upTo: p.bool("upTo"), num: p.has("num") ? p.number("num", UInt8.self) : nil, size: p.has("size") ? p.number("size", UInt32.self) : nil, feeRate: p.amount("feeRate"), skipSync: p.bool("skipSync"))
     case "sendBtc": return try w.sendBtc(online: s.requireOnline(), address: p.string("address"), amount: p.amount("amount"), feeRate: p.amount("feeRate"), skipSync: p.bool("skipSync"))
     case "receive":
-      let assignment: RGBLib.Assignment = try p.has("amount") ? .fungible(amount: p.amount("amount")) : .any
+      let assignment = try rgbReceiveAssignment(p.optional("assignmentKind"), p.has("amount") ? p.amount("amount") : nil)
       if try p.bool("witness") {
         return try rgbDto(w.witnessReceive(online: s.online, assetId: p.optional("assetId"), assignment: assignment, expirationTimestamp: p.amount("expirationTimestamp"), transportEndpoints: p.strings("transportEndpoints"), minConfirmations: p.number("minConfirmations", UInt8.self), encryption: nil))
       }
@@ -304,6 +329,8 @@ public final class RgbLibSwiftHelper: NSObject {
     case "decodeInvoice": return try rgbDto(RGBLib.Invoice(invoiceString: p.string("invoice")).invoiceData())
     case "send": return try send(s, p)
     case "issueAssetNia": return try rgbDto(w.issueAssetNia(ticker: p.string("ticker"), name: p.string("name"), precision: p.number("precision", UInt8.self), amounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }))
+    case "issueAssetCfa": return try rgbDto(w.issueAssetCfa(name: p.string("name"), details: p.optional("details"), precision: p.number("precision", UInt8.self), amounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, filePath: p.optional("filePath")))
+    case "issueAssetUda": return try rgbDto(w.issueAssetUda(ticker: p.string("ticker"), name: p.string("name"), details: p.optional("details"), precision: p.number("precision", UInt8.self), mediaFilePath: p.optional("mediaFilePath"), attachmentsFilePaths: p.strings("attachmentsFilePaths")))
     case "issueAssetIfa": return try rgbDto(w.issueAssetIfa(ticker: p.string("ticker"), name: p.string("name"), precision: p.number("precision", UInt8.self), amounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, inflationAmounts: p.strings("inflationAmounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, rejectListUrl: p.optional("rejectListUrl")))
     case "inflate": return try rgbDto(w.inflate(online: s.requireOnline(), assetId: p.string("assetId"), inflationAmounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self)))
     case "burn": return try rgbDto(w.burn(online: s.requireOnline(), assetId: p.string("assetId"), amount: p.amount("amount"), burnReason: p.optional("burnReason"), feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self)))
@@ -311,6 +338,15 @@ public final class RgbLibSwiftHelper: NSObject {
     case "refresh": return try w.refresh(online: s.requireOnline(), assetId: nil, filter: [], skipSync: p.bool("skipSync")).map { id, r -> [String: Any] in
       ["batchTransferIdx": NSNumber(value: id), "updatedStatus": r.updatedStatus.map { rgbEnum($0) as Any } ?? NSNull(), "failure": r.failure.map { ["name": rgbLibErrorCode($0), "message": String(describing: $0)] as Any } ?? NSNull()]
     }
+    case "deleteTransfers": return try w.deleteTransfers(batchTransferIdx: p.has("batchTransferIdx") ? p.number("batchTransferIdx", Int32.self) : nil, noAssetOnly: p.bool("noAssetOnly"))
+    case "drainTo": return try w.drainTo(online: s.requireOnline(), address: p.string("address"), feeRate: p.amount("feeRate"))
+    case "checkIndexerUrl":
+      switch try RGBLib.checkIndexerUrl(indexerUrl: p.string("indexerUrl"), bitcoindAuth: nil, bitcoinNetwork: rgbNetworkFromName(s.profile["network"] as! String)) {
+      case .bitcoind: return "bitcoind"
+      case .electrum: return "electrum"
+      case .esplora: return "esplora"
+      @unknown default: throw rgbInvalid("Unknown indexer protocol")
+      }
     case "sync":
       try w.sync(online: s.requireOnline(), options: RGBLib.SyncOptions(keychain: .colored, strategy: .fullSync))
       try w.sync(online: s.requireOnline(), options: RGBLib.SyncOptions(keychain: .vanilla(lookback: 20), strategy: .fullSync))

@@ -5,8 +5,8 @@ import { SDKError } from '@utexo/rgb-sdk-core';
 import { WalletBackendError } from '../lib/module/wallet/wallet-errors.js';
 import { RgbLibWallet } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
 import {
-  restoreRgbLibBackup,
-  restoreRgbLibBackupWith,
+  restoreFromBackup,
+  restoreFromBackupWith,
 } from '../lib/module/wallet/rgb-lib/restore.js';
 import { UTEXOWallet } from '../lib/module/wallet/utexo-wallet.js';
 import {
@@ -897,11 +897,11 @@ test('init and restore translate native rejections without changing key-provider
   };
   await assert.rejects(locked.wallet.init(), (error) => error === keyError);
   await assert.rejects(
-    restoreRgbLibBackupWith(
+    restoreFromBackupWith(
       {
-        backupPath: '/backups/a.rgb',
+        backupFilePath: '/backups/a.rgb',
         password: 'pw',
-        storageDirPath: '/wallets/restored',
+        dataDir: '/wallets/restored',
       },
       () => ({
         getRuntimeInfo: async () => runtime,
@@ -986,10 +986,19 @@ test('receive converts durationSeconds to absolute Unix seconds and uses the pro
   }
   const endpoints = [config.proxyEndpoint.replace('http:', 'rpc:')];
   assert.deepEqual(received, [
-    ['handle-1', false, 'rgb:asset', '9', '1700000060', endpoints, 2],
-    ['handle-1', true, null, null, '1700086400', endpoints, 0],
-    ['handle-1', true, null, null, '1700000001', endpoints, 0],
-    ['handle-1', false, null, null, '1700086400', endpoints, 0],
+    [
+      'handle-1',
+      false,
+      'rgb:asset',
+      '9',
+      '1700000060',
+      endpoints,
+      2,
+      'Fungible',
+    ],
+    ['handle-1', true, null, null, '1700086400', endpoints, 0, 'Any'],
+    ['handle-1', true, null, null, '1700000001', endpoints, 0, 'Any'],
+    ['handle-1', false, null, null, '1700086400', endpoints, 0, 'Any'],
   ]);
   for (const durationSeconds of [0, 1.5, -1, 2 ** 32]) {
     await assert.rejects(wallet.witnessReceive({ durationSeconds }));
@@ -1464,32 +1473,32 @@ test('createBackup requires an absolute path and nonempty password', async () =>
   );
   await wallet.dispose();
 });
-test('restoreRgbLibBackup validates paths and runtime version before restoring', async () => {
+test('restoreFromBackup validates paths and runtime version before restoring', async () => {
   const valid = {
-    backupPath: '/backups/w.rgb',
+    backupFilePath: '/backups/w.rgb',
     password: 'pw',
-    storageDirPath: '/wallets/restored',
+    dataDir: '/wallets/restored',
   };
   for (const invalid of [
-    { backupPath: 'backups/w.rgb' },
-    { storageDirPath: 'wallets/restored' },
+    { backupFilePath: 'backups/w.rgb' },
+    { dataDir: 'wallets/restored' },
     { password: '' },
-    { backupPath: '/backups/w\0.rgb' },
-    { storageDirPath: '/wallets/\0restored' },
+    { backupFilePath: '/backups/w\0.rgb' },
+    { dataDir: '/wallets/\0restored' },
   ]) {
     const { native, calls } = fixture();
     await assert.rejects(
-      restoreRgbLibBackupWith({ ...valid, ...invalid }, () => native),
+      restoreFromBackupWith({ ...valid, ...invalid }, () => native),
       code('INVALID_CONFIG')
     );
     assert.deepEqual(calls, []);
   }
   // The public entry point validates before it even loads the native module.
   for (const missing of [null, undefined]) {
-    await assert.rejects(restoreRgbLibBackup(missing), code('INVALID_CONFIG'));
+    await assert.rejects(restoreFromBackup(missing), code('INVALID_CONFIG'));
   }
   await assert.rejects(
-    restoreRgbLibBackup({ ...valid, backupPath: 'relative' }),
+    restoreFromBackup({ ...valid, backupFilePath: 'relative' }),
     code('INVALID_CONFIG')
   );
   for (const mismatch of [
@@ -1503,17 +1512,204 @@ test('restoreRgbLibBackup validates paths and runtime version before restoring',
       },
     });
     await assert.rejects(
-      restoreRgbLibBackupWith(valid, () => native),
+      restoreFromBackupWith(valid, () => native),
       code('NATIVE_VERSION_MISMATCH')
     );
     assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'restore'));
   }
   const { native, calls } = fixture();
-  await restoreRgbLibBackupWith(valid, () => native);
+  assert.deepEqual(await restoreFromBackupWith(valid, () => native), {
+    message: 'Wallet restored successfully',
+  });
   assert.deepEqual(calls.at(-1), [
     'restore',
-    valid.backupPath,
+    valid.backupFilePath,
     valid.password,
-    valid.storageDirPath,
+    valid.dataDir,
   ]);
+});
+
+const nativeAsset = (schema, extra = {}) => ({
+  schema,
+  assetId: `rgb:${schema.toLowerCase()}`,
+  ticker: null,
+  name: schema,
+  details: null,
+  precision: 0,
+  issuedSupply: null,
+  initialSupply: null,
+  maxSupply: null,
+  knownCirculatingSupply: null,
+  timestamp: '1700000000',
+  addedAt: '1700000001',
+  balance: { settled: '10', future: '10', spendable: '10' },
+  media: null,
+  token: null,
+  rejectListUrl: null,
+  ...extra,
+});
+
+test('rgb-lib exposes native read options, issuance, metadata and maintenance through the facade', async () => {
+  const seen = [];
+  const record =
+    (name, value) =>
+    async (...args) => {
+      seen.push([name, ...args]);
+      return typeof value === 'function' ? value(...args) : value;
+    };
+  const zero = { settled: '0', future: '0', spendable: '0' };
+  const { wallet } = publicWalletFixture({
+    listAssets: record('listAssets', []),
+    getBtcBalance: record('getBtcBalance', { vanilla: zero, colored: zero }),
+    listUnspents: record('listUnspents', []),
+    listTransactions: record('listTransactions', []),
+    getAssetMetadata: record('getAssetMetadata', {
+      assetSchema: 'Ifa',
+      initialSupply: '18446744073709551615',
+      maxSupply: '18446744073709551615',
+      knownCirculatingSupply: '5',
+      timestamp: '1700000000',
+      name: 'Inflatable',
+      precision: 2,
+      ticker: 'IFA',
+      details: null,
+      rejectListUrl: 'https://reject.example',
+    }),
+    issueAssetCfa: record(
+      'issueAssetCfa',
+      nativeAsset('Cfa', { issuedSupply: '10' })
+    ),
+    issueAssetUda: record(
+      'issueAssetUda',
+      nativeAsset('Uda', { ticker: 'UDA' })
+    ),
+    checkIndexerUrl: record('checkIndexerUrl', 'electrum'),
+    drainTo: record('drainTo', 'drain-txid'),
+    deleteTransfers: record('deleteTransfers', true),
+  });
+  await wallet.init();
+  await wallet.goOnline(config);
+
+  await wallet.listAssets({ filterAssetSchemas: ['Cfa', 'Uda'] });
+  await wallet.listAssets();
+  await wallet.getBtcBalance({ skipSync: true });
+  await wallet.listUnspents({ skipSync: true });
+  await wallet.listTransactions({ skipSync: true });
+  const metadata = await wallet.getAssetMetadata('rgb:ifa');
+  assert.deepEqual(metadata, {
+    assetSchema: 'Ifa',
+    name: 'Inflatable',
+    precision: 2,
+    ticker: 'IFA',
+    details: undefined,
+    timestamp: 1700000000,
+    initialSupply: '18446744073709551615',
+    maxSupply: '18446744073709551615',
+    knownCirculatingSupply: '5',
+    rejectListUrl: 'https://reject.example',
+  });
+  const cfa = await wallet.issueAssetCfa({
+    name: 'Cfa',
+    precision: 0,
+    amounts: [10],
+    filePath: 'file:///media/my%20logo.png',
+  });
+  assert.equal(cfa.issuedSupply, 10);
+  const uda = await wallet.issueAssetUda({
+    ticker: 'UDA',
+    name: 'Uda',
+    precision: 0,
+    attachmentsFilePaths: ['file://localhost/media/a.png'],
+  });
+  assert.equal(uda.ticker, 'UDA');
+  assert.deepEqual(await wallet.checkIndexerUrl('tcp://localhost:50001'), {
+    indexerProtocol: 'electrum',
+  });
+  assert.equal(
+    await wallet.drainTo({ address: 'bcrt1qdrain', feeRate: 3 }),
+    'drain-txid'
+  );
+  assert.equal(await wallet.deleteTransfers({ batchTransferIdx: 4 }), true);
+
+  const args = (name) =>
+    seen.filter(([n]) => n === name).map(([, ...rest]) => rest);
+  assert.deepEqual(args('listAssets'), [
+    ['handle-1', ['Cfa', 'Uda']],
+    ['handle-1', []],
+  ]);
+  assert.deepEqual(args('getBtcBalance'), [['handle-1', true]]);
+  assert.deepEqual(args('listUnspents'), [['handle-1', true]]);
+  assert.deepEqual(args('listTransactions'), [['handle-1', true]]);
+  assert.deepEqual(args('issueAssetCfa'), [
+    ['handle-1', 'Cfa', null, 0, ['10'], '/media/my logo.png'],
+  ]);
+  assert.deepEqual(args('issueAssetUda'), [
+    ['handle-1', 'UDA', 'Uda', null, 0, null, ['/media/a.png']],
+  ]);
+  assert.deepEqual(args('drainTo'), [['handle-1', 'bcrt1qdrain', '3']]);
+  assert.deepEqual(args('deleteTransfers'), [['handle-1', 4, false]]);
+});
+
+test('rgb-lib rejects invalid schema filters and receive assignments before native', async () => {
+  const seen = [];
+  const { wallet } = publicWalletFixture({
+    async listAssets(...args) {
+      seen.push(args);
+      return [];
+    },
+    async receive(...args) {
+      seen.push(args);
+      throw new Error('unexpected receive');
+    },
+  });
+  await wallet.init();
+  await wallet.goOnline(config);
+  await assert.rejects(
+    wallet.listAssets({ filterAssetSchemas: ['Rgb20'] }),
+    /Unknown asset schema/
+  );
+  await assert.rejects(
+    wallet.blindReceive({ assignmentKind: 'Fungible' }),
+    /requires amount/
+  );
+  await assert.rejects(
+    wallet.witnessReceive({ assignmentKind: 'NonFungible', amount: 1 }),
+    /takes no amount/
+  );
+  assert.equal(seen.length, 0);
+});
+
+test('rgb-lib issuance rejects non-file URIs and relative paths before native', async () => {
+  const seen = [];
+  const { wallet } = publicWalletFixture({
+    async issueAssetCfa(...args) {
+      seen.push(args);
+      throw new Error('unexpected issueAssetCfa');
+    },
+    async issueAssetUda(...args) {
+      seen.push(args);
+      throw new Error('unexpected issueAssetUda');
+    },
+  });
+  await wallet.init();
+  await wallet.goOnline(config);
+  for (const filePath of [
+    'content://media/1',
+    'media/logo.png',
+    'file://host/x',
+  ])
+    await assert.rejects(
+      wallet.issueAssetCfa({ name: 'C', precision: 0, amounts: [1], filePath }),
+      /filePath must be an absolute path or a file:\/\/ URI/
+    );
+  await assert.rejects(
+    wallet.issueAssetUda({
+      ticker: 'U',
+      name: 'U',
+      precision: 0,
+      attachmentsFilePaths: ['/ok.png', 'https://x/y.png'],
+    }),
+    /attachmentsFilePaths/
+  );
+  assert.deepEqual(seen, []);
 });

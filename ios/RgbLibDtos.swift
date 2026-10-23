@@ -158,6 +158,21 @@ func rgbDto(_ v: RGBLib.TokenLight) -> [String: Any] {
   result["attachments"] = v.attachments.sorted { $0.key < $1.key }.map { key, media in var item = rgbDto(media); item["key"] = NSNumber(value:key); return item }
   return result
 }
+func rgbDto(_ v: RGBLib.Metadata) -> [String: Any] {
+  var result: [String: Any] = [
+    "assetSchema": rgbEnum(v.assetSchema),
+    "initialSupply": String(v.initialSupply),
+    "maxSupply": String(v.maxSupply),
+    "knownCirculatingSupply": String(v.knownCirculatingSupply),
+    "timestamp": String(v.timestamp),
+    "name": v.name,
+    "precision": NSNumber(value: v.precision),
+    "ticker": v.ticker.map { $0 as Any } ?? NSNull(),
+    "details": v.details.map { $0 as Any } ?? NSNull(),
+    "rejectListUrl": v.rejectListUrl.map { $0 as Any } ?? NSNull(),
+  ]
+  return result
+}
 func rgbDto(_ v: RGBLib.InvoiceData) -> [String: Any] {
   var result: [String: Any] = [
     "recipientId": v.recipientId,

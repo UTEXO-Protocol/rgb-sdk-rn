@@ -43,6 +43,10 @@ export interface RlnNodeInfo {
   numUsableChannels: number;
   localBalanceSat: number;
   numPeers: number;
+  eventualCloseFeesSat?: number;
+  pendingOutboundPaymentsSat?: number;
+  accountXpubVanilla?: string;
+  accountXpubColored?: string;
   maxMediaUploadSizeMb?: number;
   rgbHtlcMinMsat?: number;
   rgbChannelCapacityMinSat?: number;
@@ -163,6 +167,8 @@ export interface RlnDecodeLnInvoiceResponse {
   paymentHash: string;
   paymentSecret: string;
   payeePubkey?: string;
+  /** Blocks. */
+  minFinalCltvExpiryDelta?: number;
   network: string;
 }
 
@@ -288,7 +294,8 @@ export interface RlnRgbInvoiceResponse {
 
 export interface RlnDecodeRgbInvoiceResponse {
   recipientId: string;
-  proxyRecipientId: string;
+  /** Not set by rgb-lib-bfa invoices. */
+  proxyRecipientId?: string;
   recipientType: string;
   assetSchema?: string;
   assetId?: string;
@@ -297,6 +304,10 @@ export interface RlnDecodeRgbInvoiceResponse {
   /** **Unix seconds** (not JS milliseconds). */
   expirationTimestamp?: number;
   transportEndpoints: string[];
+  /** Recipient x-only public key (64 hex chars); required by proxy invoices. */
+  publicKey?: string;
+  /** Rust `Debug` of the invoice encryption mode, e.g. `Required`. */
+  encryption: string;
 }
 
 // ── Transfers / transactions / unspents ───────────────────────────────────────
@@ -438,4 +449,20 @@ export interface RlnBurnParams {
 export interface RlnBurnResult {
   txid: string;
   batchTransferIdx: number;
+}
+
+// ── Asset metadata / media ────────────────────────────────────────────────────
+
+/** `AssetMetadataInfo`; u64 supplies are exact decimal strings. */
+export interface RlnAssetMetadata {
+  assetSchema: string;
+  initialSupply: string;
+  maxSupply: string;
+  knownCirculatingSupply: string;
+  /** **Unix seconds** (not JS milliseconds). */
+  timestamp: number;
+  name: string;
+  precision: number;
+  ticker?: string;
+  details?: string;
 }

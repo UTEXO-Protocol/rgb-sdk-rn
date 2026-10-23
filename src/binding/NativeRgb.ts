@@ -75,7 +75,7 @@ export interface Spec extends TurboModule {
     proxyEndpoint: string | null,
     announceAddresses: string[],
     announceAlias: string | null,
-    gossipRgsServerUrl: string | null
+    ethRpcUrl: string | null
   ): Promise<void>;
   rlnDestroyNativeExternalSigner(signerId: number): Promise<void>;
   rlnInitNodeWithExternalSigner(
@@ -186,7 +186,8 @@ export interface Spec extends TurboModule {
     assetAmount: number | null,
     paymentHash: string | null,
     minFinalCltvExpiryDelta: number | null,
-    descriptionHash: string | null
+    descriptionHash: string | null,
+    description: string | null
   ): Promise<object>;
   rlnClaimHodlInvoice(
     nodeId: number,
@@ -237,6 +238,22 @@ export interface Spec extends TurboModule {
     transportEndpoints: string[],
     witnessAmountSat: number | null,
     witnessBlinding: number | null
+  ): Promise<object>;
+  /**
+   * Invoice-first fungible send. RLN keeps the invoice's recipient key,
+   * encryption mode and expiry; `rlnSendRgb` drops them, so RLN rejects
+   * proxy recipients sent that way.
+   */
+  rlnSendRgbInvoice(
+    nodeId: number,
+    invoice: string,
+    assetId: string,
+    amount: number,
+    witnessAmountSat: number | null,
+    witnessBlinding: number | null,
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number
   ): Promise<object>;
   rlnShutdown(nodeId: number): Promise<void>;
   rlnSync(nodeId: number): Promise<void>;
@@ -297,6 +314,10 @@ export interface Spec extends TurboModule {
   ): Promise<object>;
 
   // ── VSS ─────────────────────────────────────────────────────────────────────
+  /** Uploads a local file (path or `file://` URI) to the node's media store; resolves its digest. */
+  rlnPostAssetMedia(nodeId: number, filePath: string): Promise<string>;
+  /** u64 supplies arrive as decimal strings. */
+  rlnAssetMetadata(nodeId: number, assetId: string): Promise<object>;
   rlnVssClearFence(nodeId: number, password: string): Promise<void>;
   rlnVssBackup(nodeId: number): Promise<number>;
 }

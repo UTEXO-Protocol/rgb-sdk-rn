@@ -11,7 +11,7 @@ export type {
   UTEXOWalletOptions,
   AnyUtexoWallet,
 } from './wallet/utexo-wallet';
-export { restoreRgbLibBackup } from './wallet/rgb-lib/restore';
+export { restoreFromBackup } from './wallet/rgb-lib/restore';
 export type {
   WalletInit,
   RlnWalletInit,
@@ -255,6 +255,18 @@ export type {
   Transfer,
   TransferAssignment,
   TransferAmount,
+  LightningNodeDetails,
+  DecodedLnInvoiceDetails,
+  AssetSchemaName,
+  ReceiveAssignmentKind,
+  ReceiveParams,
+  OnchainReceiveParams,
+  ReadOptions,
+  IssueAssetCfaParams,
+  IssueAssetUdaParams,
+  AssetMetadata,
+  RestoreFromBackupParams,
+  WalletRestoreResponse,
 } from './wallet/types';
 
 export { BurnOperations, normalizeBurnRecord } from './wallet/operations/burn';

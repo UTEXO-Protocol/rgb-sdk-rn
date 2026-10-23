@@ -203,12 +203,12 @@ options are defined in [config.ts](src/wallet/rgb-lib/config.ts).
 | `ldkPeerListeningPort` | `number` | LDK peer-to-peer port |
 | `network` | `string` | Bitcoin network (`'utexo'`, `'regtest'`, `'testnet'`, `'mainnet'`, …) |
 | `maxMediaUploadSizeMb` | `number?` | Max media upload size in MB (default 20) |
-| `reuseAddresses` | `boolean?` | Reuse on-chain addresses (default `false`) |
+| `reuseAddresses` | `boolean?` | Must be `false` or omitted; RLN on rgb-lib-bfa rejects address reuse |
 | `enableVirtualChannelsV0` | `boolean?` | Enable virtual channel support (required on both host and client) |
 | `virtualPeerPubkeys` | `string[]?` | Host pubkeys allowed to open inbound virtual channels. `null`/`[]` = accept from anyone |
 | `vssUrl` | `string?` | VSS server URL for encrypted remote backup |
 | `vssAllowHttp` | `boolean?` | Allow plain HTTP VSS endpoint (default `false`) |
-| `vssAllowEmptyRestore` | `boolean?` | Allow restoring from VSS when no backup exists yet (default `false`) |
+| `vssAllowEmptyRestore` | `boolean?` | If the VSS restore fails (server unreachable, wrong key), start with empty local state instead of failing `unlock()`. **Unsafe:** a node with active channels can lose funds. A missing backup never needs it. Default `false` |
 | `lspBaseUrl` | `string?` | LSP base URL for `createLsp()` and APay. Optional on networks with a default (e.g. `utexo` → `https://lsp-signet.utexo.com`); required otherwise |
 | `lspBearerToken` | `string?` | LSP bearer token — required for APay |
 
@@ -252,10 +252,10 @@ protocol's connection parameters to `reinit(params)`. For final cleanup, use
 | `bitcoindRpcPort` | `number?` | Bitcoin RPC port |
 | `indexerUrl` | `string?` | Electrum indexer URL (e.g. `'127.0.0.1:50001'`) |
 | `proxyEndpoint` | `string?` | RGB proxy endpoint (e.g. `'rpc://host:3000/json-rpc'`) |
-| `ethRpcUrl` | `string \| null?` | Ethereum RPC for native BFA validation; configure when unlocking a BFA wallet |
+| `ethRpcUrl` | `string \| null?` | Ethereum RPC for native BFA validation; configure when unlocking a BFA wallet. Supported by both signers |
 | `announceAddresses` | `string[]?` | Public addresses to announce to the network |
 | `announceAlias` | `string \| null?` | Node alias |
-| `gossipRgsServerUrl` | `string \| null?` | RGS server URL for rapid gossip sync |
+| `gossipRgsServerUrl` | `string \| null?` | RGS server URL for rapid gossip sync. `PasswordRLNSigner` only; `NativeExternalRLNSigner` throws `ValidationError`, because RLN's external-signer unlock has no RGS setting |
 
 ---
 
@@ -268,7 +268,7 @@ require RLN. Parameter and result types follow the selected protocol.
 
 | Method | Description |
 |--------|-------------|
-| `getBtcBalance()` | BTC balance (vanilla + colored) |
+| `getBtcBalance({ skipSync? }?)` | BTC balance (vanilla + colored) |
 | `getAddress()` | Current on-chain deposit address |
 | `rotateVanillaAddress()` | Derive a fresh on-chain (vanilla/BTC) address |
 | `getNetwork()` | Configured network string |
@@ -278,20 +278,23 @@ require RLN. Parameter and result types follow the selected protocol.
 
 | Method | Description |
 |--------|-------------|
-| `createUtxos({ upTo?, num?, size?, feeRate? })` | Create UTXOs (all-in-one) |
-| `listUnspents()` | List unspent UTXOs with RGB allocations |
+| `createUtxos({ upTo?, num?, size?, feeRate?, skipSync? })` | Create UTXOs (all-in-one); returns how many were created. `feeRate` is an integer sat/vB |
+| `listUnspents({ skipSync? }?)` | List unspent UTXOs with RGB allocations |
 
 #### Assets
 
 | Method | Description |
 |--------|-------------|
-| `listAssets()` | All RGB assets (NIA, CFA, IFA, UDA, plus the RN-specific `bfa` collection) |
+| `listAssets({ filterAssetSchemas? }?)` | All RGB assets (NIA, CFA, IFA, UDA, plus the RN-specific `bfa` collection); filter by `'Nia' \| 'Cfa' \| 'Uda' \| 'Ifa' \| 'Bfa'` |
+| `getAssetMetadata(assetId)` | Contract metadata; supplies are exact decimal strings |
 | `getAssetBalance(assetId)` | Balance for one asset |
 | `issueAssetNia({ ticker, name, precision, amounts })` | Issue a Non-Inflationary Asset |
 | `issueAssetIfa({ ticker, name, precision, amounts, inflationAmounts, rejectListUrl })` | Issue an Inflatable Asset |
+| `issueAssetCfa({ name, details?, precision, amounts, filePath? })` | Issue a Collectible Fungible Asset. RGB_LN uploads `filePath` to the node first |
+| `issueAssetUda({ ticker, name, details?, precision, mediaFilePath?, attachmentsFilePaths? })` | Issue a Unique Digital Asset |
 | `inflate({ assetId, inflationAmounts, feeRate?, minConfirmations? })` | Inflate an IFA; returns `{ txid }` |
-| `blindReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a blinded RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
-| `witnessReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a witness RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
+| `blindReceive({ assetId?, amount?, assignmentKind?, durationSeconds?, minConfirmations? })` | Create a blinded RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet. `assignmentKind`: `Fungible`, `NonFungible`, `InflationRight`, `MintRight` (RGB_L1 only) or `Any` |
+| `witnessReceive({ assetId?, amount?, assignmentKind?, durationSeconds?, minConfirmations? })` | Create a witness RGB invoice. Same `assignmentKind` rules as `blindReceive` |
 | `decodeRGBInvoice({ invoice })` | Decode an RGB invoice |
 
 #### BFA & Consignments
@@ -320,7 +323,7 @@ for a persistent journal. Invoice and balance APIs still require safe JS integer
 
 | Method | Description |
 |--------|-------------|
-| `listTransactions()` | On-chain transaction history |
+| `listTransactions({ skipSync? }?)` | On-chain transaction history |
 | `listTransactionsByTxid(txid, skipSync?)` | Transactions matching a txid |
 | `listTransfers(assetId?)` | RGB transfer history |
 | `listTransfersByTxid(txid)` | RGB transfers matching a txid |
@@ -333,15 +336,18 @@ for a persistent journal. Invoice and balance APIs still require safe JS integer
 
 | Method | Description |
 |--------|-------------|
-| `estimateFeeRate(blocks)` | Fee rate estimate for target confirmation |
-| `createBackup({ backupPath, password })` | Encrypted local backup (file) |
+| `estimateFeeRate(blocks)` | Fee rate estimate for target confirmation, rounded up to an integer sat/vB |
+| `checkIndexerUrl(url)` | Detect the indexer protocol: `{ indexerProtocol: 'electrum' \| 'esplora' \| 'bitcoind' }` |
+| `drainTo({ address, feeRate? })` | RGB_L1 only. Send the whole vanilla BTC balance to `address` |
+| `deleteTransfers({ batchTransferIdx?, noAssetOnly? }?)` | RGB_L1 only. Remove failed transfers from the local database |
+| `createBackup({ backupPath, password })` | RGB_L1 only. Encrypted backup file; restore it with `restoreFromBackup()`. RGB_LN rejects it: RLN mobile bindings have no file backup, use VSS |
 | `backupNow()` | RLN only: replicate state to VSS; returns the new backup version |
 
 #### IUTEXOProtocol — Lightning
 
 | Method | Description |
 |--------|-------------|
-| `createLightningInvoice({ amountSats?, asset?, expirySeconds? })` | Create a Lightning invoice |
+| `createLightningInvoice({ amountSats?, asset?, expirySeconds?, description?, descriptionHash? })` | Create a Lightning invoice |
 | `payLightningInvoice({ lnInvoice, amount?, assetId? })` | Pay a Lightning invoice |
 | `getLightningSendStatus(paymentHash)` | Poll send status — `RlnPaymentStatus` (`'Pending'` \| `'Claimable'` \| `'Claiming'` \| `'Succeeded'` \| `'Cancelled'` \| `'Failed'`); `null` if the hash is unknown |
 | `getLightningReceiveStatus(invoice)` | Poll receive status (`RlnInvoiceStatus`) |
@@ -366,15 +372,15 @@ See [docs/lsp.md](./docs/lsp.md) for `UtexoLsp` composed flows and full examples
 
 | Method | Description |
 |--------|-------------|
-| `onchainReceive({ assetId?, amount?, durationSeconds?, minConfirmations?, witness? })` | RGB invoice — witness by default (`witness: true`). Pass `witness: false` for a blinded invoice |
-| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, skipSync?, witnessData? })` | RGB send via decoded invoice |
+| `onchainReceive({ assetId?, amount?, assignmentKind?, durationSeconds?, minConfirmations?, witness? })` | RGB invoice — witness by default (`witness: true`). Pass `witness: false` for a blinded invoice |
+| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, witnessData? })` | RGB send to an invoice. The whole invoice goes to RLN, so proxy invoices keep their recipient key, encryption and expiry. `assetId` and `amount` default to the invoice values. `feeRate` is an integer in sat/vB (default 1 on RLN, 2 on RGB_L1). `skipSync` is accepted but ignored by both engines; the send always syncs |
 | `listOnchainTransfers(assetId?)` | RGB transfer history |
 
 #### RLN Extras — Node Info
 
 | Method | Description |
 |--------|-------------|
-| `getNodeInfo()` | Node pubkey, channel counts, sync status |
+| `getNodeInfo()` | Node pubkey, channel counts, channel and HTLC limits, network graph size, close-fee and pending-payment totals, account xpubs |
 
 #### RLN Extras — Peers
 
@@ -398,14 +404,13 @@ See [docs/lsp.md](./docs/lsp.md) for `UtexoLsp` composed flows and full examples
 | Method | Description |
 |--------|-------------|
 | `keysend(destPubkey, amtMsat, assetId?, assetAmount?)` | Spontaneous keysend payment |
-| `decodeLnInvoice(invoice)` | Decode a Lightning invoice |
+| `decodeLnInvoice(invoice)` | Decode a Lightning invoice, including `minFinalCltvExpiryDelta` |
 | `invoiceStatus(invoice)` | Raw invoice status |
 
 #### RLN Extras — Utility
 
 | Method | Description |
 |--------|-------------|
-| `checkIndexerUrl(url)` | Validate an electrum URL |
 | `checkProxyEndpoint(endpoint)` | Validate a proxy endpoint |
 | `signMessage(message)` / `verifyMessage(message, signature)` | Sign or verify with the node's own key |
 
@@ -437,6 +442,42 @@ The demo contains full flows for
 [channels, payments and restart](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/flows/payments/runRlnUtexoWalletChannelPaymentFlow.ts)
 and [external-signer asset channels](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/flows/ext-signer/runRlnUtexoWalletAssetChannelExtSignerFlow.ts).
 
+## Backup and Restore
+
+The two protocols back up differently:
+
+| | RGB_L1 (rgb-lib) | RGB_LN (RLN) |
+|---|---|---|
+| Backup | `createBackup({ backupPath, password })` writes an encrypted file | VSS, automatic once `vssUrl` is set; `backupNow()` uploads immediately |
+| Restore | `restoreFromBackup()` before `init()` | Automatic during `unlock()` when local storage is empty |
+| File backup | Yes | No (`createBackup()` rejects) |
+| VSS | No | Yes |
+
+### RGB_L1: backup file
+
+```typescript
+import { UTEXOWallet, restoreFromBackup } from '@utexo/rgb-sdk-rn';
+
+// Back up an initialized wallet. Both paths must be absolute.
+await onchain.createBackup({ backupPath: '/path/to/wallet.rgb', password });
+
+// Restore into a new, empty directory before init().
+await restoreFromBackup({
+  backupFilePath: '/path/to/wallet.rgb',
+  password,
+  dataDir: '/path/to/restored-storage',
+});
+const restored = new UTEXOWallet({
+  protocol: 'RGB_L1',
+  params: { network: 'utexo', storageDirPath: '/path/to/restored-storage' },
+  keys: new CallbackRgbLibKeyProvider(readRgbLibMnemonic),
+});
+await restored.init();
+```
+
+The archive is encrypted with `password`. Storing the file off the device is the
+app's job. `restoreFromBackup()` restores RGB_L1 wallets only.
+
 ## VSS — Encrypted Remote Backup
 
 VSS (Versioned Storage Service) keeps an encrypted remote copy of an RLN node's
@@ -456,7 +497,7 @@ const wallet = new UTEXOWallet(
     network: 'regtest',
     vssUrl: 'https://vss.example.com',
     vssAllowHttp: false,           // set true if vssUrl starts with http://
-    vssAllowEmptyRestore: false,   // set true to allow first-time restore with no backup yet
+    vssAllowEmptyRestore: false,   // keep false: true starts empty if the restore fails
   },
   new PasswordRLNSigner('my-password', keys.mnemonic),
 );
@@ -488,6 +529,10 @@ await walletRestored.init();
 await walletRestored.vssClearFence('my-password');  // release stale lock before unlock
 await walletRestored.unlock(unlockParams);           // pulls LDK state from VSS
 ```
+
+On `mainnet`, the node does not restore Lightning channel state from VSS. Only
+the RGB wallet and shared configuration are restored. Channel recovery from VSS
+works on test networks.
 
 ### `vssClearFence(password)`
 

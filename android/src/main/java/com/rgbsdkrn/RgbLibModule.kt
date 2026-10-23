@@ -51,7 +51,9 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
 
   override fun getAssetBalance(handle: String, assetId: String, promise: Promise) = invoke("getAssetBalance", mapOf("handle" to handle, "assetId" to assetId), promise)
 
-  override fun listAssets(handle: String, promise: Promise) = invoke("listAssets", mapOf("handle" to handle), promise)
+  override fun listAssets(handle: String, filterAssetSchemas: ReadableArray, promise: Promise) = invoke("listAssets", mapOf("handle" to handle, "filterAssetSchemas" to filterAssetSchemas.toArrayList()), promise)
+
+  override fun getAssetMetadata(handle: String, assetId: String, promise: Promise) = invoke("getAssetMetadata", mapOf("handle" to handle, "assetId" to assetId), promise)
 
   override fun listUnspents(handle: String, skipSync: Boolean, promise: Promise) = invoke("listUnspents", mapOf("handle" to handle, "skipSync" to skipSync), promise)
 
@@ -63,13 +65,17 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
 
   override fun sendBtc(handle: String, address: String, amount: String, feeRate: String, skipSync: Boolean, promise: Promise) = invoke("sendBtc", mapOf("handle" to handle, "address" to address, "amount" to amount, "feeRate" to feeRate, "skipSync" to skipSync), promise)
 
-  override fun receive(handle: String, witness: Boolean, assetId: String?, amount: String?, expirationTimestamp: String, transportEndpoints: ReadableArray, minConfirmations: Double, promise: Promise) = invoke("receive", mapOf("handle" to handle, "witness" to witness, "assetId" to assetId, "amount" to amount, "expirationTimestamp" to expirationTimestamp, "transportEndpoints" to transportEndpoints.toArrayList(), "minConfirmations" to minConfirmations), promise)
+  override fun receive(handle: String, witness: Boolean, assetId: String?, amount: String?, expirationTimestamp: String, transportEndpoints: ReadableArray, minConfirmations: Double, assignmentKind: String?, promise: Promise) = invoke("receive", mapOf("handle" to handle, "witness" to witness, "assetId" to assetId, "amount" to amount, "expirationTimestamp" to expirationTimestamp, "transportEndpoints" to transportEndpoints.toArrayList(), "minConfirmations" to minConfirmations, "assignmentKind" to assignmentKind), promise)
 
   override fun decodeInvoice(handle: String, invoice: String, promise: Promise) = invoke("decodeInvoice", mapOf("handle" to handle, "invoice" to invoice), promise)
 
   override fun send(handle: String, invoice: String, assetId: String?, amount: String?, witnessAmountSat: String?, witnessBlinding: String?, donation: Boolean, feeRate: String, minConfirmations: Double, skipSync: Boolean, senderTransportEndpoint: String, promise: Promise) = invoke("send", mapOf("handle" to handle, "invoice" to invoice, "assetId" to assetId, "amount" to amount, "witnessAmountSat" to witnessAmountSat, "witnessBlinding" to witnessBlinding, "donation" to donation, "feeRate" to feeRate, "minConfirmations" to minConfirmations, "skipSync" to skipSync, "senderTransportEndpoint" to senderTransportEndpoint), promise)
 
   override fun issueAssetNia(handle: String, ticker: String, name: String, precision: Double, amounts: ReadableArray, promise: Promise) = invoke("issueAssetNia", mapOf("handle" to handle, "ticker" to ticker, "name" to name, "precision" to precision, "amounts" to amounts.toArrayList()), promise)
+
+  override fun issueAssetCfa(handle: String, name: String, details: String?, precision: Double, amounts: ReadableArray, filePath: String?, promise: Promise) = invoke("issueAssetCfa", mapOf("handle" to handle, "name" to name, "details" to details, "precision" to precision, "amounts" to amounts.toArrayList(), "filePath" to filePath), promise)
+
+  override fun issueAssetUda(handle: String, ticker: String, name: String, details: String?, precision: Double, mediaFilePath: String?, attachmentsFilePaths: ReadableArray, promise: Promise) = invoke("issueAssetUda", mapOf("handle" to handle, "ticker" to ticker, "name" to name, "details" to details, "precision" to precision, "mediaFilePath" to mediaFilePath, "attachmentsFilePaths" to attachmentsFilePaths.toArrayList()), promise)
 
   override fun issueAssetIfa(handle: String, ticker: String, name: String, precision: Double, amounts: ReadableArray, inflationAmounts: ReadableArray, rejectListUrl: String?, promise: Promise) = invoke("issueAssetIfa", mapOf("handle" to handle, "ticker" to ticker, "name" to name, "precision" to precision, "amounts" to amounts.toArrayList(), "inflationAmounts" to inflationAmounts.toArrayList(), "rejectListUrl" to rejectListUrl), promise)
 
@@ -84,6 +90,12 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
   override fun failTransfers(handle: String, batchTransferIdx: Double?, noAssetOnly: Boolean, skipSync: Boolean, promise: Promise) = invoke("failTransfers", mapOf("handle" to handle, "batchTransferIdx" to batchTransferIdx, "noAssetOnly" to noAssetOnly, "skipSync" to skipSync), promise)
 
   override fun refresh(handle: String, skipSync: Boolean, promise: Promise) = invoke("refresh", mapOf("handle" to handle, "skipSync" to skipSync), promise)
+
+  override fun deleteTransfers(handle: String, batchTransferIdx: Double?, noAssetOnly: Boolean, promise: Promise) = invoke("deleteTransfers", mapOf("handle" to handle, "batchTransferIdx" to batchTransferIdx, "noAssetOnly" to noAssetOnly), promise)
+
+  override fun drainTo(handle: String, address: String, feeRate: String, promise: Promise) = invoke("drainTo", mapOf("handle" to handle, "address" to address, "feeRate" to feeRate), promise)
+
+  override fun checkIndexerUrl(handle: String, indexerUrl: String, promise: Promise) = invoke("checkIndexerUrl", mapOf("handle" to handle, "indexerUrl" to indexerUrl), promise)
 
   override fun sync(handle: String, promise: Promise) = invoke("sync", mapOf("handle" to handle), promise)
 

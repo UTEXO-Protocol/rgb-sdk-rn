@@ -32,6 +32,7 @@ import type {
   RlnFailTransfersResponse,
   RlnRefreshTransfersResponse,
   RlnAssignmentKind,
+  RlnAssetMetadata,
   RlnSignMessageResponse,
   RlnVerifyMessageResponse,
   RlnClaimHodlInvoiceResponse,
@@ -66,8 +67,13 @@ export interface IRLNUnlockParams {
   proxyEndpoint?: string | null;
   announceAddresses?: string[];
   announceAlias?: string | null;
+  /**
+   * RGS gossip server. Supported with `PasswordRLNSigner` only; RLN's
+   * external-signer unlock has no such setting, so `NativeExternalRLNSigner`
+   * rejects it instead of ignoring it.
+   */
   gossipRgsServerUrl?: string | null;
-  /** Ethereum RPC used by the native BFA validator. */
+  /** Ethereum RPC used by the native BFA validator. Supported by both signers. */
   ethRpcUrl?: string | null;
 }
 
@@ -176,7 +182,9 @@ export interface IRLN {
     paymentHash?: string | null,
     minFinalCltvExpiryDelta?: number | null,
     /** BOLT11 `h` tag — commits the invoice to LNURL-pay metadata. */
-    descriptionHash?: string | null
+    descriptionHash?: string | null,
+    /** BOLT11 `d` tag; mutually exclusive with `descriptionHash`. */
+    description?: string | null
   ): Promise<RlnLnInvoiceResponse>;
 
   rlnClaimHodlInvoice(
@@ -259,6 +267,9 @@ export interface IRLN {
     mediaFileDigest: string | null,
     attachmentsFileDigests: string[]
   ): Promise<any>;
+  /** Uploads a local file to the node's media store and returns its digest. */
+  rlnPostAssetMedia(filePath: string): Promise<string>;
+  rlnAssetMetadata(assetId: string): Promise<RlnAssetMetadata>;
   /** Atomic IFA inflation — see {@link RlnInflateResponse}. */
   rlnInflate(
     assetId: string,
@@ -293,6 +304,21 @@ export interface IRLN {
     transportEndpoints: string[],
     witnessData?: { amountSat: number; blinding?: number } | null
   ): Promise<RlnSendRgbResponse>;
+  /**
+   * Sends a fungible amount to an RGB invoice without dropping its proxy
+   * fields (recipient key, encryption, expiry). RLN requires this path for
+   * invoices that carry transport endpoints. The amount must match a
+   * fungible invoice amount when the invoice states one.
+   */
+  rlnSendRgbInvoice(
+    invoice: string,
+    assetId: string,
+    amount: number,
+    donation: boolean,
+    feeRate: number,
+    minConfirmations: number,
+    witnessData?: { amountSat: number; blinding?: number } | null
+  ): Promise<RlnSendRgbResponse>;
   rlnListTransactions(skipSync: boolean): Promise<RlnTransaction[]>;
   rlnListTransactionsByTxid(
     txid: string,
@@ -321,6 +347,14 @@ export interface IRLN {
     feeRate: number,
     skipSync: boolean
   ): Promise<void>;
+  /** Creates UTXOs atomically with the count of new colorable outpoints. */
+  rlnCreateUtxosCounted(
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<number>;
 
   // ── Backup ───────────────────────────────────────────────────────────────────
 

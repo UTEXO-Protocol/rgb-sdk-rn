@@ -59,6 +59,7 @@ import {
 } from '@utexo/rgb-sdk-core';
 
 import { RLNManager, createRLNManager } from './rln-manager';
+import { snapshot } from '../runtime/snapshot';
 import type { IRLNSigner } from './rln-signers';
 import type {
   IRLNUnlockParams,
@@ -1174,8 +1175,11 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   // here — the node sends atomically and signs internally.
 
   async onchainSend(
-    params: OnchainSendRequestModel
+    request: OnchainSendRequestModel
   ): Promise<OnchainSendResponse> {
+    // Own the request before the first await, so the invoice and numbers sent
+    // to native are the ones checked here even if the caller mutates it.
+    const params = snapshot(request);
     // RLN rejects proxy recipients built from decoded fields, so the whole
     // invoice goes to native. Decoding here only fills defaults. RLN syncs
     // inside the send; `skipSync` does not apply.

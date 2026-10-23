@@ -208,7 +208,7 @@ options are defined in [config.ts](src/wallet/rgb-lib/config.ts).
 | `virtualPeerPubkeys` | `string[]?` | Host pubkeys allowed to open inbound virtual channels. `null`/`[]` = accept from anyone |
 | `vssUrl` | `string?` | VSS server URL for encrypted remote backup |
 | `vssAllowHttp` | `boolean?` | Allow plain HTTP VSS endpoint (default `false`) |
-| `vssAllowEmptyRestore` | `boolean?` | Allow restoring from VSS when no backup exists yet (default `false`) |
+| `vssAllowEmptyRestore` | `boolean?` | If the VSS restore fails (server unreachable, wrong key), start with empty local state instead of failing `unlock()`. **Unsafe:** a node with active channels can lose funds. A missing backup never needs it. Default `false` |
 | `lspBaseUrl` | `string?` | LSP base URL for `createLsp()` and APay. Optional on networks with a default (e.g. `utexo` → `https://lsp-signet.utexo.com`); required otherwise |
 | `lspBearerToken` | `string?` | LSP bearer token — required for APay |
 
@@ -340,7 +340,7 @@ for a persistent journal. Invoice and balance APIs still require safe JS integer
 | `checkIndexerUrl(url)` | Detect the indexer protocol: `{ indexerProtocol: 'electrum' \| 'esplora' \| 'bitcoind' }` |
 | `drainTo({ address, feeRate? })` | RGB_L1 only. Send the whole vanilla BTC balance to `address` |
 | `deleteTransfers({ batchTransferIdx?, noAssetOnly? }?)` | RGB_L1 only. Remove failed transfers from the local database |
-| `createBackup({ backupPath, password })` | Encrypted local backup (file) |
+| `createBackup({ backupPath, password })` | RGB_L1 only. Encrypted backup file; restore it with `restoreFromBackup()`. RGB_LN rejects it: RLN mobile bindings have no file backup, use VSS |
 | `backupNow()` | RLN only: replicate state to VSS; returns the new backup version |
 
 #### IUTEXOProtocol — Lightning
@@ -442,6 +442,42 @@ The demo contains full flows for
 [channels, payments and restart](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/flows/payments/runRlnUtexoWalletChannelPaymentFlow.ts)
 and [external-signer asset channels](https://github.com/UTEXO-Protocol/rgb-sdk-rn-demo/blob/main/flows/ext-signer/runRlnUtexoWalletAssetChannelExtSignerFlow.ts).
 
+## Backup and Restore
+
+The two protocols back up differently:
+
+| | RGB_L1 (rgb-lib) | RGB_LN (RLN) |
+|---|---|---|
+| Backup | `createBackup({ backupPath, password })` writes an encrypted file | VSS, automatic once `vssUrl` is set; `backupNow()` uploads immediately |
+| Restore | `restoreFromBackup()` before `init()` | Automatic during `unlock()` when local storage is empty |
+| File backup | Yes | No (`createBackup()` rejects) |
+| VSS | No | Yes |
+
+### RGB_L1: backup file
+
+```typescript
+import { UTEXOWallet, restoreFromBackup } from '@utexo/rgb-sdk-rn';
+
+// Back up an initialized wallet. Both paths must be absolute.
+await onchain.createBackup({ backupPath: '/path/to/wallet.rgb', password });
+
+// Restore into a new, empty directory before init().
+await restoreFromBackup({
+  backupFilePath: '/path/to/wallet.rgb',
+  password,
+  dataDir: '/path/to/restored-storage',
+});
+const restored = new UTEXOWallet({
+  protocol: 'RGB_L1',
+  params: { network: 'utexo', storageDirPath: '/path/to/restored-storage' },
+  keys: new CallbackRgbLibKeyProvider(readRgbLibMnemonic),
+});
+await restored.init();
+```
+
+The archive is encrypted with `password`. Storing the file off the device is the
+app's job. `restoreFromBackup()` restores RGB_L1 wallets only.
+
 ## VSS — Encrypted Remote Backup
 
 VSS (Versioned Storage Service) keeps an encrypted remote copy of an RLN node's
@@ -461,7 +497,7 @@ const wallet = new UTEXOWallet(
     network: 'regtest',
     vssUrl: 'https://vss.example.com',
     vssAllowHttp: false,           // set true if vssUrl starts with http://
-    vssAllowEmptyRestore: false,   // set true to allow first-time restore with no backup yet
+    vssAllowEmptyRestore: false,   // keep false: true starts empty if the restore fails
   },
   new PasswordRLNSigner('my-password', keys.mnemonic),
 );
@@ -493,6 +529,10 @@ await walletRestored.init();
 await walletRestored.vssClearFence('my-password');  // release stale lock before unlock
 await walletRestored.unlock(unlockParams);           // pulls LDK state from VSS
 ```
+
+On `mainnet`, the node does not restore Lightning channel state from VSS. Only
+the RGB wallet and shared configuration are restored. Channel recovery from VSS
+works on test networks.
 
 ### `vssClearFence(password)`
 

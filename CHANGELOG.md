@@ -6,6 +6,7 @@ __added__
 
 - `issueAssetCfa()` and `issueAssetUda()` on both protocols. RGB_LN uploads `filePath` / `mediaFilePath` / `attachmentsFilePaths` to the node and issues with their digests; RGB_L1 passes the paths to rgb-lib.
 - `getAssetMetadata(assetId)` on both protocols; supplies are exact u64 decimal strings.
+- RGB_L1 `restoreFromBackup({ backupFilePath, password, dataDir })` restores a `createBackup()` file into an empty directory before `init()`. It has the name and shape of the function removed in `1.0.0-beta.10`, and now also passes `dataDir` to native (the old version ignored it). It returns `{ message }`.
 - `checkIndexerUrl(url)` is shared (was RGB_LN only) and returns a lowercase `indexerProtocol` on both.
 - RGB_L1 only: `drainTo({ address, feeRate? })` and `deleteTransfers({ batchTransferIdx?, noAssetOnly? })`.
 - `assignmentKind` for `blindReceive()`, `witnessReceive()` and `onchainReceive()` (`Fungible`, `NonFungible`, `InflationRight`, `MintRight`, `Any`). Both engines validate it the same way; `MintRight` is RGB_L1 only.
@@ -27,6 +28,7 @@ __fixed__
 
 __changed__
 
+- Readme: documented how backup differs between protocols. `createBackup()` is RGB_L1 only. `vssAllowEmptyRestore` means start empty when the VSS restore fails, which is unsafe with channels; the old description was wrong.
 - RGB Lib bridge version is `3` (new operations and parameters). Rebuild the app so the native module matches the JS SDK.
 - RLN `onchainSend()` sends through the new native `sendrgbinvoice` call ([rgb-lightning-node#212](https://github.com/UTEXO-Protocol/rgb-lightning-node/pull/212)). RLN now rejects proxy recipients built from decoded invoice fields. `amount` defaults to a fungible invoice amount, and a different explicit amount is rejected. `skipSync` is ignored.
 - RLN `decodeRGBInvoice()` returns `publicKey` and `encryption`. Raw `proxyRecipientId` is optional.

@@ -1,44 +1,46 @@
 import { WalletBackendError } from '../wallet-errors';
+import type { RestoreFromBackupParams, WalletRestoreResponse } from '../types';
 import { getRgbLibBinding, assertRuntime } from './native';
 import { guardNative } from './errors';
 
-/** Restores an RGB Lib archive into a new, empty profile directory before init(). */
-export async function restoreRgbLibBackup(params: {
-  backupPath: string;
-  password: string;
-  storageDirPath: string;
-}): Promise<void> {
-  return restoreRgbLibBackupWith(params, getRgbLibBinding);
+/**
+ * RGB_L1 only. Restores a `createBackup()` archive into a new, empty wallet
+ * directory. Call it before `init()`, then create the wallet with
+ * `storageDirPath: dataDir`. RGB_LN restores from VSS during `unlock()`.
+ */
+export async function restoreFromBackup(
+  params: RestoreFromBackupParams
+): Promise<WalletRestoreResponse> {
+  return restoreFromBackupWith(params, getRgbLibBinding);
 }
 
 /** @internal Transport-injectable implementation; not exported from the package. */
-export async function restoreRgbLibBackupWith(
-  params: { backupPath: string; password: string; storageDirPath: string },
+export async function restoreFromBackupWith(
+  params: RestoreFromBackupParams,
   loadBinding: typeof getRgbLibBinding
-): Promise<void> {
+): Promise<WalletRestoreResponse> {
   if (
     !params ||
-    !params.backupPath?.startsWith('/') ||
-    !params.storageDirPath?.startsWith('/') ||
+    typeof params.backupFilePath !== 'string' ||
+    !params.backupFilePath.startsWith('/') ||
+    typeof params.dataDir !== 'string' ||
+    !params.dataDir.startsWith('/') ||
     typeof params.password !== 'string' ||
     !params.password ||
-    params.backupPath.includes('\0') ||
-    params.storageDirPath.includes('\0')
+    params.backupFilePath.includes('\0') ||
+    params.dataDir.includes('\0')
   ) {
     throw new WalletBackendError(
       'INVALID_CONFIG',
-      'Restore requires absolute paths and a nonempty password',
+      'Restore requires an absolute backupFilePath and dataDir and a nonempty password',
       undefined,
       'RGB_L1'
     );
   }
-  params = { ...params };
+  const { backupFilePath, password, dataDir } = params;
   const native = guardNative(loadBinding());
   const runtime = await native.getRuntimeInfo();
   assertRuntime(runtime);
-  await native.restoreBackup(
-    params.backupPath,
-    params.password,
-    params.storageDirPath
-  );
+  await native.restoreBackup(backupFilePath, password, dataDir);
+  return { message: 'Wallet restored successfully' };
 }

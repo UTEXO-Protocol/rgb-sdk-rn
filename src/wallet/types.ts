@@ -136,3 +136,15 @@ export interface AssetMetadata {
   /** RGB_L1 only. */
   rejectListUrl?: string;
 }
+
+/** `restoreFromBackup()` input. Both paths are absolute. */
+export interface RestoreFromBackupParams {
+  /** Archive written by RGB_L1 `createBackup()`. */
+  backupFilePath: string;
+  password: string;
+  /** New, empty directory; pass it as `storageDirPath` to the wallet. */
+  dataDir: string;
+}
+export interface WalletRestoreResponse {
+  message: string;
+}

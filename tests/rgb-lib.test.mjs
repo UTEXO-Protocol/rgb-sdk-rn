@@ -5,8 +5,8 @@ import { SDKError } from '@utexo/rgb-sdk-core';
 import { WalletBackendError } from '../lib/module/wallet/wallet-errors.js';
 import { RgbLibWallet } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
 import {
-  restoreRgbLibBackup,
-  restoreRgbLibBackupWith,
+  restoreFromBackup,
+  restoreFromBackupWith,
 } from '../lib/module/wallet/rgb-lib/restore.js';
 import { UTEXOWallet } from '../lib/module/wallet/utexo-wallet.js';
 import {
@@ -897,11 +897,11 @@ test('init and restore translate native rejections without changing key-provider
   };
   await assert.rejects(locked.wallet.init(), (error) => error === keyError);
   await assert.rejects(
-    restoreRgbLibBackupWith(
+    restoreFromBackupWith(
       {
-        backupPath: '/backups/a.rgb',
+        backupFilePath: '/backups/a.rgb',
         password: 'pw',
-        storageDirPath: '/wallets/restored',
+        dataDir: '/wallets/restored',
       },
       () => ({
         getRuntimeInfo: async () => runtime,
@@ -1473,32 +1473,32 @@ test('createBackup requires an absolute path and nonempty password', async () =>
   );
   await wallet.dispose();
 });
-test('restoreRgbLibBackup validates paths and runtime version before restoring', async () => {
+test('restoreFromBackup validates paths and runtime version before restoring', async () => {
   const valid = {
-    backupPath: '/backups/w.rgb',
+    backupFilePath: '/backups/w.rgb',
     password: 'pw',
-    storageDirPath: '/wallets/restored',
+    dataDir: '/wallets/restored',
   };
   for (const invalid of [
-    { backupPath: 'backups/w.rgb' },
-    { storageDirPath: 'wallets/restored' },
+    { backupFilePath: 'backups/w.rgb' },
+    { dataDir: 'wallets/restored' },
     { password: '' },
-    { backupPath: '/backups/w\0.rgb' },
-    { storageDirPath: '/wallets/\0restored' },
+    { backupFilePath: '/backups/w\0.rgb' },
+    { dataDir: '/wallets/\0restored' },
   ]) {
     const { native, calls } = fixture();
     await assert.rejects(
-      restoreRgbLibBackupWith({ ...valid, ...invalid }, () => native),
+      restoreFromBackupWith({ ...valid, ...invalid }, () => native),
       code('INVALID_CONFIG')
     );
     assert.deepEqual(calls, []);
   }
   // The public entry point validates before it even loads the native module.
   for (const missing of [null, undefined]) {
-    await assert.rejects(restoreRgbLibBackup(missing), code('INVALID_CONFIG'));
+    await assert.rejects(restoreFromBackup(missing), code('INVALID_CONFIG'));
   }
   await assert.rejects(
-    restoreRgbLibBackup({ ...valid, backupPath: 'relative' }),
+    restoreFromBackup({ ...valid, backupFilePath: 'relative' }),
     code('INVALID_CONFIG')
   );
   for (const mismatch of [
@@ -1512,18 +1512,20 @@ test('restoreRgbLibBackup validates paths and runtime version before restoring',
       },
     });
     await assert.rejects(
-      restoreRgbLibBackupWith(valid, () => native),
+      restoreFromBackupWith(valid, () => native),
       code('NATIVE_VERSION_MISMATCH')
     );
     assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'restore'));
   }
   const { native, calls } = fixture();
-  await restoreRgbLibBackupWith(valid, () => native);
+  assert.deepEqual(await restoreFromBackupWith(valid, () => native), {
+    message: 'Wallet restored successfully',
+  });
   assert.deepEqual(calls.at(-1), [
     'restore',
-    valid.backupPath,
+    valid.backupFilePath,
     valid.password,
-    valid.storageDirPath,
+    valid.dataDir,
   ]);
 });
 

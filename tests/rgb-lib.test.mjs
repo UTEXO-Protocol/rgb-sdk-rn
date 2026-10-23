@@ -208,6 +208,27 @@ test('native pins agree with the UniFFI artifact manifest', () => {
   assert.equal(manifest.sourceRevision, RGB_LIB_REVISION);
   assert.equal(manifest.bridgeVersion, RGB_LIB_BRIDGE_VERSION);
 });
+test('native bridges report the manifest bridge version and read artifact provenance', () => {
+  const source = (file) =>
+    fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+  const swift = source('ios/RgbLibSwiftHelper.swift');
+  const kotlin = source(
+    'android/src/main/java/com/rgbsdkrn/RgbLibSessionStore.kt'
+  );
+  assert.match(
+    swift,
+    new RegExp(`"bridgeVersion": ${RGB_LIB_BRIDGE_VERSION},`)
+  );
+  assert.match(
+    kotlin,
+    new RegExp(`"bridgeVersion" to ${RGB_LIB_BRIDGE_VERSION},`)
+  );
+  // Version and revision come from the artifacts, never from constants.
+  for (const text of [swift, kotlin]) {
+    assert.ok(!text.includes(RGB_LIB_REVISION));
+    assert.ok(text.includes('source_commit'));
+  }
+});
 test('network info omits block height when the UniFFI API does not expose it', async () => {
   const { wallet } = fixture({
     async getNetworkInfo() {

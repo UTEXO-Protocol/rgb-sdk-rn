@@ -45,7 +45,13 @@ function installedMatches() {
     );
     return (
       PINNED_FIELDS.every((field) => installed[field] === pin[field]) &&
-      installed.ios?.sha256 === pin.ios.sha256
+      installed.ios?.sha256 === pin.ios.sha256 &&
+      fs.existsSync(
+        path.join(
+          target,
+          'RGBLib.xcframework/ios-arm64/RGBLib.framework/rgb-lib-bfa-version.json'
+        )
+      )
     );
   } catch {
     return false;
@@ -158,6 +164,11 @@ function buildSlice(release, work, slice) {
   fs.writeFileSync(
     path.join(swift, 'Info.plist'),
     frameworkPlist('RGBLib', 'org.utexo.rgb-lib-bfa')
+  );
+  // The bridge reads the release provenance from here at runtime.
+  fs.copyFileSync(
+    path.join(release, 'version.json'),
+    path.join(swift, 'rgb-lib-bfa-version.json')
   );
 
   const ffiBinaries = [];
@@ -272,7 +283,7 @@ async function installIos() {
     return;
   }
   if (!force && installedMatches()) {
-    log(`iOS bindings ${pin.ios.release} already installed.`);
+    log(`iOS bindings ${pin.version} already installed.`);
     return;
   }
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'rgb-lib-ios-'));
@@ -293,7 +304,7 @@ async function installIos() {
       fs.readFileSync(path.join(release, 'version.json'), 'utf8')
     );
     if (
-      provenance.version !== pin.ios.release ||
+      provenance.version !== pin.version ||
       provenance.source_commit !== pin.sourceRevision
     )
       throw new Error('The rgb-lib-swift release does not match the pin');
@@ -332,7 +343,7 @@ async function installIos() {
     }
     fs.rmSync(previous, { recursive: true, force: true });
     log(
-      `Installed iOS bindings ${pin.ios.release}. Run pod install and rebuild the app.`
+      `Installed iOS bindings ${pin.version}. Run pod install and rebuild the app.`
     );
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -342,7 +353,7 @@ async function installIos() {
 try {
   await installIos();
   log(
-    `Android uses com.utexo:rgb-lib-bfa-android:${pin.androidVersion} from Maven Central.`
+    `Android uses com.utexo:rgb-lib-bfa-android:${pin.version} from Maven Central.`
   );
 } catch (error) {
   const detail = error.stderr?.toString().trim() || error.message;

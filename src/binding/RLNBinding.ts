@@ -48,35 +48,27 @@ import type {
   RlnApayNewResponse,
 } from './rln-types';
 
-// The native layer may return BtcBalance as its Rust Display string
-// e.g. "BtcBalance(settled=100, future=0, spendable=100)" — parse it into a proper object.
-function parseBtcSubBalance(raw: any): {
-  settled: number;
-  future: number;
-  spendable: number;
-} {
-  if (raw && typeof raw === 'object') return raw;
-  if (typeof raw === 'string') {
-    const m = raw.match(/settled=(\d+)[,\s]+future=(\d+)[,\s]+spendable=(\d+)/);
-    if (m)
-      return {
-        settled: Number(m[1]),
-        future: Number(m[2]),
-        spendable: Number(m[3]),
-      };
-  }
-  return { settled: 0, future: 0, spendable: 0 };
+type RlnSubBalance = RlnBtcBalance['vanilla'];
+
+function normalizeSubBalance(raw: unknown, name: string): RlnSubBalance {
+  const b = raw as Partial<Record<keyof RlnSubBalance, unknown>> | null;
+  if (
+    !b ||
+    typeof b !== 'object' ||
+    typeof b.settled !== 'number' ||
+    typeof b.future !== 'number' ||
+    typeof b.spendable !== 'number'
+  )
+    throw new WalletError(`Invalid native BTC balance: ${name}`);
+  return { settled: b.settled, future: b.future, spendable: b.spendable };
 }
 
-function normalizeBtcBalance(raw: any): RlnBtcBalance {
-  if (!raw || typeof raw !== 'object')
-    return {
-      vanilla: { settled: 0, future: 0, spendable: 0 },
-      colored: { settled: 0, future: 0, spendable: 0 },
-    };
+/** Both bridges return `{ vanilla, colored }` records; anything else is a bug. */
+function normalizeBtcBalance(raw: unknown): RlnBtcBalance {
+  const b = raw as { vanilla?: unknown; colored?: unknown } | null;
   return {
-    vanilla: parseBtcSubBalance(raw.vanilla),
-    colored: parseBtcSubBalance(raw.colored),
+    vanilla: normalizeSubBalance(b?.vanilla, 'vanilla'),
+    colored: normalizeSubBalance(b?.colored, 'colored'),
   };
 }
 
@@ -113,8 +105,6 @@ export class RLNBinding implements IRLN {
     'idle';
 
   async rlnBfaCapabilities(): Promise<RlnBfaCapabilities> {
-    if (typeof Rgb.rlnBfaCapabilities !== 'function')
-      return { burn: false, consignment: false, bfa: false };
     return Rgb.rlnBfaCapabilities();
   }
   async rlnBurn(params: RlnBurnParams): Promise<RlnBurnResult> {
@@ -980,17 +970,6 @@ export class RLNBinding implements IRLN {
         (u) => u.utxo.colorable && !before.has(u.utxo.outpoint)
       ).length;
     });
-  }
-
-  // ── Backup ───────────────────────────────────────────────────────────────────
-
-  /**
-   * @throws Always throws — backup is not yet supported by the native RLN node.
-   */
-  async rlnBackup(backupPath: string, password: string): Promise<void> {
-    await this.withNodeOperation((nodeId) =>
-      Rgb.rlnBackup(nodeId, backupPath, password)
-    );
   }
 
   // ── VSS ─────────────────────────────────────────────────────────────────────

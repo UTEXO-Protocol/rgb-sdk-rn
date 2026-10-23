@@ -66,10 +66,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
   private val coroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
   private val TAG = "RNRgb"
 
-  init {
-    AppConstants.ensureInitialized(reactContext)
-  }
-
   override fun getName(): String {
     return NAME
   }
@@ -803,27 +799,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putDouble("offchainOutbound", b.offchainOutbound.toDouble())
         map.putDouble("offchainInbound", b.offchainInbound.toDouble())
         withContext(Dispatchers.Main) { promise.resolve(map) }
-      } catch (e: Exception) {
-        withContext(Dispatchers.Main) {
-          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
-        }
-      }
-    }
-  }
-
-  override fun rlnBackup(nodeId: Double, backupPath: String, password: String, promise: Promise) {
-    coroutineScope.launch(Dispatchers.IO) {
-      try {
-        val node = RlnNodeStore.get(nodeId.toInt())
-          ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        // Some generated RLN artifacts do not expose backup() on SdkNode yet.
-        // Keep bridge callable and return a clear runtime error instead.
-        withContext(Dispatchers.Main) {
-          promise.reject(
-            "UnsupportedOperationException",
-            "rlnBackup is not available in current Android RLN bindings"
-          )
-        }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)

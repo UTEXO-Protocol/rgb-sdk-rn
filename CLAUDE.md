@@ -37,7 +37,7 @@ cd ios && pod install
 node scripts/download-rln-bindings.mjs
 ```
 
-Tests use Node's built-in test runner. Run `npm test` for typecheck, runtime contract checks, rgb-lib tests and WebRGB tests. `tests/types/` contains compile-only API regressions (including facade method coverage); `tests/*.test.mjs` contains JavaScript tests. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run the native smoke sources in `tests/native/`. The Android script uses the host JVM; it is not an emulator test. Existing Android instrumentation tests remain in `android/src/androidTest/`.
+Tests use Node's built-in test runner. Run `npm test` for typecheck, runtime contract checks, rgb-lib tests and WebRGB tests. `tests/types/` contains compile-only API regressions (including facade method coverage); `tests/*.test.mjs` contains JavaScript tests. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run the native smoke sources in `tests/native/`. The Android script uses the host JVM and needs no native artifacts. The rgb-lib session store runs against the Maven Central AAR as an instrumentation test (`android/src/androidTest/`, `RgbLibSessionStoreInstrumentationTest`), on an emulator or device.
 
 Use `.mjs` (ES modules) for Node scripts, runtime tests and ESLint config. `babel.config.cjs` stays CommonJS for synchronous config loading. SDK source stays TypeScript; generated JavaScript in `lib/` is managed by Bob.
 
@@ -106,9 +106,9 @@ The signer is created with a disk-backed VLS store (`NativeExternalSigner.newWit
 
 ### Type mapping
 
-`src/binding/rln-types.ts` defines raw types as the native layer returns them. `wallet/rln/rln-wallet.ts` contains a set of private `map*` functions (e.g. `mapAssetNia`, `mapTransaction`, `mapTransfer`) that convert these to the `@utexo/rgb-sdk-core` types that callers expect. When the native layer returns BtcBalance as a Rust Display string (e.g. `"BtcBalance(settled=100, ...)"`) `RLNBinding.normalizeBtcBalance` parses it.
+`src/binding/rln-types.ts` defines raw types as the native layer returns them. `wallet/rln/rln-wallet.ts` contains a set of private `map*` functions (e.g. `mapAssetNia`, `mapTransaction`, `mapTransfer`) that convert these to the `@utexo/rgb-sdk-core` types that callers expect. Both bridges return BtcBalance as `{ vanilla, colored }` records; `RLNBinding.normalizeBtcBalance` throws `WalletError` on any other shape.
 
-RGB Lib DTO-to-domain mapping lives in `wallet/rgb-lib/mappers.ts`; u64 input validation lives in `amounts.ts`. Native wire u64 values remain decimal strings until an explicit safe public conversion. `native.ts` shares runtime-version validation between init and restore. `WalletBackendError` extends core `SDKError` and carries an optional `protocol`; do not label an unknown configuration as a particular engine.
+RGB Lib DTO-to-domain mapping lives in `wallet/rgb-lib/mappers.ts`; u64 input validation lives in `amounts.ts`. Native wire u64 values remain decimal strings until an explicit safe public conversion. `native.ts` shares runtime-version validation between init and restore. The bridges report `version` and `sourceRevision` from the artifact's own `version.json` (the AAR asset `rgb-lib-bfa-version.json`, and the copy the installer puts in `RGBLib.framework`), never from constants. `WalletBackendError` extends core `SDKError` and carries an optional `protocol`; do not label an unknown configuration as a particular engine.
 
 ### Core dependency
 
@@ -118,9 +118,9 @@ RGB Lib DTO-to-domain mapping lives in `wallet/rgb-lib/mappers.ts`; u64 input va
 
 The TurboModule spec is `src/binding/NativeRgb.ts` (module name `'Rgb'`, package `com.rgbsdkrn`). After changing the spec, run `yarn codegen` to regenerate `android/build/generated/source/codegen/`. The Android `build.gradle` sources `generated/java` and `generated/jni`.
 
-For rgb-lib, edit `src/binding/NativeRgbLib.ts`, run `npm run codegen:rgb-lib`, and implement native behavior in the platform session helpers. The generated bridge and DTO files are checked by `npm test`. Keep them in the current native locations: the podspec uses a nonrecursive `ios/*` source glob, and Android reflection uses the module's existing fully qualified name.
+For rgb-lib, edit `src/binding/NativeRgbLib.ts`, run `npm run codegen:rgb-lib`, and implement native behavior in the platform session helpers. The generated bridge and DTO files are checked by `npm test`. Keep them in the current native locations: the podspec uses a nonrecursive `ios/*` source glob, and `RgbPackage` registers `RgbLibModule` directly.
 
-`src/bindings/rgb-lib/manifest.json` pins the upstream artifacts. On iOS, `scripts/setup-rgb-lib-bindings.mjs` (run by `postinstall`, or `npm run bindings:rgb-lib`) downloads the pinned rgb-lib-swift release, verifies its SHA-256 and `version.json`, and builds `ios/RgbLibBindings/` (a dynamic `rgb_libFFI` wrapper of the release library plus the `RGBLib` Swift module). On Android, Gradle resolves `com.utexo:rgb-lib-bfa-android` from Maven Central. When bumping rgb-lib, update the manifest and the version constants in `config.ts`, `RgbLibSwiftHelper.swift` and `RgbLibSessionStore.kt` together. Rebuild the application after changing native artifacts.
+`src/bindings/rgb-lib/manifest.json` pins the upstream artifacts. On iOS, `scripts/setup-rgb-lib-bindings.mjs` (run by `postinstall`, or `npm run bindings:rgb-lib`) downloads the pinned rgb-lib-swift release, verifies its SHA-256 and `version.json`, and builds `ios/RgbLibBindings/` (a dynamic `rgb_libFFI` wrapper of the release library plus the `RGBLib` Swift module). On Android, Gradle resolves `com.utexo:rgb-lib-bfa-android` from Maven Central. When bumping rgb-lib, update the manifest and `RGB_LIB_VERSION`/`RGB_LIB_REVISION` in `config.ts` together; `npm test` checks they agree. Rebuild the application after changing native artifacts.
 
 ### Build output
 
@@ -128,7 +128,7 @@ For rgb-lib, edit `src/binding/NativeRgbLib.ts`, run `npm run codegen:rgb-lib`, 
 - `lib/module/` — ESM JS
 - `lib/typescript/` — type declarations
 
-The `lib/` directory and native binary artifacts (`ios/RGBLightningNode.xcframework`, `android/src/main/jniLibs/`) are excluded from git and must be built/downloaded locally.
+The `lib/` directory and native binary artifacts (`ios/RGBLightningNode.xcframework`, `ios/RgbLibBindings/`) are excluded from git and are downloaded or built by the install scripts.
 
 ## Stack
 

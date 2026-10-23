@@ -29,7 +29,6 @@ android/generated
 
 # React Native Nitro Modules
 nitrogen/
-/ios/rgb_libFFI.xcframework
 
 # BUCK
 buck-out/
@@ -42,11 +41,6 @@ android/keystores/debug.keystore
 
 
 
-src/bindings/*.zip
-src/bindings/extracted-android/
-src/bindings/.tmp-rln-android/
-android/src/main/jniLibs/                                        
-android/src/main/java/org/utexo/                                 
 ios/RGBLightningNode.xcframework/                                
                                                                    
 # UniFFI auto-generated bindings                                 

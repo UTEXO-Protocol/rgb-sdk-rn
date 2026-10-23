@@ -27,7 +27,10 @@ int main(void) {
     check(status.code == 0, "RLN healthcheck failed");
     ffi_rgb_lightning_node_rustbuffer_free(health, &status);
     check(status.code == 0, "RLN buffer cleanup failed");
-    check([call(@"getRuntimeInfo", @{})[@"bridgeVersion"] isEqual:@3], "Wrong bridge version");
+    NSDictionary *runtime = call(@"getRuntimeInfo", @{});
+    check([runtime[@"bridgeVersion"] isEqual:@3], "Wrong bridge version");
+    // Read from the framework's copy of the release version.json.
+    check([runtime[@"sourceRevision"] length] == 40 && [runtime[@"version"] length] > 0, "Missing artifact provenance");
 
     NSString *base = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
     NSString *root = [base stringByAppendingPathComponent:@"source"];

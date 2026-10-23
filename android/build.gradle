@@ -50,6 +50,15 @@ android {
     }
   }
 
+  // The rgb-lib AAR also ships libc++_shared.so, which React Native provides
+  // too; librgblibuniffi.so does not link it. This covers the SDK's own test
+  // APK only: apps need the same pickFirst until the AAR drops the file.
+  packagingOptions {
+    jniLibs {
+      pickFirsts += ["**/libc++_shared.so"]
+    }
+  }
+
   lintOptions {
     disable "GradleCompatible"
   }
@@ -83,7 +92,7 @@ dependencies {
   // UniFFI-generated RLN Kotlin bindings require JNA. Use Android AAR artifact
   // explicitly to avoid Gradle resolving both .aar and .jar variants.
   implementation "net.java.dev.jna:jna:5.17.0@aar"
-  implementation "com.utexo:rgb-lib-bfa-android:${rgbLibPin.androidVersion}"
+  implementation "com.utexo:rgb-lib-bfa-android:${rgbLibPin.version}"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
 

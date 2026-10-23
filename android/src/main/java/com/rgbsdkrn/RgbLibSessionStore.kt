@@ -23,7 +23,8 @@ internal fun rgbLibErrorCode(error: RgbLibException) = "RGB_LIB_" + error.javaCl
  * changes; each session's lock serializes its own native calls, so slow indexer
  * I/O on one wallet does not block others. UniFFI owns the Rust wallet.
  */
-internal class RgbLibSessionStore {
+/** [artifactInfo] returns the AAR's `rgb-lib-bfa-version.json`, or null. */
+internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { null }) {
   private class Lease(input: File) : AutoCloseable {
     val root = input.canonicalFile
     private val file: RandomAccessFile
@@ -193,7 +194,10 @@ internal class RgbLibSessionStore {
   fun execute(operation: String, params: Map<String, Any?>): Any? {
     val p = JSONObject(params)
     when(operation) {
-      "getRuntimeInfo" -> return mapOf("version" to VERSION,"sourceRevision" to REVISION,"bridgeVersion" to 3,"burn" to true,"consignment" to true,"bfa" to true)
+      "getRuntimeInfo" -> {
+        val artifact = runCatching { JSONObject(artifactInfo()!!) }.getOrNull()
+        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 3,"burn" to true,"consignment" to true,"bfa" to true)
+      }
       "openWallet" -> return open(p)
       "restoreBackup" -> { restore(p); return null }
     }
@@ -281,7 +285,11 @@ internal class RgbLibSessionStore {
   companion object {
     private const val PROFILE="rgb-sdk-profile.json"
     private const val LOCK=".rgb-sdk.lock"
-    private const val VERSION="v0.3.0-beta.7-upstream-dev-bfa.2"
-    private const val REVISION="668151e290ddf859858cb74024e6b148535ebec9"
+    // The published AAR's Kotlin loads "uniffi_rgb_lib", but the library it
+    // ships is librgblibuniffi.so. UniFFI reads this override before loading.
+    private const val LIBRARY_OVERRIDE="uniffi.component.rgb_lib.libraryOverride"
+    init {
+      if (System.getProperty(LIBRARY_OVERRIDE) == null) System.setProperty(LIBRARY_OVERRIDE, "rgblibuniffi")
+    }
   }
 }

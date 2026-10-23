@@ -484,18 +484,6 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnBackup:backupPath:password:)
-  public static func _rlnBackup(_ nodeId: NSNumber, backupPath: String, password: String) -> NSDictionary {
-    do {
-      guard RlnNodeStore.shared.get(id: nodeId.intValue) != nil else {
-        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
-      }
-      throw NSError(domain: "RlnError", code: -1, userInfo: [NSLocalizedDescriptionKey: "rlnBackup is not supported in this version of the RLN node"])
-    } catch {
-      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
-    }
-  }
-
   @objc(_rlnBtcBalance:skipSync:)
   public static func _rlnBtcBalance(_ nodeId: NSNumber, skipSync: NSNumber) -> NSDictionary {
     do {

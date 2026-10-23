@@ -1,7 +1,8 @@
 import type { BitcoinNetwork } from '@utexo/rgb-sdk-core';
 import { WalletBackendError } from '../wallet-errors';
 
-export const RGB_LIB_VERSION = 'v0.3.0-beta.7-upstream-dev-bfa.2';
+/** Release of the Swift and Kotlin bindings, as written in their `version.json`. */
+export const RGB_LIB_VERSION = '0.3.0-beta.7-upstream-dev-bfa.2-bfa';
 export const RGB_LIB_REVISION = '668151e290ddf859858cb74024e6b148535ebec9';
 export const RGB_LIB_BRIDGE_VERSION = 3;
 

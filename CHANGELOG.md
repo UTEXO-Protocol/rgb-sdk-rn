@@ -32,6 +32,16 @@ __changed__
   - **iOS:** `postinstall` downloads the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.2-bfa), verifies it and builds the frameworks.
   - **Android:** Gradle resolves `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.2-bfa` from Maven Central.
   - `--from` and `RGB_LIB_BINDINGS_DIR` are removed. RGB_L1 now needs iOS 16.0; on Android it is available on `arm64-v8a` and `x86_64` only.
+- iOS: the podspec ships `PrivacyInfo.xcprivacy` (file timestamp `C617.1`, disk space `E174.1`) for the required-reason APIs the native libraries call. When the rgb-lib iOS bindings are installed, the pod requires iOS 16.0.
+- rgb-lib `getRuntimeInfo` reports the version and source revision from the artifact's own `version.json`, not from constants in the bridge, so a mismatched native library is detected.
+- RGB_LN `createBackup()` rejects with `WalletBackendError` `UNSUPPORTED_CAPABILITY` in JS. The native `rlnBackup` stubs, which always failed, are removed from the TurboModule spec.
+- RLN `getBtcBalance()` throws `WalletError` for a malformed native balance instead of reporting zeros. The parser for the old Rust display string is removed.
+- Android: the Maven Central rgb-lib AAR's Kotlin loads `libuniffi_rgb_lib.so`, but the AAR ships `librgblibuniffi.so`. The session store sets `uniffi.component.rgb_lib.libraryOverride` so RGB_L1 loads; without it every rgb-lib call failed with `UnsatisfiedLinkError`.
+- Android: the AAR also ships `libc++_shared.so`, which conflicts with React Native's copy. Apps need `pickFirsts` for `**/libc++_shared.so` (see Readme); the SDK sets it for its own tests.
+- iOS: switches over RGBLib enums handle unknown cases, as library evolution requires.
+- Android registers `RgbLibModule` directly instead of looking it up by reflection.
+- The rgb-lib session store test runs as an Android instrumentation test against the Maven Central AAR, replacing the JVM test that needed a local desktop bundle.
+- Removed unused code left from the earlier rgb-lib integration: most of `Interfaces.ts`, `RgbError`, `src/constants`, and `AppConstants` on iOS and Android.
 - Readme: documented how backup differs between protocols. `createBackup()` is RGB_L1 only. `vssAllowEmptyRestore` means start empty when the VSS restore fails, which is unsafe with channels; the old description was wrong.
 - RGB Lib bridge version is `3` (new operations and parameters). Rebuild the app so the native module matches the JS SDK.
 - RLN `onchainSend()` sends through the new native `sendrgbinvoice` call ([rgb-lightning-node#212](https://github.com/UTEXO-Protocol/rgb-lightning-node/pull/212)). RLN now rejects proxy recipients built from decoded invoice fields. `amount` defaults to a fungible invoice amount, and a different explicit amount is rejected. `skipSync` is ignored.

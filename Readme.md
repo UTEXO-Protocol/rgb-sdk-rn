@@ -59,8 +59,35 @@ npm run bindings:rgb-lib -- --force
 
 Set `RGB_LIB_SKIP_IOS=1` to skip the iOS step, for example in JavaScript-only CI.
 
-Minimum platforms for RGB_L1: iOS 16.0 (the release is built for 16.0).
+Minimum platforms for RGB_L1: iOS 16.0, because the release is built for 16.0.
+When the iOS bindings are installed, the podspec raises the pod's minimum to
+16.0, so `pod install` fails for an app that targets an older iOS. Raise the
+app's deployment target to 16.0 (for Expo: `ios.deploymentTarget` in
+`expo-build-properties`). An app that does not use RGB_L1 can stay on an older
+target by installing with `RGB_LIB_SKIP_IOS=1`, so `ios/RgbLibBindings/` is
+not created. The App Store rejects an
+embedded framework that needs a newer iOS than the app (ITMS-90208).
 On Android, the AAR includes `arm64-v8a` and `x86_64` only.
+
+The Android AAR also ships `libc++_shared.so`, which React Native already
+provides, so the app build fails in `merge*NativeLibs` with "2 files found with
+path 'lib/…/libc++_shared.so'". The rgb-lib library does not link it. Until
+the AAR drops the file, add to the app's `android/gradle.properties` (read by
+Expo's `app/build.gradle`):
+
+```properties
+android.packagingOptions.pickFirsts=**/libc++_shared.so
+```
+
+or, in any React Native app, to `android/app/build.gradle`:
+
+```groovy
+android { packagingOptions { jniLibs { pickFirsts += ["**/libc++_shared.so"] } } }
+```
+
+The podspec ships a privacy manifest (`ios/PrivacyInfo.xcprivacy`). It
+declares the required-reason APIs the rgb-lib and RLN libraries call: file
+timestamps (`C617.1`) and disk space (`E174.1`).
 
 After native setup, run CocoaPods on iOS and rebuild the application:
 
@@ -332,7 +359,7 @@ for a persistent journal. Invoice and balance APIs still require safe JS integer
 | `checkIndexerUrl(url)` | Detect the indexer protocol: `{ indexerProtocol: 'electrum' \| 'esplora' \| 'bitcoind' }` |
 | `drainTo({ address, feeRate? })` | RGB_L1 only. Send the whole vanilla BTC balance to `address` |
 | `deleteTransfers({ batchTransferIdx?, noAssetOnly? }?)` | RGB_L1 only. Remove failed transfers from the local database |
-| `createBackup({ backupPath, password })` | RGB_L1 only. Encrypted backup file; restore it with `restoreFromBackup()`. RGB_LN rejects it: RLN mobile bindings have no file backup, use VSS |
+| `createBackup({ backupPath, password })` | RGB_L1 only. Encrypted backup file; restore it with `restoreFromBackup()`. RGB_LN rejects it with `UNSUPPORTED_CAPABILITY`: RLN mobile bindings have no file backup, use VSS |
 | `backupNow()` | RLN only: replicate state to VSS; returns the new backup version |
 
 #### IUTEXOProtocol — Lightning

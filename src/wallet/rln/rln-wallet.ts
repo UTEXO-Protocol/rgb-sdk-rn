@@ -290,13 +290,12 @@ function mapBalance(b: RlnAssetBalance): Balance {
 }
 
 function mapAssetBalance(b: RlnAssetBalance): AssetBalance {
-  const raw = b as any;
   return {
     settled: b.settled,
     future: b.future,
     spendable: b.spendable,
-    offchainOutbound: b.offchainOutbound ?? raw.offchain_outbound,
-    offchainInbound: b.offchainInbound ?? raw.offchain_inbound,
+    offchainOutbound: b.offchainOutbound,
+    offchainInbound: b.offchainInbound,
   };
 }
 
@@ -1029,15 +1028,22 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   // ── Backup ────────────────────────────────────────────────────────────────
 
-  async createBackup(params: {
+  /**
+   * Always rejects: the RLN UniFFI bindings have no file backup. RGB_LN state
+   * is backed up through VSS (`vssUrl`, `backupNow()`).
+   */
+  // The parameter keeps the shared createBackup signature on both protocols.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async createBackup(_params: {
     backupPath: string;
     password: string;
   }): Promise<WalletBackupResponse> {
-    await this.rln.rlnBackup(params.backupPath, params.password);
-    return {
-      message: 'Backup created successfully',
-      backupPath: params.backupPath,
-    };
+    throw new WalletBackendError(
+      'UNSUPPORTED_CAPABILITY',
+      'RGB_LN has no file backup; configure vssUrl and use backupNow()',
+      'createBackup',
+      'RGB_LN'
+    );
   }
 
   // ── Cryptographic Operations ──────────────────────────────────────────────

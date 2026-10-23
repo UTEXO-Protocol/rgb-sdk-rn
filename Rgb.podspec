@@ -27,9 +27,17 @@ Pod::Spec.new do |s|
     end
     # Built by scripts/setup-rgb-lib-bindings.mjs from the pinned rgb-lib-swift release.
     native_frameworks += ["ios/RgbLibBindings/RGBLib.xcframework", "ios/RgbLibBindings/rgb_libFFI.xcframework"]
+    # The release is built for this iOS version, and App Store upload rejects
+    # an embedded framework that needs a newer iOS than the app (ITMS-90208).
+    rgb_lib_ios = pin["ios"]["minIosVersion"]
+    if Gem::Version.new(rgb_lib_ios) > Gem::Version.new(min_ios_version_supported)
+      s.platforms = { :ios => rgb_lib_ios }
+    end
     s.libraries = "c++", "resolv", "sqlite3"
     s.frameworks = "Security", "SystemConfiguration"
   end
+  # Required-reason API declarations for the bundled native libraries.
+  s.resource_bundles = { "RgbPrivacyInfo" => ["ios/PrivacyInfo.xcprivacy"] }
   s.vendored_frameworks = native_frameworks
   s.preserve_paths = native_frameworks
 

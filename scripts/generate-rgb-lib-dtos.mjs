@@ -160,6 +160,8 @@ func rgbNetwork(_ value: RGBLib.BitcoinNetwork) -> String {
   case .signet: return "signet"
   case .regtest: return "regtest"
   case .signetCustom: return "utexo"
+  // RGBLib is built with library evolution; JS rejects an unknown network.
+  @unknown default: return String(describing: value)
   }
 }
 func rgbDto(_ v: RGBLib.Assignment) -> [String: Any] {
@@ -169,6 +171,8 @@ func rgbDto(_ v: RGBLib.Assignment) -> [String: Any] {
   case .any: return ["type":"Any","amount":NSNull()]
   case .nonFungible: return ["type":"NonFungible","amount":NSNull()]
   case .mintRight: return ["type":"MintRight","amount":NSNull()]
+  // JS rejects an unknown assignment type instead of guessing one.
+  @unknown default: return ["type":rgbEnum(v),"amount":NSNull()]
   }
 }
 `;

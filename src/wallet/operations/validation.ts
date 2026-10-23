@@ -1,5 +1,9 @@
 import { ValidationError } from '@utexo/rgb-sdk-core';
-import type { BurnParams } from '../types';
+import type {
+  AssetSchemaName,
+  BurnParams,
+  ReceiveAssignmentKind,
+} from '../types';
 
 export function validateConsignmentLookup(assetId: string, txid: string): void {
   if (
@@ -65,4 +69,55 @@ export function toSafeBridgeNumber(
       `${field} must be a non-negative safe integer for the native bridge`
     );
   return value;
+}
+
+const RECEIVE_KINDS: Record<ReceiveAssignmentKind, 'amount' | 'none'> = {
+  Fungible: 'amount',
+  InflationRight: 'amount',
+  NonFungible: 'none',
+  MintRight: 'none',
+  Any: 'none',
+};
+
+/**
+ * Resolves the invoice assignment for a receive. Both engines share these
+ * rules, so a request means the same thing on RGB_L1 and RGB_LN.
+ */
+export function resolveReceiveAssignment(
+  kind: ReceiveAssignmentKind | undefined,
+  amount: number | undefined
+): ReceiveAssignmentKind {
+  const resolved = kind ?? (amount === undefined ? 'Any' : 'Fungible');
+  const rule = RECEIVE_KINDS[resolved];
+  if (rule === undefined)
+    throw new ValidationError(
+      `Unknown assignmentKind: ${String(kind)}`,
+      'assignmentKind'
+    );
+  if (rule === 'amount' && amount === undefined)
+    throw new ValidationError(`${resolved} receive requires amount`, 'amount');
+  if (rule === 'none' && amount !== undefined)
+    throw new ValidationError(`${resolved} receive takes no amount`, 'amount');
+  return resolved;
+}
+
+const ASSET_SCHEMAS: readonly AssetSchemaName[] = [
+  'Nia',
+  'Cfa',
+  'Uda',
+  'Ifa',
+  'Bfa',
+];
+
+export function validateAssetSchemas(
+  schemas: readonly AssetSchemaName[] | undefined
+): AssetSchemaName[] {
+  const list = schemas ?? [];
+  for (const schema of list)
+    if (!ASSET_SCHEMAS.includes(schema))
+      throw new ValidationError(
+        `Unknown asset schema: ${String(schema)}`,
+        'filterAssetSchemas'
+      );
+  return [...list];
 }

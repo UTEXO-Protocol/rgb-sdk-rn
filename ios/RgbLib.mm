@@ -66,8 +66,12 @@ RCT_EXPORT_MODULE(RgbLib)
   [self invoke:@"getAssetBalance" params:@{@"handle": handle ?: [NSNull null], @"assetId": assetId ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
-- (void)listAssets:(NSString *)handle resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
-  [self invoke:@"listAssets" params:@{@"handle": handle ?: [NSNull null]} resolve:resolve reject:reject];
+- (void)listAssets:(NSString *)handle filterAssetSchemas:(NSArray *)filterAssetSchemas resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"listAssets" params:@{@"handle": handle ?: [NSNull null], @"filterAssetSchemas": filterAssetSchemas ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)getAssetMetadata:(NSString *)handle assetId:(NSString *)assetId resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"getAssetMetadata" params:@{@"handle": handle ?: [NSNull null], @"assetId": assetId ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
 - (void)listUnspents:(NSString *)handle skipSync:(BOOL)skipSync resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
@@ -90,8 +94,8 @@ RCT_EXPORT_MODULE(RgbLib)
   [self invoke:@"sendBtc" params:@{@"handle": handle ?: [NSNull null], @"address": address ?: [NSNull null], @"amount": amount ?: [NSNull null], @"feeRate": feeRate ?: [NSNull null], @"skipSync": @(skipSync)} resolve:resolve reject:reject];
 }
 
-- (void)receive:(NSString *)handle witness:(BOOL)witness assetId:(NSString *)assetId amount:(NSString *)amount expirationTimestamp:(NSString *)expirationTimestamp transportEndpoints:(NSArray *)transportEndpoints minConfirmations:(double)minConfirmations resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
-  [self invoke:@"receive" params:@{@"handle": handle ?: [NSNull null], @"witness": @(witness), @"assetId": assetId ?: [NSNull null], @"amount": amount ?: [NSNull null], @"expirationTimestamp": expirationTimestamp ?: [NSNull null], @"transportEndpoints": transportEndpoints ?: [NSNull null], @"minConfirmations": @(minConfirmations)} resolve:resolve reject:reject];
+- (void)receive:(NSString *)handle witness:(BOOL)witness assetId:(NSString *)assetId amount:(NSString *)amount expirationTimestamp:(NSString *)expirationTimestamp transportEndpoints:(NSArray *)transportEndpoints minConfirmations:(double)minConfirmations assignmentKind:(NSString *)assignmentKind resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"receive" params:@{@"handle": handle ?: [NSNull null], @"witness": @(witness), @"assetId": assetId ?: [NSNull null], @"amount": amount ?: [NSNull null], @"expirationTimestamp": expirationTimestamp ?: [NSNull null], @"transportEndpoints": transportEndpoints ?: [NSNull null], @"minConfirmations": @(minConfirmations), @"assignmentKind": assignmentKind ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
 - (void)decodeInvoice:(NSString *)handle invoice:(NSString *)invoice resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
@@ -104,6 +108,14 @@ RCT_EXPORT_MODULE(RgbLib)
 
 - (void)issueAssetNia:(NSString *)handle ticker:(NSString *)ticker name:(NSString *)name precision:(double)precision amounts:(NSArray *)amounts resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   [self invoke:@"issueAssetNia" params:@{@"handle": handle ?: [NSNull null], @"ticker": ticker ?: [NSNull null], @"name": name ?: [NSNull null], @"precision": @(precision), @"amounts": amounts ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)issueAssetCfa:(NSString *)handle name:(NSString *)name details:(NSString *)details precision:(double)precision amounts:(NSArray *)amounts filePath:(NSString *)filePath resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"issueAssetCfa" params:@{@"handle": handle ?: [NSNull null], @"name": name ?: [NSNull null], @"details": details ?: [NSNull null], @"precision": @(precision), @"amounts": amounts ?: [NSNull null], @"filePath": filePath ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)issueAssetUda:(NSString *)handle ticker:(NSString *)ticker name:(NSString *)name details:(NSString *)details precision:(double)precision mediaFilePath:(NSString *)mediaFilePath attachmentsFilePaths:(NSArray *)attachmentsFilePaths resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"issueAssetUda" params:@{@"handle": handle ?: [NSNull null], @"ticker": ticker ?: [NSNull null], @"name": name ?: [NSNull null], @"details": details ?: [NSNull null], @"precision": @(precision), @"mediaFilePath": mediaFilePath ?: [NSNull null], @"attachmentsFilePaths": attachmentsFilePaths ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
 - (void)issueAssetIfa:(NSString *)handle ticker:(NSString *)ticker name:(NSString *)name precision:(double)precision amounts:(NSArray *)amounts inflationAmounts:(NSArray *)inflationAmounts rejectListUrl:(NSString *)rejectListUrl resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
@@ -132,6 +144,18 @@ RCT_EXPORT_MODULE(RgbLib)
 
 - (void)refresh:(NSString *)handle skipSync:(BOOL)skipSync resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   [self invoke:@"refresh" params:@{@"handle": handle ?: [NSNull null], @"skipSync": @(skipSync)} resolve:resolve reject:reject];
+}
+
+- (void)deleteTransfers:(NSString *)handle batchTransferIdx:(NSNumber *)batchTransferIdx noAssetOnly:(BOOL)noAssetOnly resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"deleteTransfers" params:@{@"handle": handle ?: [NSNull null], @"batchTransferIdx": batchTransferIdx ?: [NSNull null], @"noAssetOnly": @(noAssetOnly)} resolve:resolve reject:reject];
+}
+
+- (void)drainTo:(NSString *)handle address:(NSString *)address feeRate:(NSString *)feeRate resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"drainTo" params:@{@"handle": handle ?: [NSNull null], @"address": address ?: [NSNull null], @"feeRate": feeRate ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)checkIndexerUrl:(NSString *)handle indexerUrl:(NSString *)indexerUrl resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"checkIndexerUrl" params:@{@"handle": handle ?: [NSNull null], @"indexerUrl": indexerUrl ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
 - (void)sync:(NSString *)handle resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {

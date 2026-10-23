@@ -150,6 +150,21 @@ internal fun rgbDto(v: TokenLight): Map<String, Any?> {
   result["attachments"] = v.attachments.toSortedMap().map { (key, media) -> rgbDto(media) + ("key" to key.toDouble()) }
   return result
 }
+internal fun rgbDto(v: Metadata): Map<String, Any?> {
+  val result = mutableMapOf<String, Any?>(
+    "assetSchema" to rgbEnum(v.assetSchema),
+    "initialSupply" to v.initialSupply.toString(),
+    "maxSupply" to v.maxSupply.toString(),
+    "knownCirculatingSupply" to v.knownCirculatingSupply.toString(),
+    "timestamp" to v.timestamp.toString(),
+    "name" to v.name,
+    "precision" to v.precision.toDouble(),
+    "ticker" to v.ticker?.let { it },
+    "details" to v.details?.let { it },
+    "rejectListUrl" to v.rejectListUrl?.let { it },
+  )
+  return result
+}
 internal fun rgbDto(v: InvoiceData): Map<String, Any?> {
   val result = mutableMapOf<String, Any?>(
     "recipientId" to v.recipientId,

@@ -6,11 +6,16 @@
  * parse. The contract checks in `check-contract.mjs` only inspect class fields
  * and getters — they never touch the native module — so a stub is enough and
  * keeps this package free of a test toolchain it does not otherwise need.
+ * Runtime tests can still install a fake transport, see below.
  */
 
 const STUB = `
+// Tests may install fakes in globalThis.__RN_NATIVE__[moduleName]; lookup is
+// per call, so the order of imports does not matter.
 export const TurboModuleRegistry = {
-  getEnforcing: () => new Proxy({}, { get: () => () => {
+  getEnforcing: (name) => new Proxy({}, { get: (_, prop) => (...args) => {
+    const fake = globalThis.__RN_NATIVE__?.[name]?.[prop];
+    if (typeof fake === 'function') return fake(...args);
     throw new Error('react-native stub: native module is not available in Node');
   }}),
   get: () => null,

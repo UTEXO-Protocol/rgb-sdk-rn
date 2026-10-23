@@ -3,7 +3,7 @@ import { WalletBackendError } from '../wallet-errors';
 
 export const RGB_LIB_VERSION = 'v0.3.0-beta.7-upstream-dev-bfa.1';
 export const RGB_LIB_REVISION = 'ad87acb673262dbc0f2270b5b2e2f0d3db74a65a';
-export const RGB_LIB_BRIDGE_VERSION = 2;
+export const RGB_LIB_BRIDGE_VERSION = 3;
 
 export interface RgbLibWalletParams {
   network: BitcoinNetwork;

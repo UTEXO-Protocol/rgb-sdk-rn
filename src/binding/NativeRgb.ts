@@ -75,7 +75,7 @@ export interface Spec extends TurboModule {
     proxyEndpoint: string | null,
     announceAddresses: string[],
     announceAlias: string | null,
-    gossipRgsServerUrl: string | null
+    ethRpcUrl: string | null
   ): Promise<void>;
   rlnDestroyNativeExternalSigner(signerId: number): Promise<void>;
   rlnInitNodeWithExternalSigner(
@@ -186,7 +186,8 @@ export interface Spec extends TurboModule {
     assetAmount: number | null,
     paymentHash: string | null,
     minFinalCltvExpiryDelta: number | null,
-    descriptionHash: string | null
+    descriptionHash: string | null,
+    description: string | null
   ): Promise<object>;
   rlnClaimHodlInvoice(
     nodeId: number,
@@ -313,6 +314,10 @@ export interface Spec extends TurboModule {
   ): Promise<object>;
 
   // ── VSS ─────────────────────────────────────────────────────────────────────
+  /** Uploads a local file (path or `file://` URI) to the node's media store; resolves its digest. */
+  rlnPostAssetMedia(nodeId: number, filePath: string): Promise<string>;
+  /** u64 supplies arrive as decimal strings. */
+  rlnAssetMetadata(nodeId: number, assetId: string): Promise<object>;
   rlnVssClearFence(nodeId: number, password: string): Promise<void>;
   rlnVssBackup(nodeId: number): Promise<number>;
 }

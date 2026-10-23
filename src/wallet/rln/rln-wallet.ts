@@ -1,9 +1,25 @@
 import {
+  resolveReceiveAssignment,
   toSafeBridgeNumber,
+  validateAssetSchemas,
   validateBurnParams,
   validateConsignmentLookup,
 } from '../operations/validation';
-import type { BurnParams, BurnResult, ListAssets, Transfer } from '../types';
+import type {
+  AssetMetadata,
+  AssetSchemaName,
+  BurnParams,
+  BurnResult,
+  DecodedLnInvoiceDetails,
+  IssueAssetCfaParams,
+  IssueAssetUdaParams,
+  LightningNodeDetails,
+  ListAssets,
+  OnchainReceiveParams,
+  ReadOptions,
+  ReceiveParams,
+  Transfer,
+} from '../types';
 import { getTransferAmount, parseTransferAssignment } from './transfer-amounts';
 import type { RefreshTransfersResult } from '../refresh-types';
 import type { WalletInvoiceData } from '../wallet-api';
@@ -29,7 +45,6 @@ import type {
   AssetUDA,
   AssetCFA,
   AssetBalance,
-  InvoiceRequest,
   InvoiceReceiveData,
   InvoiceData,
   IssueAssetNiaRequestModel,
@@ -42,7 +57,6 @@ import type {
   LightningSendRequest,
   ListLightningPaymentsResponse,
   PayLightningInvoiceRequestModel,
-  OnchainReceiveRequestModel,
   OnchainReceiveResponse,
   GetFeeEstimationResponse,
   OnchainSendRequestModel,
@@ -71,7 +85,7 @@ import {
   resolveUnlockParams,
 } from './network-defaults';
 import type {
-  RlnCheckIndexerUrlResponse,
+  RlnAssetMetadata,
   RlnBtcBalance,
   RlnAssetBalance,
   RlnAssetNia,
@@ -92,10 +106,8 @@ import type {
   ApayNewResponse,
   LspPeer,
   LightningChannel,
-  LightningNodeInfo,
   LightningPayment,
   LightningInvoice,
-  DecodedLnInvoice,
   OpenChannelParams,
   OpenChannelResult,
   LightningNetworkInfo,
@@ -189,6 +201,38 @@ function invoiceFungibleAmount(assignment: string): number | undefined {
  * silently truncated to 1, so 1 keeps the fee callers already paid.
  */
 const DEFAULT_RLN_SEND_FEE_RATE = 1;
+
+/** Each value must be a positive safe integer (u64 base units). */
+function bridgeAmounts(values: readonly number[], field: string): number[] {
+  if (!Array.isArray(values))
+    throw new ValidationError(`${field} must be an array`, field);
+  return values.map((v) => bridgeInteger(v, field, 1, Number.MAX_SAFE_INTEGER));
+}
+
+const ASSET_SCHEMA_NAMES: Record<string, AssetSchemaName> = {
+  nia: 'Nia',
+  cfa: 'Cfa',
+  uda: 'Uda',
+  ifa: 'Ifa',
+  bfa: 'Bfa',
+};
+
+function mapAssetMetadata(m: RlnAssetMetadata): AssetMetadata {
+  const assetSchema = ASSET_SCHEMA_NAMES[m.assetSchema.toLowerCase()];
+  if (!assetSchema)
+    throw new WalletError(`Unknown asset schema: ${m.assetSchema}`);
+  return {
+    assetSchema,
+    name: m.name,
+    precision: m.precision,
+    ticker: m.ticker ?? undefined,
+    details: m.details ?? undefined,
+    timestamp: m.timestamp,
+    initialSupply: m.initialSupply,
+    maxSupply: m.maxSupply,
+    knownCirculatingSupply: m.knownCirculatingSupply,
+  };
+}
 
 /** Integer the TurboModule bridge carries without rounding or truncation. */
 function bridgeInteger(
@@ -596,8 +640,10 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   // ── Balance & Address ────────────────────────────────────
 
-  async getBtcBalance(): Promise<BtcBalance> {
-    return mapBtcBalance(await this.rln.rlnBtcBalance(false));
+  async getBtcBalance(options?: ReadOptions): Promise<BtcBalance> {
+    return mapBtcBalance(
+      await this.rln.rlnBtcBalance(options?.skipSync ?? false)
+    );
   }
 
   async getAddress(): Promise<string> {
@@ -615,8 +661,10 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   // ── UTXO Management ───────────────────────────────────────────────────────
 
-  async listUnspents(): Promise<Unspent[]> {
-    return (await this.rln.rlnListUnspents(false)).map(mapUtxo);
+  async listUnspents(options?: ReadOptions): Promise<Unspent[]> {
+    return (await this.rln.rlnListUnspents(options?.skipSync ?? false)).map(
+      mapUtxo
+    );
   }
 
   // `createUtxosBegin`/`createUtxosEnd` belong to the `beginEnd` carrier, which
@@ -624,20 +672,49 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   // internally, so there is no PSBT to hand out. `createUtxos()` below is the
   // whole operation.
 
-  async createUtxos(params: {
-    upTo?: boolean;
-    num?: number;
-    size?: number;
-    feeRate?: number;
-  }): Promise<number> {
+  /**
+   * Returns the number of UTXOs created. RLN does not report it, so it is
+   * counted from colorable outpoints that appear after the call; rgb-lib
+   * records the broadcast transaction locally, so no extra sync is needed.
+   */
+  async createUtxos(
+    params: {
+      upTo?: boolean;
+      num?: number;
+      size?: number;
+      feeRate?: number;
+    } & ReadOptions
+  ): Promise<number> {
+    const num =
+      params.num === undefined
+        ? null
+        : bridgeInteger(params.num, 'num', 1, 255);
+    const size =
+      params.size === undefined
+        ? null
+        : bridgeInteger(params.size, 'size', 1, 0xffffffff);
+    const feeRate = bridgeInteger(
+      params.feeRate ?? DEFAULT_RLN_SEND_FEE_RATE,
+      'feeRate',
+      1,
+      Number.MAX_SAFE_INTEGER
+    );
+    // The baseline read performs the sync the caller asked for.
+    const before = new Set(
+      (await this.rln.rlnListUnspents(params.skipSync ?? false)).map(
+        (u) => u.utxo.outpoint
+      )
+    );
     await this.rln.rlnCreateUtxos(
       params.upTo ?? true,
-      params.num ?? null,
-      params.size ?? null,
-      params.feeRate ?? 1.5,
-      false
+      num,
+      size,
+      feeRate,
+      true
     );
-    return params.num ?? 0;
+    return (await this.rln.rlnListUnspents(true)).filter(
+      (u) => u.utxo.colorable && !before.has(u.utxo.outpoint)
+    ).length;
   }
 
   async getBfaCapabilities() {
@@ -667,8 +744,18 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   // ── Asset Operations ────────────────────────────────────
 
-  async listAssets(): Promise<ListAssets> {
-    return mapListAssets(await this.rln.rlnListAssets([]));
+  async listAssets(options?: {
+    filterAssetSchemas?: AssetSchemaName[];
+  }): Promise<ListAssets> {
+    return mapListAssets(
+      await this.rln.rlnListAssets(
+        validateAssetSchemas(options?.filterAssetSchemas)
+      )
+    );
+  }
+
+  async getAssetMetadata(assetId: string): Promise<AssetMetadata> {
+    return mapAssetMetadata(await this.rln.rlnAssetMetadata(assetId));
   }
 
   async getAssetBalance(asset_id: string): Promise<AssetBalance> {
@@ -679,10 +766,49 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     const raw = await this.rln.rlnIssueAssetNia(
       params.ticker,
       params.name,
-      params.precision,
-      params.amounts
+      bridgeInteger(params.precision, 'precision', 0, 18),
+      bridgeAmounts(params.amounts, 'amounts')
     );
     return mapAssetNia(raw);
+  }
+
+  /** `filePath` is uploaded to the node first; RLN issues with its digest. */
+  async issueAssetCfa(params: IssueAssetCfaParams): Promise<AssetCFA> {
+    const precision = bridgeInteger(params.precision, 'precision', 0, 18);
+    const amounts = bridgeAmounts(params.amounts, 'amounts');
+    const digest = params.filePath
+      ? await this.rln.rlnPostAssetMedia(params.filePath)
+      : null;
+    return mapAssetCfa(
+      await this.rln.rlnIssueAssetCfa(
+        params.name,
+        params.details ?? null,
+        precision,
+        amounts,
+        digest
+      )
+    );
+  }
+
+  /** Media and attachment files are uploaded first; RLN issues with their digests. */
+  async issueAssetUda(params: IssueAssetUdaParams): Promise<AssetUDA> {
+    const precision = bridgeInteger(params.precision, 'precision', 0, 18);
+    const media = params.mediaFilePath
+      ? await this.rln.rlnPostAssetMedia(params.mediaFilePath)
+      : null;
+    const attachments: string[] = [];
+    for (const path of params.attachmentsFilePaths ?? [])
+      attachments.push(await this.rln.rlnPostAssetMedia(path));
+    return mapAssetUda(
+      await this.rln.rlnIssueAssetUda(
+        params.ticker,
+        params.name,
+        params.details ?? null,
+        precision,
+        media,
+        attachments
+      )
+    );
   }
 
   /** Issue an inflatable (IFA) asset — mapped like `listAssets().ifa` entries. */
@@ -691,9 +817,9 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       await this.rln.rlnIssueAssetIfa(
         params.ticker,
         params.name,
-        params.precision,
-        params.amounts,
-        params.inflationAmounts,
+        bridgeInteger(params.precision, 'precision', 0, 18),
+        bridgeAmounts(params.amounts, 'amounts'),
+        bridgeAmounts(params.inflationAmounts, 'inflationAmounts'),
         params.rejectListUrl
       )
     );
@@ -717,9 +843,14 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   ): Promise<{ txid: string }> {
     const res = await this.rln.rlnInflate(
       params.assetId,
-      params.inflationAmounts,
-      params.feeRate ?? 1.5,
-      params.minConfirmations ?? 1
+      bridgeAmounts(params.inflationAmounts, 'inflationAmounts'),
+      bridgeInteger(
+        params.feeRate ?? DEFAULT_RLN_SEND_FEE_RATE,
+        'feeRate',
+        1,
+        Number.MAX_SAFE_INTEGER
+      ),
+      bridgeInteger(params.minConfirmations ?? 1, 'minConfirmations', 0, 255)
     );
     return { txid: res.txid };
   }
@@ -734,9 +865,9 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   async sendBtc(params: SendBtcBeginRequestModel): Promise<string> {
     const resp = await this.rln.rlnSendBtc(
-      params.amount,
+      bridgeInteger(params.amount, 'amount', 1, Number.MAX_SAFE_INTEGER),
       params.address,
-      params.feeRate,
+      bridgeInteger(params.feeRate, 'feeRate', 1, Number.MAX_SAFE_INTEGER),
       params.skipSync ?? false
     );
     return resp.txid;
@@ -744,27 +875,37 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   // ── Receiving Assets ────────────────────────────────────
 
-  async blindReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    return mapInvoiceReceiveData(
-      await this.rln.rlnRgbInvoice(
-        params.assetId ?? null,
-        params.amount ?? null,
-        params.durationSeconds ?? null,
-        params.minConfirmations ?? 0,
-        false
-      )
-    );
+  async blindReceive(params: ReceiveParams): Promise<InvoiceReceiveData> {
+    return mapInvoiceReceiveData(await this.rgbInvoice(params, false));
   }
 
-  async witnessReceive(params: InvoiceRequest): Promise<InvoiceReceiveData> {
-    return mapInvoiceReceiveData(
-      await this.rln.rlnRgbInvoice(
-        params.assetId ?? null,
-        params.amount ?? null,
-        params.durationSeconds ?? null,
-        params.minConfirmations ?? 0,
-        true
-      )
+  async witnessReceive(params: ReceiveParams): Promise<InvoiceReceiveData> {
+    return mapInvoiceReceiveData(await this.rgbInvoice(params, true));
+  }
+
+  private rgbInvoice(params: ReceiveParams, witness: boolean) {
+    const kind = resolveReceiveAssignment(params.assignmentKind, params.amount);
+    if (kind === 'MintRight')
+      throw new ValidationError(
+        'MintRight receive is not supported by RGB_LN',
+        'assignmentKind'
+      );
+    return this.rln.rlnRgbInvoice(
+      params.assetId ?? null,
+      params.amount === undefined
+        ? null
+        : bridgeInteger(params.amount, 'amount', 1, Number.MAX_SAFE_INTEGER),
+      params.durationSeconds === undefined
+        ? null
+        : bridgeInteger(
+            params.durationSeconds,
+            'durationSeconds',
+            1,
+            2_592_000
+          ),
+      bridgeInteger(params.minConfirmations ?? 0, 'minConfirmations', 0, 255),
+      witness,
+      kind
     );
   }
 
@@ -777,8 +918,10 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   // ── Transactions & Transfers ─────────────────────────────
 
-  async listTransactions(): Promise<Transaction[]> {
-    return (await this.rln.rlnListTransactions(false)).map(mapTransaction);
+  async listTransactions(options?: ReadOptions): Promise<Transaction[]> {
+    return (await this.rln.rlnListTransactions(options?.skipSync ?? false)).map(
+      mapTransaction
+    );
   }
 
   /** Transactions filtered to a single txid — avoids listing the whole wallet history. */
@@ -802,7 +945,14 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   async failTransfers(params: FailTransfersRequest): Promise<boolean> {
     const resp = await this.rln.rlnFailTransfers(
-      params.batchTransferIdx ?? null,
+      params.batchTransferIdx === undefined
+        ? null
+        : bridgeInteger(
+            params.batchTransferIdx,
+            'batchTransferIdx',
+            1,
+            0x7fffffff
+          ),
       params.noAssetOnly ?? false,
       params.skipSync ?? false
     );
@@ -837,8 +987,11 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   // ── Fee Estimation ────────────────────────────────────────────────────────
 
   async estimateFeeRate(blocks: number): Promise<GetFeeEstimationResponse> {
-    const resp = await this.rln.rlnEstimateFee(blocks);
-    return { feeRate: resp.feeRate };
+    const resp = await this.rln.rlnEstimateFee(
+      bridgeInteger(blocks, 'blocks', 1, 0xffff)
+    );
+    // Rounded up, as on RGB_L1, so the estimate is a valid integer feeRate.
+    return { feeRate: Math.ceil(resp.feeRate) };
   }
 
   // `estimateFee(psbt)` is on the `psbt` carrier — it estimates for a *PSBT*,
@@ -896,6 +1049,8 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       minFinalCltvExpiryDelta?: number | null;
       /** BOLT11 `h` tag — required by LNURL-pay to commit to the metadata. */
       descriptionHash?: string | null;
+      /** BOLT11 `d` tag; mutually exclusive with `descriptionHash`. */
+      description?: string | null;
     }
   ): Promise<LightningReceiveRequest> {
     this.assertLightningEnabled();
@@ -914,7 +1069,8 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       assetAmount,
       null,
       params.minFinalCltvExpiryDelta ?? null,
-      params.descriptionHash ?? null
+      params.descriptionHash ?? null,
+      params.description ?? null
     );
     return { lnInvoice: resp.invoice };
   }
@@ -923,6 +1079,8 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     params: CreateHodlInvoiceParams & {
       /** BOLT11 `h` tag — required by LNURL-pay to commit to the metadata. */
       descriptionHash?: string | null;
+      /** BOLT11 `d` tag; mutually exclusive with `descriptionHash`. */
+      description?: string | null;
     }
   ): Promise<LightningInvoice> {
     this.assertLightningEnabled();
@@ -937,7 +1095,8 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
         : null,
       params.paymentHash,
       params.minFinalCltvExpiryDelta ?? null,
-      params.descriptionHash ?? null
+      params.descriptionHash ?? null,
+      params.description ?? null
     );
     return toLightningInvoice(resp, {
       paymentHash: params.paymentHash,
@@ -1127,12 +1286,15 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     params: PayLightningInvoiceRequestModel
   ): Promise<LightningSendRequest> {
     this.assertLightningEnabled();
-    const amtMsat = params.amount != null ? params.amount * 1000 : null;
+    const amtMsat =
+      params.amount != null
+        ? toSafeBridgeNumber(params.amount * 1000, 'amount')
+        : null;
     const resp = await this.rln.rlnSendPayment(
       params.lnInvoice,
       amtMsat,
       params.assetId ?? null,
-      params.assetAmount ?? null
+      toSafeBridgeNumber(params.assetAmount, 'assetAmount')
     );
     return { txid: resp.paymentHash ?? resp.paymentId, status: resp.status };
   }
@@ -1151,15 +1313,9 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   // ── IUTEXOProtocol — Onchain ──────────────────────────────────────────────
 
   async onchainReceive(
-    params: OnchainReceiveRequestModel
+    params: OnchainReceiveParams
   ): Promise<OnchainReceiveResponse> {
-    const resp = await this.rln.rlnRgbInvoice(
-      params.assetId ?? null,
-      params.amount ?? null,
-      params.durationSeconds ?? null,
-      params.minConfirmations ?? 0,
-      params.witness ?? true
-    );
+    const resp = await this.rgbInvoice(params, params.witness ?? true);
     // Full receive data — the node already returns it; the older shape
     // discarded everything but the invoice.
     return {
@@ -1241,7 +1397,7 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   // ── RLN-specific extras ───────────────────────────────────────────────────
 
-  async getNodeInfo(): Promise<LightningNodeInfo> {
+  async getNodeInfo(): Promise<LightningNodeDetails> {
     return toLightningNodeInfo(await this.rln.rlnNodeInfo());
   }
 
@@ -1338,14 +1494,14 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     return toSendPaymentResult(
       await this.rln.rlnKeysend(
         destPubkey,
-        amtMsat,
+        toSafeBridgeNumber(amtMsat, 'amtMsat')!,
         assetId ?? null,
-        assetAmount ?? null
+        toSafeBridgeNumber(assetAmount, 'assetAmount')
       )
     );
   }
 
-  async decodeLnInvoice(invoice: string): Promise<DecodedLnInvoice> {
+  async decodeLnInvoice(invoice: string): Promise<DecodedLnInvoiceDetails> {
     this.assertLightningEnabled();
     return toDecodedLnInvoice(await this.rln.rlnDecodeLnInvoice(invoice));
   }
@@ -1356,8 +1512,10 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     return normalizeInvoiceStatus(await this.rln.rlnInvoiceStatus(invoice));
   }
 
-  checkIndexerUrl(url: string): Promise<RlnCheckIndexerUrlResponse> {
-    return this.rln.rlnCheckIndexerUrl(url);
+  /** `indexerProtocol` is lowercase (`electrum`, `esplora`), as on RGB_L1. */
+  async checkIndexerUrl(url: string): Promise<{ indexerProtocol: string }> {
+    const resp = await this.rln.rlnCheckIndexerUrl(url);
+    return { indexerProtocol: resp.indexerProtocol.toLowerCase() };
   }
 
   checkProxyEndpoint(endpoint: string): Promise<void> {

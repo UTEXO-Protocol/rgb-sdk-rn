@@ -255,6 +255,16 @@ export type {
   Transfer,
   TransferAssignment,
   TransferAmount,
+  LightningNodeDetails,
+  DecodedLnInvoiceDetails,
+  AssetSchemaName,
+  ReceiveAssignmentKind,
+  ReceiveParams,
+  OnchainReceiveParams,
+  ReadOptions,
+  IssueAssetCfaParams,
+  IssueAssetUdaParams,
+  AssetMetadata,
 } from './wallet/types';
 
 export { BurnOperations, normalizeBurnRecord } from './wallet/operations/burn';

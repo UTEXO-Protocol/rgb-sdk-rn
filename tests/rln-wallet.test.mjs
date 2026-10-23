@@ -189,3 +189,226 @@ test('constructor rejects address reuse', () => {
     () => new RlnWallet({ ...params, reuseAddresses: false }, signer)
   );
 });
+
+const unspent = (outpoint, colorable = true) => ({
+  utxo: { outpoint, colorable, exists: true, btcAmount: 1000 },
+  rgbAllocations: [],
+});
+
+test('createUtxos returns the number of new colorable UTXOs', async () => {
+  let created = false;
+  const { wallet, calls } = walletWith({
+    rlnListUnspents: async () =>
+      created
+        ? [
+            unspent('a:0'),
+            unspent('b:0'),
+            unspent('b:1'),
+            unspent('b:2', false),
+          ]
+        : [unspent('a:0')],
+    rlnCreateUtxos: async () => {
+      created = true;
+    },
+  });
+  assert.equal(await wallet.createUtxos({ num: 2, feeRate: 3 }), 2);
+  assert.deepEqual(
+    calls.map(([name, args]) => [name, args]),
+    [
+      ['rlnListUnspents', [false]],
+      ['rlnCreateUtxos', [true, 2, null, 3, true]],
+      ['rlnListUnspents', [true]],
+    ]
+  );
+  await assert.rejects(wallet.createUtxos({ num: 256 }), /num must be/);
+  await assert.rejects(wallet.createUtxos({ feeRate: 1.5 }), /feeRate/);
+});
+
+test('read methods forward skipSync to native', async () => {
+  const { wallet, calls } = walletWith({
+    rlnBtcBalance: async () => ({}),
+    rlnListUnspents: async () => [],
+    rlnListTransactions: async () => [],
+  });
+  await wallet.getBtcBalance({ skipSync: true });
+  await wallet.listUnspents({ skipSync: true });
+  await wallet.listTransactions({ skipSync: true });
+  await wallet.getBtcBalance();
+  assert.deepEqual(
+    calls.map(([, args]) => args),
+    [[true], [true], [true], [false]]
+  );
+});
+
+test('receive forwards assignmentKind with the shared rules', async () => {
+  const { wallet, calls } = walletWith({
+    rlnRgbInvoice: async () => ({
+      invoice: 'rgb:inv',
+      batchTransferIdx: 1,
+      recipientId: 'r',
+    }),
+  });
+  await wallet.witnessReceive({
+    assetId: 'rgb:uda',
+    assignmentKind: 'NonFungible',
+  });
+  await wallet.blindReceive({ amount: 5 });
+  await wallet.onchainReceive({ assignmentKind: 'InflationRight', amount: 9 });
+  assert.deepEqual(
+    calls.map(([, args]) => args),
+    [
+      ['rgb:uda', null, null, 0, true, 'NonFungible'],
+      [null, 5, null, 0, false, 'Fungible'],
+      [null, 9, null, 0, true, 'InflationRight'],
+    ]
+  );
+  await assert.rejects(
+    wallet.witnessReceive({ assignmentKind: 'MintRight' }),
+    /not supported by RGB_LN/
+  );
+  await assert.rejects(
+    wallet.blindReceive({ assignmentKind: 'Fungible' }),
+    /requires amount/
+  );
+  assert.equal(calls.length, 3);
+});
+
+test('listAssets forwards schema filters', async () => {
+  const { wallet, calls } = walletWith({ rlnListAssets: async () => ({}) });
+  await wallet.listAssets({ filterAssetSchemas: ['Nia', 'Bfa'] });
+  await wallet.listAssets();
+  assert.deepEqual(
+    calls.map(([, args]) => args),
+    [[['Nia', 'Bfa']], [[]]]
+  );
+  await assert.rejects(
+    wallet.listAssets({ filterAssetSchemas: ['nia'] }),
+    /Unknown asset schema/
+  );
+});
+
+test('issueAssetCfa and issueAssetUda upload files before issuing', async () => {
+  let n = 0;
+  const asset = {
+    assetId: 'rgb:a',
+    name: 'A',
+    precision: 0,
+    issuedSupply: 10,
+    timestamp: 1,
+    addedAt: 2,
+    balance: { settled: 0, future: 0, spendable: 0 },
+  };
+  const { wallet, calls } = walletWith({
+    rlnPostAssetMedia: async () => `digest-${++n}`,
+    rlnIssueAssetCfa: async () => asset,
+    rlnIssueAssetUda: async () => ({ ...asset, ticker: 'U' }),
+  });
+  await wallet.issueAssetCfa({
+    name: 'A',
+    precision: 0,
+    amounts: [10],
+    filePath: '/m.png',
+  });
+  await wallet.issueAssetUda({
+    ticker: 'U',
+    name: 'A',
+    precision: 0,
+    mediaFilePath: '/u.png',
+    attachmentsFilePaths: ['/x.png'],
+  });
+  assert.deepEqual(
+    calls.map(([name, args]) => [name, args]),
+    [
+      ['rlnPostAssetMedia', ['/m.png']],
+      ['rlnIssueAssetCfa', ['A', null, 0, [10], 'digest-1']],
+      ['rlnPostAssetMedia', ['/u.png']],
+      ['rlnPostAssetMedia', ['/x.png']],
+      ['rlnIssueAssetUda', ['U', 'A', null, 0, 'digest-2', ['digest-3']]],
+    ]
+  );
+  // Invalid input fails before any upload.
+  await assert.rejects(
+    wallet.issueAssetCfa({
+      name: 'A',
+      precision: 0,
+      amounts: [1.5],
+      filePath: '/m.png',
+    }),
+    /amounts/
+  );
+  assert.equal(n, 3);
+});
+
+test('getAssetMetadata, checkIndexerUrl and estimateFeeRate match RGB_L1 shapes', async () => {
+  const { wallet } = walletWith({
+    rlnAssetMetadata: async () => ({
+      assetSchema: 'Nia',
+      initialSupply: '18446744073709551615',
+      maxSupply: '18446744073709551615',
+      knownCirculatingSupply: '18446744073709551615',
+      timestamp: 1700000000,
+      name: 'N',
+      precision: 8,
+      ticker: 'N',
+    }),
+    rlnCheckIndexerUrl: async () => ({ indexerProtocol: 'Electrum' }),
+    rlnEstimateFee: async () => ({ feeRate: 2.1 }),
+  });
+  const metadata = await wallet.getAssetMetadata('rgb:n');
+  assert.equal(metadata.assetSchema, 'Nia');
+  assert.equal(metadata.initialSupply, '18446744073709551615');
+  assert.deepEqual(await wallet.checkIndexerUrl('tcp://x'), {
+    indexerProtocol: 'electrum',
+  });
+  assert.deepEqual(await wallet.estimateFeeRate(6), { feeRate: 3 });
+});
+
+test('native-signer unlock rejects gossipRgsServerUrl instead of dropping it', async () => {
+  const { RLNBinding } = await import('../lib/module/binding/RLNBinding.js');
+  const binding = new RLNBinding();
+  await assert.rejects(
+    binding.rlnUnlockNodeWithNativeExternalSigner(1, {
+      gossipRgsServerUrl: 'https://rgs.example',
+    }),
+    (error) =>
+      error instanceof ValidationError && error.field === 'gossipRgsServerUrl'
+  );
+});
+
+test('payment types are normalized on both platform spellings', async () => {
+  const { RLNBinding } = await import('../lib/module/binding/RLNBinding.js');
+  const { toLightningPayment } =
+    await import('../lib/module/binding/mappers.js');
+  globalThis.__RN_NATIVE__ = {
+    Rgb: {
+      rlnCreateNode: async () => 7,
+      // Android SCREAMING_SNAKE, iOS lowerCamel, then an unknown value.
+      rlnListPayments: async () => [
+        { paymentHash: 'a', status: 'SUCCEEDED', paymentType: 'OUTBOUND' },
+        {
+          paymentHash: 'b',
+          status: 'SUCCEEDED',
+          paymentType: 'inboundAutoClaim',
+        },
+        { paymentHash: 'c', status: 'SUCCEEDED', paymentType: 'INBOUND_HODL' },
+        { paymentHash: 'd', status: 'SUCCEEDED', paymentType: 'Future' },
+      ],
+    },
+  };
+  try {
+    const binding = new RLNBinding();
+    await binding.rlnCreateNode({ storageDirPath: '/tmp', network: 'regtest' });
+    const payments = (await binding.rlnListPayments()).map(toLightningPayment);
+    assert.deepEqual(
+      payments.map((p) => [p.paymentType, p.inbound]),
+      [
+        ['Outbound', false],
+        ['InboundAutoClaim', true],
+        ['InboundHodl', true],
+        [undefined, undefined],
+      ]
+    );
+  } finally {
+    delete globalThis.__RN_NATIVE__;
+  }
+});

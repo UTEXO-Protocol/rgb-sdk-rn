@@ -7,6 +7,7 @@ import type {
   IRLNExternalSignerBootstrap,
 } from '../../binding/IRLN';
 import type {
+  RlnAssetMetadata,
   RlnNodeInfo,
   RlnNetworkInfo,
   RlnPeer,
@@ -213,7 +214,9 @@ export class RLNManager implements IRLN {
     assetAmount: number | null,
     paymentHash?: string | null,
     minFinalCltvExpiryDelta?: number | null,
-    descriptionHash?: string | null
+    descriptionHash?: string | null,
+    /** BOLT11 `d` tag; mutually exclusive with `descriptionHash`. */
+    description?: string | null
   ): Promise<RlnLnInvoiceResponse> {
     return this.rlnBinding.rlnLnInvoice(
       amtMsat,
@@ -222,7 +225,8 @@ export class RLNManager implements IRLN {
       assetAmount,
       paymentHash,
       minFinalCltvExpiryDelta,
-      descriptionHash
+      descriptionHash,
+      description
     );
   }
 
@@ -328,6 +332,14 @@ export class RLNManager implements IRLN {
     amounts: number[]
   ): Promise<any> {
     return this.rlnBinding.rlnIssueAssetNia(ticker, name, precision, amounts);
+  }
+
+  rlnPostAssetMedia(filePath: string): Promise<string> {
+    return this.rlnBinding.rlnPostAssetMedia(filePath);
+  }
+
+  rlnAssetMetadata(assetId: string): Promise<RlnAssetMetadata> {
+    return this.rlnBinding.rlnAssetMetadata(assetId);
   }
 
   rlnIssueAssetCfa(

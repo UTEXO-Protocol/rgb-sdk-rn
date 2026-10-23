@@ -252,10 +252,10 @@ protocol's connection parameters to `reinit(params)`. For final cleanup, use
 | `bitcoindRpcPort` | `number?` | Bitcoin RPC port |
 | `indexerUrl` | `string?` | Electrum indexer URL (e.g. `'127.0.0.1:50001'`) |
 | `proxyEndpoint` | `string?` | RGB proxy endpoint (e.g. `'rpc://host:3000/json-rpc'`) |
-| `ethRpcUrl` | `string \| null?` | Ethereum RPC for native BFA validation; configure when unlocking a BFA wallet |
+| `ethRpcUrl` | `string \| null?` | Ethereum RPC for native BFA validation; configure when unlocking a BFA wallet. Supported by both signers |
 | `announceAddresses` | `string[]?` | Public addresses to announce to the network |
 | `announceAlias` | `string \| null?` | Node alias |
-| `gossipRgsServerUrl` | `string \| null?` | RGS server URL for rapid gossip sync |
+| `gossipRgsServerUrl` | `string \| null?` | RGS server URL for rapid gossip sync. `PasswordRLNSigner` only; `NativeExternalRLNSigner` throws `ValidationError`, because RLN's external-signer unlock has no RGS setting |
 
 ---
 
@@ -268,7 +268,7 @@ require RLN. Parameter and result types follow the selected protocol.
 
 | Method | Description |
 |--------|-------------|
-| `getBtcBalance()` | BTC balance (vanilla + colored) |
+| `getBtcBalance({ skipSync? }?)` | BTC balance (vanilla + colored) |
 | `getAddress()` | Current on-chain deposit address |
 | `rotateVanillaAddress()` | Derive a fresh on-chain (vanilla/BTC) address |
 | `getNetwork()` | Configured network string |
@@ -278,20 +278,23 @@ require RLN. Parameter and result types follow the selected protocol.
 
 | Method | Description |
 |--------|-------------|
-| `createUtxos({ upTo?, num?, size?, feeRate? })` | Create UTXOs (all-in-one) |
-| `listUnspents()` | List unspent UTXOs with RGB allocations |
+| `createUtxos({ upTo?, num?, size?, feeRate?, skipSync? })` | Create UTXOs (all-in-one); returns how many were created. `feeRate` is an integer sat/vB |
+| `listUnspents({ skipSync? }?)` | List unspent UTXOs with RGB allocations |
 
 #### Assets
 
 | Method | Description |
 |--------|-------------|
-| `listAssets()` | All RGB assets (NIA, CFA, IFA, UDA, plus the RN-specific `bfa` collection) |
+| `listAssets({ filterAssetSchemas? }?)` | All RGB assets (NIA, CFA, IFA, UDA, plus the RN-specific `bfa` collection); filter by `'Nia' \| 'Cfa' \| 'Uda' \| 'Ifa' \| 'Bfa'` |
+| `getAssetMetadata(assetId)` | Contract metadata; supplies are exact decimal strings |
 | `getAssetBalance(assetId)` | Balance for one asset |
 | `issueAssetNia({ ticker, name, precision, amounts })` | Issue a Non-Inflationary Asset |
 | `issueAssetIfa({ ticker, name, precision, amounts, inflationAmounts, rejectListUrl })` | Issue an Inflatable Asset |
+| `issueAssetCfa({ name, details?, precision, amounts, filePath? })` | Issue a Collectible Fungible Asset. RGB_LN uploads `filePath` to the node first |
+| `issueAssetUda({ ticker, name, details?, precision, mediaFilePath?, attachmentsFilePaths? })` | Issue a Unique Digital Asset |
 | `inflate({ assetId, inflationAmounts, feeRate?, minConfirmations? })` | Inflate an IFA; returns `{ txid }` |
-| `blindReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a blinded RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
-| `witnessReceive({ assetId?, amount?, durationSeconds?, minConfirmations? })` | Create a witness RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet |
+| `blindReceive({ assetId?, amount?, assignmentKind?, durationSeconds?, minConfirmations? })` | Create a blinded RGB invoice. Omit `assetId`/`amount` if the receiver doesn't own the asset yet. `assignmentKind`: `Fungible`, `NonFungible`, `InflationRight`, `MintRight` (RGB_L1 only) or `Any` |
+| `witnessReceive({ assetId?, amount?, assignmentKind?, durationSeconds?, minConfirmations? })` | Create a witness RGB invoice. Same `assignmentKind` rules as `blindReceive` |
 | `decodeRGBInvoice({ invoice })` | Decode an RGB invoice |
 
 #### BFA & Consignments
@@ -320,7 +323,7 @@ for a persistent journal. Invoice and balance APIs still require safe JS integer
 
 | Method | Description |
 |--------|-------------|
-| `listTransactions()` | On-chain transaction history |
+| `listTransactions({ skipSync? }?)` | On-chain transaction history |
 | `listTransactionsByTxid(txid, skipSync?)` | Transactions matching a txid |
 | `listTransfers(assetId?)` | RGB transfer history |
 | `listTransfersByTxid(txid)` | RGB transfers matching a txid |
@@ -333,7 +336,10 @@ for a persistent journal. Invoice and balance APIs still require safe JS integer
 
 | Method | Description |
 |--------|-------------|
-| `estimateFeeRate(blocks)` | Fee rate estimate for target confirmation |
+| `estimateFeeRate(blocks)` | Fee rate estimate for target confirmation, rounded up to an integer sat/vB |
+| `checkIndexerUrl(url)` | Detect the indexer protocol: `{ indexerProtocol: 'electrum' \| 'esplora' \| 'bitcoind' }` |
+| `drainTo({ address, feeRate? })` | RGB_L1 only. Send the whole vanilla BTC balance to `address` |
+| `deleteTransfers({ batchTransferIdx?, noAssetOnly? }?)` | RGB_L1 only. Remove failed transfers from the local database |
 | `createBackup({ backupPath, password })` | Encrypted local backup (file) |
 | `backupNow()` | RLN only: replicate state to VSS; returns the new backup version |
 
@@ -341,7 +347,7 @@ for a persistent journal. Invoice and balance APIs still require safe JS integer
 
 | Method | Description |
 |--------|-------------|
-| `createLightningInvoice({ amountSats?, asset?, expirySeconds? })` | Create a Lightning invoice |
+| `createLightningInvoice({ amountSats?, asset?, expirySeconds?, description?, descriptionHash? })` | Create a Lightning invoice |
 | `payLightningInvoice({ lnInvoice, amount?, assetId? })` | Pay a Lightning invoice |
 | `getLightningSendStatus(paymentHash)` | Poll send status — `RlnPaymentStatus` (`'Pending'` \| `'Claimable'` \| `'Claiming'` \| `'Succeeded'` \| `'Cancelled'` \| `'Failed'`); `null` if the hash is unknown |
 | `getLightningReceiveStatus(invoice)` | Poll receive status (`RlnInvoiceStatus`) |
@@ -366,7 +372,7 @@ See [docs/lsp.md](./docs/lsp.md) for `UtexoLsp` composed flows and full examples
 
 | Method | Description |
 |--------|-------------|
-| `onchainReceive({ assetId?, amount?, durationSeconds?, minConfirmations?, witness? })` | RGB invoice — witness by default (`witness: true`). Pass `witness: false` for a blinded invoice |
+| `onchainReceive({ assetId?, amount?, assignmentKind?, durationSeconds?, minConfirmations?, witness? })` | RGB invoice — witness by default (`witness: true`). Pass `witness: false` for a blinded invoice |
 | `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, witnessData? })` | RGB send to an invoice. The whole invoice goes to RLN, so proxy invoices keep their recipient key, encryption and expiry. `assetId` and `amount` default to the invoice values. `feeRate` is an integer in sat/vB (default 1 on RLN, 2 on RGB_L1). `skipSync` is accepted but ignored by both engines; the send always syncs |
 | `listOnchainTransfers(assetId?)` | RGB transfer history |
 
@@ -374,7 +380,7 @@ See [docs/lsp.md](./docs/lsp.md) for `UtexoLsp` composed flows and full examples
 
 | Method | Description |
 |--------|-------------|
-| `getNodeInfo()` | Node pubkey, channel counts, sync status |
+| `getNodeInfo()` | Node pubkey, channel counts, channel and HTLC limits, network graph size, close-fee and pending-payment totals, account xpubs |
 
 #### RLN Extras — Peers
 
@@ -398,14 +404,13 @@ See [docs/lsp.md](./docs/lsp.md) for `UtexoLsp` composed flows and full examples
 | Method | Description |
 |--------|-------------|
 | `keysend(destPubkey, amtMsat, assetId?, assetAmount?)` | Spontaneous keysend payment |
-| `decodeLnInvoice(invoice)` | Decode a Lightning invoice |
+| `decodeLnInvoice(invoice)` | Decode a Lightning invoice, including `minFinalCltvExpiryDelta` |
 | `invoiceStatus(invoice)` | Raw invoice status |
 
 #### RLN Extras — Utility
 
 | Method | Description |
 |--------|-------------|
-| `checkIndexerUrl(url)` | Validate an electrum URL |
 | `checkProxyEndpoint(endpoint)` | Validate a proxy endpoint |
 | `signMessage(message)` / `verifyMessage(message, signature)` | Sign or verify with the node's own key |
 

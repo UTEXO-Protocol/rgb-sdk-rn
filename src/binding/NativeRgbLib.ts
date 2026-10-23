@@ -124,6 +124,18 @@ export type NativeRuntimeInfo = {
   consignment: boolean;
   bfa: boolean;
 };
+export type NativeAssetMetadata = {
+  assetSchema: string;
+  initialSupply: string;
+  maxSupply: string;
+  knownCirculatingSupply: string;
+  timestamp: string;
+  name: string;
+  precision: number;
+  ticker: string | null;
+  details: string | null;
+  rejectListUrl: string | null;
+};
 export type NativeIdentity = {
   id: string;
   network: string;
@@ -160,7 +172,14 @@ export interface Spec extends TurboModule {
     skipSync: boolean
   ): Promise<{ vanilla: NativeBalance; colored: NativeBalance }>;
   getAssetBalance(handle: string, assetId: string): Promise<NativeBalance>;
-  listAssets(handle: string): Promise<NativeAsset[]>;
+  listAssets(
+    handle: string,
+    filterAssetSchemas: string[]
+  ): Promise<NativeAsset[]>;
+  getAssetMetadata(
+    handle: string,
+    assetId: string
+  ): Promise<NativeAssetMetadata>;
   listUnspents(handle: string, skipSync: boolean): Promise<NativeUnspent[]>;
   listTransactions(
     handle: string,
@@ -193,7 +212,8 @@ export interface Spec extends TurboModule {
     amount: string | null,
     expirationTimestamp: string,
     transportEndpoints: string[],
-    minConfirmations: number
+    minConfirmations: number,
+    assignmentKind: string | null
   ): Promise<NativeReceive>;
   decodeInvoice(handle: string, invoice: string): Promise<NativeInvoice>;
   send(
@@ -215,6 +235,23 @@ export interface Spec extends TurboModule {
     name: string,
     precision: number,
     amounts: string[]
+  ): Promise<NativeAsset>;
+  issueAssetCfa(
+    handle: string,
+    name: string,
+    details: string | null,
+    precision: number,
+    amounts: string[],
+    filePath: string | null
+  ): Promise<NativeAsset>;
+  issueAssetUda(
+    handle: string,
+    ticker: string,
+    name: string,
+    details: string | null,
+    precision: number,
+    mediaFilePath: string | null,
+    attachmentsFilePaths: string[]
   ): Promise<NativeAsset>;
   issueAssetIfa(
     handle: string,
@@ -266,6 +303,14 @@ export interface Spec extends TurboModule {
       failure: { name: string; message: string } | null;
     }[]
   >;
+  deleteTransfers(
+    handle: string,
+    batchTransferIdx: number | null,
+    noAssetOnly: boolean
+  ): Promise<boolean>;
+  drainTo(handle: string, address: string, feeRate: string): Promise<string>;
+  /** Resolves the indexer protocol: `electrum`, `esplora` or `bitcoind`. */
+  checkIndexerUrl(handle: string, indexerUrl: string): Promise<string>;
   sync(handle: string): Promise<void>;
   estimateFeeRate(handle: string, blocks: number): Promise<number>;
   getNetworkInfo(

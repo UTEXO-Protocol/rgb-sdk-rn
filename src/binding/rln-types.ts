@@ -43,6 +43,10 @@ export interface RlnNodeInfo {
   numUsableChannels: number;
   localBalanceSat: number;
   numPeers: number;
+  eventualCloseFeesSat?: number;
+  pendingOutboundPaymentsSat?: number;
+  accountXpubVanilla?: string;
+  accountXpubColored?: string;
   maxMediaUploadSizeMb?: number;
   rgbHtlcMinMsat?: number;
   rgbChannelCapacityMinSat?: number;
@@ -163,6 +167,8 @@ export interface RlnDecodeLnInvoiceResponse {
   paymentHash: string;
   paymentSecret: string;
   payeePubkey?: string;
+  /** Blocks. */
+  minFinalCltvExpiryDelta?: number;
   network: string;
 }
 
@@ -443,4 +449,20 @@ export interface RlnBurnParams {
 export interface RlnBurnResult {
   txid: string;
   batchTransferIdx: number;
+}
+
+// ── Asset metadata / media ────────────────────────────────────────────────────
+
+/** `AssetMetadataInfo`; u64 supplies are exact decimal strings. */
+export interface RlnAssetMetadata {
+  assetSchema: string;
+  initialSupply: string;
+  maxSupply: string;
+  knownCirculatingSupply: string;
+  /** **Unix seconds** (not JS milliseconds). */
+  timestamp: number;
+  name: string;
+  precision: number;
+  ticker?: string;
+  details?: string;
 }

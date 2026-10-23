@@ -42,6 +42,7 @@ import org.utexo.rgblightningnode.AssetCfa
 import org.utexo.rgblightningnode.AssetIfa
 import org.utexo.rgblightningnode.AssetUda
 import org.utexo.rgblightningnode.RgbRecipient
+import org.utexo.rgblightningnode.SdkExternalUnlockRequest
 import org.utexo.rgblightningnode.SendRgbInvoiceRequest
 import org.utexo.rgblightningnode.SendRgbRequest
 import org.utexo.rgblightningnode.WitnessData
@@ -49,6 +50,7 @@ import org.utexo.rgblightningnode.SdkLdkChainSync
 import org.utexo.rgblightningnode.SdkUnlockRequest
 import org.utexo.rgblightningnode.PaymentType
 import org.utexo.rgblightningnode.SdkIssueAssetCfaRequest
+import org.utexo.rgblightningnode.SdkPostAssetMediaRequest
 import org.utexo.rgblightningnode.SdkIssueAssetIfaRequest
 import org.utexo.rgblightningnode.InflateRequest
 import org.utexo.rgblightningnode.SdkIssueAssetNiaRequest
@@ -385,7 +387,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     proxyEndpoint: String?,
     announceAddresses: ReadableArray,
     announceAlias: String?,
-    gossipRgsServerUrl: String?,
+    ethRpcUrl: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -410,16 +412,19 @@ class RgbModule(reactContext: ReactApplicationContext) :
         for (i in 0 until announceAddresses.size()) {
           announceAddressesList.add(announceAddresses.getString(i) ?: "")
         }
-        node.unlockWithNativeExternalSigner(
-          signer = signer,
-          ldkChainSync = ldkChainSync(
-            bitcoindRpcUsername, bitcoindRpcPassword, bitcoindRpcHost,
-            bitcoindRpcPort, indexerUrl
-          ),
-          indexerUrl = indexerUrl,
-          proxyEndpoint = proxyEndpoint,
-          announceAddresses = announceAddressesList,
-          announceAlias = announceAlias
+        node.unlockWithNativeExternalSignerRequest(
+          signer,
+          SdkExternalUnlockRequest(
+            ldkChainSync = ldkChainSync(
+              bitcoindRpcUsername, bitcoindRpcPassword, bitcoindRpcHost,
+              bitcoindRpcPort, indexerUrl
+            ),
+            indexerUrl = indexerUrl,
+            proxyEndpoint = proxyEndpoint,
+            announceAddresses = announceAddressesList,
+            announceAlias = announceAlias,
+            ethRpcUrl = ethRpcUrl
+          )
         )
         RlnNodeStore.markUnlocked(intNodeId)
         withContext(Dispatchers.Main) { promise.resolve(null) }
@@ -476,6 +481,19 @@ class RgbModule(reactContext: ReactApplicationContext) :
         map.putDouble("numUsableChannels", info.numUsableChannels.toDouble())
         map.putDouble("localBalanceSat", info.localBalanceSat.toDouble())
         map.putDouble("numPeers", info.numPeers.toDouble())
+        map.putDouble("eventualCloseFeesSat", info.eventualCloseFeesSat.toDouble())
+        map.putDouble("pendingOutboundPaymentsSat", info.pendingOutboundPaymentsSat.toDouble())
+        map.putString("accountXpubVanilla", info.accountXpubVanilla)
+        map.putString("accountXpubColored", info.accountXpubColored)
+        map.putDouble("maxMediaUploadSizeMb", info.maxMediaUploadSizeMb.toDouble())
+        map.putDouble("rgbHtlcMinMsat", info.rgbHtlcMinMsat.toDouble())
+        map.putDouble("rgbChannelCapacityMinSat", info.rgbChannelCapacityMinSat.toDouble())
+        map.putDouble("channelCapacityMinSat", info.channelCapacityMinSat.toDouble())
+        map.putDouble("channelCapacityMaxSat", info.channelCapacityMaxSat.toDouble())
+        map.putDouble("channelAssetMinAmount", info.channelAssetMinAmount.toDouble())
+        map.putDouble("channelAssetMaxAmount", info.channelAssetMaxAmount.toDouble())
+        map.putDouble("networkNodes", info.networkNodes.toDouble())
+        map.putDouble("networkChannels", info.networkChannels.toDouble())
         info.latestRgsSnapshotTimestamp?.let { map.putDouble("latestRgsSnapshotTimestamp", it.toDouble()) }
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
@@ -920,6 +938,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         res.payeePubkey?.let { map.putString("payeePubkey", it) }
         res.description?.let { map.putString("description", it) }
         res.descriptionHash?.let { map.putString("descriptionHash", it) }
+        map.putDouble("minFinalCltvExpiryDelta", res.minFinalCltvExpiryDelta.toDouble())
         map.putString("network", res.network)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
@@ -995,7 +1014,18 @@ class RgbModule(reactContext: ReactApplicationContext) :
       try {
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        val p = node.getPayment(paymentHash, PaymentType.OUTBOUND)
+        // A hash can belong to an outbound, auto-claim or HODL payment; try each, as iOS does.
+        var lastError: Exception? = null
+        var found: org.utexo.rgblightningnode.Payment? = null
+        for (type in listOf(PaymentType.OUTBOUND, PaymentType.INBOUND_AUTO_CLAIM, PaymentType.INBOUND_HODL)) {
+          try {
+            found = node.getPayment(paymentHash, type)
+            break
+          } catch (e: Exception) {
+            lastError = e
+          }
+        }
+        val p = found ?: throw (lastError ?: IllegalStateException("Payment not found for hash: $paymentHash"))
         val map = Arguments.createMap()
         map.putString("paymentHash", p.paymentHash)
         map.putString("status", p.status.name)
@@ -1288,6 +1318,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
     paymentHash: String?,
     minFinalCltvExpiryDelta: Double?,
     descriptionHash: String?,
+    description: String?,
     promise: Promise
   ) {
     coroutineScope.launch(Dispatchers.IO) {
@@ -1301,6 +1332,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
             assetId = assetId,
             assetAmount = assetAmount?.toULong(),
             paymentHash = paymentHash,
+            description = description,
             descriptionHash = descriptionHash,
             minFinalCltvExpiryDelta = minFinalCltvExpiryDelta?.toInt()?.toUShort()
           )
@@ -1945,6 +1977,47 @@ class RgbModule(reactContext: ReactApplicationContext) :
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
         val version = node.vssBackup()
         withContext(Dispatchers.Main) { promise.resolve(version.toDouble()) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnPostAssetMedia(nodeId: Double, filePath: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val bytes = java.io.File(filePath.removePrefix("file://")).readBytes()
+        val res = node.postassetmedia(SdkPostAssetMediaRequest(fileBytes = bytes.map { it.toUByte() }))
+        withContext(Dispatchers.Main) { promise.resolve(res.digest) }
+      } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
+        }
+      }
+    }
+  }
+
+  override fun rlnAssetMetadata(nodeId: Double, assetId: String, promise: Promise) {
+    coroutineScope.launch(Dispatchers.IO) {
+      try {
+        val node = RlnNodeStore.get(nodeId.toInt())
+          ?: throw IllegalStateException("RLN node with id $nodeId not found")
+        val m = node.assetMetadata(assetId)
+        val map = Arguments.createMap()
+        map.putString("assetSchema", m.assetSchema)
+        map.putString("initialSupply", m.initialSupply.toString())
+        map.putString("maxSupply", m.maxSupply.toString())
+        map.putString("knownCirculatingSupply", m.knownCirculatingSupply.toString())
+        map.putDouble("timestamp", m.timestamp.toDouble())
+        map.putString("name", m.name)
+        map.putDouble("precision", m.precision.toDouble())
+        m.ticker?.let { map.putString("ticker", it) }
+        m.details?.let { map.putString("details", it) }
+        withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
           promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)

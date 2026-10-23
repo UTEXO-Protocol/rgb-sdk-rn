@@ -15,12 +15,10 @@
 import type {
   WireMapper,
   LightningChannel,
-  LightningNodeInfo,
   LightningNetworkInfo,
   LightningPeer,
   LightningPayment,
   LightningInvoice,
-  DecodedLnInvoice,
   SendPaymentResult,
 } from '@utexo/rgb-sdk-core';
 import {
@@ -31,6 +29,10 @@ import {
   tryNormalizeRlnNetwork,
 } from '@utexo/rgb-sdk-core';
 import type { RefreshTransfersResult } from '../wallet/refresh-types';
+import type {
+  DecodedLnInvoiceDetails,
+  LightningNodeDetails,
+} from '../wallet/types';
 import type {
   RlnChannel,
   RlnRefreshTransfersResponse,
@@ -77,9 +79,10 @@ export const toLightningChannel: WireMapper<RlnChannel, LightningChannel> = (
   virtualOpenMode: w.virtualOpenMode,
 });
 
-export const toLightningNodeInfo: WireMapper<RlnNodeInfo, LightningNodeInfo> = (
-  w
-) => ({
+export const toLightningNodeInfo: WireMapper<
+  RlnNodeInfo,
+  LightningNodeDetails
+> = (w) => ({
   pubkey: w.pubkey,
   numChannels: w.numChannels,
   numUsableChannels: w.numUsableChannels,
@@ -97,6 +100,10 @@ export const toLightningNodeInfo: WireMapper<RlnNodeInfo, LightningNodeInfo> = (
   networkNodes: w.networkNodes,
   networkChannels: w.networkChannels,
   latestRgsSnapshotTimestamp: w.latestRgsSnapshotTimestamp,
+  eventualCloseFeesSat: w.eventualCloseFeesSat,
+  pendingOutboundPaymentsSat: w.pendingOutboundPaymentsSat,
+  accountXpubVanilla: w.accountXpubVanilla,
+  accountXpubColored: w.accountXpubColored,
 });
 
 export const toLightningNetworkInfo: WireMapper<
@@ -150,7 +157,7 @@ export const toSendPaymentResult: WireMapper<
 
 export const toDecodedLnInvoice: WireMapper<
   RlnDecodeLnInvoiceResponse,
-  DecodedLnInvoice
+  DecodedLnInvoiceDetails
 > = (w) => ({
   paymentHash: w.paymentHash,
   amtMsat: w.amtMsat,
@@ -163,6 +170,7 @@ export const toDecodedLnInvoice: WireMapper<
   assetId: w.assetId,
   assetAmount: w.assetAmount,
   network: tryNormalizeRlnNetwork(w.network) ?? w.network,
+  minFinalCltvExpiryDelta: w.minFinalCltvExpiryDelta,
 });
 
 /**

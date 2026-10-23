@@ -54,6 +54,23 @@ internal class RgbLibSessionStore {
   private val registry = Any()
   private fun fail(message: String): Nothing = throw RgbLibBridgeError("INVALID_CONFIG", message)
   private fun optional(p: JSONObject, key: String): String? = if (p.isNull(key)) null else p.getString(key)
+  private fun schema(name: String): AssetSchema = when (name) {
+    "Nia" -> AssetSchema.NIA
+    "Uda" -> AssetSchema.UDA
+    "Cfa" -> AssetSchema.CFA
+    "Ifa" -> AssetSchema.IFA
+    "Bfa" -> AssetSchema.BFA
+    else -> fail("Unknown asset schema")
+  }
+  private fun receiveAssignment(kind: String?, amount: ULong?): Assignment = when (kind ?: if (amount == null) "Any" else "Fungible") {
+    "Fungible" -> Assignment.Fungible(amount ?: fail("Fungible receive requires an amount"))
+    "InflationRight" -> Assignment.InflationRight(amount ?: fail("InflationRight receive requires an amount"))
+    "NonFungible", "MintRight", "Any" -> {
+      if (amount != null) fail("This assignment kind takes no amount")
+      when (kind) { "NonFungible" -> Assignment.NonFungible; "MintRight" -> Assignment.MintRight; else -> Assignment.Any }
+    }
+    else -> fail("Unknown assignment kind")
+  }
   private fun amount(p: JSONObject, key: String): ULong =
     (p.get(key) as? String)?.toULongOrNull() ?: fail("Invalid decimal $key")
   private fun number(p: JSONObject, key: String, max: Long): Long {
@@ -176,7 +193,7 @@ internal class RgbLibSessionStore {
   fun execute(operation: String, params: Map<String, Any?>): Any? {
     val p = JSONObject(params)
     when(operation) {
-      "getRuntimeInfo" -> return mapOf("version" to VERSION,"sourceRevision" to REVISION,"bridgeVersion" to 2,"burn" to true,"consignment" to true,"bfa" to true)
+      "getRuntimeInfo" -> return mapOf("version" to VERSION,"sourceRevision" to REVISION,"bridgeVersion" to 3,"burn" to true,"consignment" to true,"bfa" to true)
       "openWallet" -> return open(p)
       "restoreBackup" -> { restore(p); return null }
     }
@@ -226,25 +243,31 @@ internal class RgbLibSessionStore {
       }
       "getBtcBalance" -> rgbDto(w.getBtcBalance(s.online,p.getBoolean("skipSync")))
       "getAssetBalance" -> rgbDto(w.getAssetBalance(p.getString("assetId")))
-      "listAssets" -> rgbDto(w.listAssets(emptyList()))
+      "listAssets" -> rgbDto(w.listAssets(strings(p,"filterAssetSchemas").map { schema(it) }))
+      "getAssetMetadata" -> rgbDto(w.getAssetMetadata(p.getString("assetId")))
       "listUnspents" -> w.listUnspents(s.online,false,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransactions" -> w.listTransactions(s.online,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransfers" -> w.listTransfers(optional(p,"assetId")?.let { AssetFilter.Id(it) } ?: AssetFilter.AnyOrNone,optional(p,"txid")).map { rgbDto(it) }
       "createUtxos" -> w.createUtxos(online(s),p.getBoolean("upTo"),if(p.isNull("num")) null else number(p,"num",255).toUByte(),if(p.isNull("size")) null else number(p,"size",0xffffffffL).toUInt(),amount(p,"feeRate"),p.getBoolean("skipSync")).toDouble()
       "sendBtc" -> w.sendBtc(online(s),p.getString("address"),amount(p,"amount"),amount(p,"feeRate"),p.getBoolean("skipSync"))
       "receive" -> {
-        val assignment=if(p.isNull("amount")) Assignment.Any else Assignment.Fungible(amount(p,"amount"))
+        val assignment=receiveAssignment(optional(p,"assignmentKind"),if(p.isNull("amount")) null else amount(p,"amount"))
         rgbDto(if(p.getBoolean("witness")) w.witnessReceive(s.online,optional(p,"assetId"),assignment,amount(p,"expirationTimestamp"),strings(p,"transportEndpoints"),number(p,"minConfirmations",255).toUByte(),null)
           else w.blindReceive(s.online,optional(p,"assetId"),assignment,amount(p,"expirationTimestamp"),strings(p,"transportEndpoints"),number(p,"minConfirmations",255).toUByte(),null))
       }
       "decodeInvoice" -> Invoice(p.getString("invoice")).use { rgbDto(it.invoiceData()) }
       "send" -> send(s,p)
       "issueAssetNia" -> rgbDto(w.issueAssetNia(p.getString("ticker"),p.getString("name"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() }))
+      "issueAssetCfa" -> rgbDto(w.issueAssetCfa(p.getString("name"),optional(p,"details"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() },optional(p,"filePath")))
+      "issueAssetUda" -> rgbDto(w.issueAssetUda(p.getString("ticker"),p.getString("name"),optional(p,"details"),number(p,"precision",18).toUByte(),optional(p,"mediaFilePath"),strings(p,"attachmentsFilePaths")))
       "issueAssetIfa" -> rgbDto(w.issueAssetIfa(p.getString("ticker"),p.getString("name"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() },strings(p,"inflationAmounts").map { it.toULong() },optional(p,"rejectListUrl")))
       "inflate" -> rgbDto(w.inflate(online(s),p.getString("assetId"),strings(p,"amounts").map { it.toULong() },amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte()))
       "burn" -> rgbDto(w.burn(online(s),p.getString("assetId"),amount(p,"amount"),optional(p,"burnReason"),amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte()))
       "failTransfers" -> w.failTransfers(online(s),if(p.isNull("batchTransferIdx")) null else number(p,"batchTransferIdx",Int.MAX_VALUE.toLong()).toInt(),p.getBoolean("noAssetOnly"),p.getBoolean("skipSync"))
       "refresh" -> w.refresh(online(s),null,emptyList(),p.getBoolean("skipSync")).map { (id,r) -> mapOf("batchTransferIdx" to id.toDouble(),"updatedStatus" to r.updatedStatus?.let { rgbEnum(it) },"failure" to r.failure?.let { mapOf("name" to rgbLibErrorCode(it),"message" to (it.message ?: "RGB Lib operation failed")) }) }
+      "deleteTransfers" -> w.deleteTransfers(if(p.isNull("batchTransferIdx")) null else number(p,"batchTransferIdx",Int.MAX_VALUE.toLong()).toInt(),p.getBoolean("noAssetOnly"))
+      "drainTo" -> w.drainTo(online(s),p.getString("address"),amount(p,"feeRate"))
+      "checkIndexerUrl" -> checkIndexerUrl(p.getString("indexerUrl"),null,network(s.profile.getString("network"))).name.lowercase()
       "sync" -> { w.sync(online(s),SyncOptions(SyncKeychain.Colored,SyncStrategy.FULL_SYNC)); w.sync(online(s),SyncOptions(SyncKeychain.Vanilla(20U),SyncStrategy.FULL_SYNC)); null }
       "estimateFeeRate" -> w.getFeeEstimation(online(s),number(p,"blocks",65535).toUShort())
       // This UniFFI release has no block-height method. Preserve the optional API field.

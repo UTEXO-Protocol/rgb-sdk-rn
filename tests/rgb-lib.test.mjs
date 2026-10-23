@@ -1610,14 +1610,14 @@ test('rgb-lib exposes native read options, issuance, metadata and maintenance th
     name: 'Cfa',
     precision: 0,
     amounts: [10],
-    filePath: '/media/logo.png',
+    filePath: 'file:///media/my%20logo.png',
   });
   assert.equal(cfa.issuedSupply, 10);
   const uda = await wallet.issueAssetUda({
     ticker: 'UDA',
     name: 'Uda',
     precision: 0,
-    attachmentsFilePaths: ['/media/a.png'],
+    attachmentsFilePaths: ['file://localhost/media/a.png'],
   });
   assert.equal(uda.ticker, 'UDA');
   assert.deepEqual(await wallet.checkIndexerUrl('tcp://localhost:50001'), {
@@ -1639,7 +1639,7 @@ test('rgb-lib exposes native read options, issuance, metadata and maintenance th
   assert.deepEqual(args('listUnspents'), [['handle-1', true]]);
   assert.deepEqual(args('listTransactions'), [['handle-1', true]]);
   assert.deepEqual(args('issueAssetCfa'), [
-    ['handle-1', 'Cfa', null, 0, ['10'], '/media/logo.png'],
+    ['handle-1', 'Cfa', null, 0, ['10'], '/media/my logo.png'],
   ]);
   assert.deepEqual(args('issueAssetUda'), [
     ['handle-1', 'UDA', 'Uda', null, 0, null, ['/media/a.png']],
@@ -1675,4 +1675,39 @@ test('rgb-lib rejects invalid schema filters and receive assignments before nati
     /takes no amount/
   );
   assert.equal(seen.length, 0);
+});
+
+test('rgb-lib issuance rejects non-file URIs and relative paths before native', async () => {
+  const seen = [];
+  const { wallet } = publicWalletFixture({
+    async issueAssetCfa(...args) {
+      seen.push(args);
+      throw new Error('unexpected issueAssetCfa');
+    },
+    async issueAssetUda(...args) {
+      seen.push(args);
+      throw new Error('unexpected issueAssetUda');
+    },
+  });
+  await wallet.init();
+  await wallet.goOnline(config);
+  for (const filePath of [
+    'content://media/1',
+    'media/logo.png',
+    'file://host/x',
+  ])
+    await assert.rejects(
+      wallet.issueAssetCfa({ name: 'C', precision: 0, amounts: [1], filePath }),
+      /filePath must be an absolute path or a file:\/\/ URI/
+    );
+  await assert.rejects(
+    wallet.issueAssetUda({
+      ticker: 'U',
+      name: 'U',
+      precision: 0,
+      attachmentsFilePaths: ['/ok.png', 'https://x/y.png'],
+    }),
+    /attachmentsFilePaths/
+  );
+  assert.deepEqual(seen, []);
 });

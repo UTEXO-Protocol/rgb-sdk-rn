@@ -13,6 +13,7 @@ import {
   validateAssetSchemas,
   validateBurnParams,
   validateConsignmentLookup,
+  localFilePath,
 } from '../operations/validation';
 import {
   configEquals,
@@ -481,7 +482,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
               params.details ?? null,
               integer(params.precision, 'precision', 0, 18),
               amounts,
-              params.filePath ?? null
+              params.filePath
+                ? localFilePath(params.filePath, 'filePath')
+                : null
             )
           );
         }
@@ -499,8 +502,12 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
               params.name,
               params.details ?? null,
               integer(params.precision, 'precision', 0, 18),
-              params.mediaFilePath ?? null,
-              params.attachmentsFilePaths ?? []
+              params.mediaFilePath
+                ? localFilePath(params.mediaFilePath, 'mediaFilePath')
+                : null,
+              (params.attachmentsFilePaths ?? []).map((path) =>
+                localFilePath(path, 'attachmentsFilePaths')
+              )
             )
           )
       ),

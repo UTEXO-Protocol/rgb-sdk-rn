@@ -195,33 +195,72 @@ const unspent = (outpoint, colorable = true) => ({
   rgbAllocations: [],
 });
 
-test('createUtxos returns the number of new colorable UTXOs', async () => {
-  let created = false;
-  const { wallet, calls } = walletWith({
-    rlnListUnspents: async () =>
-      created
-        ? [
-            unspent('a:0'),
-            unspent('b:0'),
-            unspent('b:1'),
-            unspent('b:2', false),
-          ]
-        : [unspent('a:0')],
-    rlnCreateUtxos: async () => {
-      created = true;
+// A fake native UTXO store; reads yield so unserialized calls would interleave.
+function fakeUtxoNative() {
+  const unspents = [unspent('a:0'), unspent('a:1', false)];
+  const calls = [];
+  let next = 0;
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+  return {
+    calls,
+    Rgb: {
+      rlnCreateNode: async () => 7,
+      rlnListUnspents: async (_id, skipSync) => {
+        calls.push(['rlnListUnspents', skipSync]);
+        await tick();
+        return unspents.map((u) => ({ ...u }));
+      },
+      rlnCreateUtxos: async (_id, upTo, num, size, feeRate, skipSync) => {
+        calls.push(['rlnCreateUtxos', upTo, num, size, feeRate, skipSync]);
+        await tick();
+        for (let i = 0; i < (num ?? 1); i++)
+          unspents.push(unspent(`new:${next++}`));
+        unspents.push(unspent(`change:${next++}`, false));
+      },
     },
+  };
+}
+
+async function walletOnFakeNative(native) {
+  const { RLNBinding } = await import('../lib/module/binding/RLNBinding.js');
+  globalThis.__RN_NATIVE__ = { Rgb: native.Rgb };
+  const binding = new RLNBinding();
+  await binding.rlnCreateNode({ storageDirPath: '/tmp', network: 'regtest' });
+  const { wallet } = walletWith({
+    rlnCreateUtxosCounted: (...args) => binding.rlnCreateUtxosCounted(...args),
   });
-  assert.equal(await wallet.createUtxos({ num: 2, feeRate: 3 }), 2);
-  assert.deepEqual(
-    calls.map(([name, args]) => [name, args]),
-    [
-      ['rlnListUnspents', [false]],
-      ['rlnCreateUtxos', [true, 2, null, 3, true]],
-      ['rlnListUnspents', [true]],
-    ]
-  );
-  await assert.rejects(wallet.createUtxos({ num: 256 }), /num must be/);
-  await assert.rejects(wallet.createUtxos({ feeRate: 1.5 }), /feeRate/);
+  return wallet;
+}
+
+test('createUtxos returns the number of new colorable UTXOs', async () => {
+  const native = fakeUtxoNative();
+  try {
+    const wallet = await walletOnFakeNative(native);
+    assert.equal(await wallet.createUtxos({ num: 2, feeRate: 3 }), 2);
+    assert.deepEqual(native.calls, [
+      ['rlnListUnspents', false],
+      ['rlnCreateUtxos', true, 2, null, 3, true],
+      ['rlnListUnspents', true],
+    ]);
+    await assert.rejects(wallet.createUtxos({ num: 256 }), /num must be/);
+    await assert.rejects(wallet.createUtxos({ feeRate: 1.5 }), /feeRate/);
+  } finally {
+    delete globalThis.__RN_NATIVE__;
+  }
+});
+
+test('concurrent createUtxos calls count only their own UTXOs', async () => {
+  const native = fakeUtxoNative();
+  try {
+    const wallet = await walletOnFakeNative(native);
+    const counts = await Promise.all([
+      wallet.createUtxos({ num: 1, upTo: false }),
+      wallet.createUtxos({ num: 1, upTo: false }),
+    ]);
+    assert.deepEqual(counts, [1, 1]);
+  } finally {
+    delete globalThis.__RN_NATIVE__;
+  }
 });
 
 test('read methods forward skipSync to native', async () => {
@@ -453,4 +492,77 @@ test('onchainSend sends the request it validated even if the caller mutates it',
     1,
     { amountSat: 1000 },
   ]);
+});
+
+test('RLN issuance rejects a total supply beyond the exact integer range', async () => {
+  const { wallet, calls } = walletWith({});
+  const big = Number.MAX_SAFE_INTEGER;
+  const overflow = (error) => error.code === 'AMOUNT_OVERFLOW';
+  await assert.rejects(
+    wallet.issueAssetCfa({
+      name: 'C',
+      precision: 0,
+      amounts: [big, 2],
+      filePath: '/m.png',
+    }),
+    overflow
+  );
+  await assert.rejects(
+    wallet.issueAssetNia({
+      ticker: 'N',
+      name: 'N',
+      precision: 0,
+      amounts: [big, 1],
+    }),
+    overflow
+  );
+  await assert.rejects(
+    wallet.issueAssetIfa({
+      ticker: 'I',
+      name: 'I',
+      precision: 0,
+      amounts: [big - 1],
+      inflationAmounts: [2],
+    }),
+    overflow
+  );
+  // Nothing reaches native, not even the media upload.
+  assert.deepEqual(calls, []);
+});
+
+test('RLN issuance converts file:// URIs and rejects other schemes before upload', async () => {
+  const asset = {
+    assetId: 'rgb:a',
+    name: 'A',
+    precision: 0,
+    issuedSupply: 1,
+    timestamp: 1,
+    addedAt: 2,
+    balance: { settled: 0, future: 0, spendable: 0 },
+  };
+  const { wallet, calls } = walletWith({
+    rlnPostAssetMedia: async () => 'digest',
+    rlnIssueAssetCfa: async () => asset,
+    rlnIssueAssetUda: async () => ({ ...asset, ticker: 'U' }),
+  });
+  await wallet.issueAssetCfa({
+    name: 'A',
+    precision: 0,
+    amounts: [1],
+    filePath: 'file:///data/my%20logo.png',
+  });
+  await assert.rejects(
+    wallet.issueAssetUda({
+      ticker: 'U',
+      name: 'A',
+      precision: 0,
+      mediaFilePath: '/ok.png',
+      attachmentsFilePaths: ['content://media/1'],
+    }),
+    /attachmentsFilePaths must be an absolute path or a file:\/\/ URI/
+  );
+  assert.deepEqual(
+    calls.filter(([name]) => name === 'rlnPostAssetMedia').map(([, a]) => a),
+    [['/data/my logo.png']]
+  );
 });

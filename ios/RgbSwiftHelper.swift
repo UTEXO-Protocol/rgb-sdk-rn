@@ -1772,10 +1772,8 @@ public class RgbSwiftHelper: NSObject {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
         return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
       }
-      guard let url = filePath.hasPrefix("file://") ? URL(string: filePath) : URL(fileURLWithPath: filePath) else {
-        return ["error": "Invalid media file path"] as NSDictionary
-      }
-      let bytes = [UInt8](try Data(contentsOf: url))
+      // JS passes an absolute path; file:// URIs are converted before the bridge.
+      let bytes = [UInt8](try Data(contentsOf: URL(fileURLWithPath: filePath)))
       let res = try node.postassetmedia(request: SdkPostAssetMediaRequest(fileBytes: bytes))
       return ["digest": res.digest] as NSDictionary
     } catch {

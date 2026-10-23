@@ -4,7 +4,9 @@ import {
   validateAssetSchemas,
   validateBurnParams,
   validateConsignmentLookup,
+  localFilePath,
 } from '../operations/validation';
+import { WalletBackendError } from '../wallet-errors';
 import type {
   AssetMetadata,
   AssetSchemaName,
@@ -202,6 +204,30 @@ function invoiceFungibleAmount(assignment: string): number | undefined {
  * silently truncated to 1, so 1 keeps the fee callers already paid.
  */
 const DEFAULT_RLN_SEND_FEE_RATE = 1;
+
+/**
+ * Issuance allocations whose total supply (with inflation) stays exact in the
+ * numeric asset fields. Same rule as RGB_L1 `issuanceAmounts`.
+ */
+function bridgeSupply(
+  amounts: readonly number[],
+  inflationAmounts: readonly number[] = []
+): { amounts: number[]; inflationAmounts: number[] } {
+  const issued = bridgeAmounts(amounts, 'amounts');
+  const inflation = bridgeAmounts(inflationAmounts, 'inflationAmounts');
+  const total = [...issued, ...inflation].reduce(
+    (sum, n) => sum + BigInt(n),
+    0n
+  );
+  if (total > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new WalletBackendError(
+      'AMOUNT_OVERFLOW',
+      'Total issued and inflatable supply cannot be represented by the numeric SDK fields',
+      undefined,
+      'RGB_LN'
+    );
+  return { amounts: issued, inflationAmounts: inflation };
+}
 
 /** Each value must be a positive safe integer (u64 base units). */
 function bridgeAmounts(values: readonly number[], field: string): number[] {
@@ -700,22 +726,13 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       1,
       Number.MAX_SAFE_INTEGER
     );
-    // The baseline read performs the sync the caller asked for.
-    const before = new Set(
-      (await this.rln.rlnListUnspents(params.skipSync ?? false)).map(
-        (u) => u.utxo.outpoint
-      )
-    );
-    await this.rln.rlnCreateUtxos(
+    return this.rln.rlnCreateUtxosCounted(
       params.upTo ?? true,
       num,
       size,
       feeRate,
-      true
+      params.skipSync ?? false
     );
-    return (await this.rln.rlnListUnspents(true)).filter(
-      (u) => u.utxo.colorable && !before.has(u.utxo.outpoint)
-    ).length;
   }
 
   async getBfaCapabilities() {
@@ -768,7 +785,7 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
       params.ticker,
       params.name,
       bridgeInteger(params.precision, 'precision', 0, 18),
-      bridgeAmounts(params.amounts, 'amounts')
+      bridgeSupply(params.amounts).amounts
     );
     return mapAssetNia(raw);
   }
@@ -776,10 +793,11 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   /** `filePath` is uploaded to the node first; RLN issues with its digest. */
   async issueAssetCfa(params: IssueAssetCfaParams): Promise<AssetCFA> {
     const precision = bridgeInteger(params.precision, 'precision', 0, 18);
-    const amounts = bridgeAmounts(params.amounts, 'amounts');
-    const digest = params.filePath
-      ? await this.rln.rlnPostAssetMedia(params.filePath)
+    const { amounts } = bridgeSupply(params.amounts);
+    const file = params.filePath
+      ? localFilePath(params.filePath, 'filePath')
       : null;
+    const digest = file ? await this.rln.rlnPostAssetMedia(file) : null;
     return mapAssetCfa(
       await this.rln.rlnIssueAssetCfa(
         params.name,
@@ -794,11 +812,17 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   /** Media and attachment files are uploaded first; RLN issues with their digests. */
   async issueAssetUda(params: IssueAssetUdaParams): Promise<AssetUDA> {
     const precision = bridgeInteger(params.precision, 'precision', 0, 18);
-    const media = params.mediaFilePath
-      ? await this.rln.rlnPostAssetMedia(params.mediaFilePath)
+    const mediaFile = params.mediaFilePath
+      ? localFilePath(params.mediaFilePath, 'mediaFilePath')
+      : null;
+    const attachmentFiles = (params.attachmentsFilePaths ?? []).map((path) =>
+      localFilePath(path, 'attachmentsFilePaths')
+    );
+    const media = mediaFile
+      ? await this.rln.rlnPostAssetMedia(mediaFile)
       : null;
     const attachments: string[] = [];
-    for (const path of params.attachmentsFilePaths ?? [])
+    for (const path of attachmentFiles)
       attachments.push(await this.rln.rlnPostAssetMedia(path));
     return mapAssetUda(
       await this.rln.rlnIssueAssetUda(
@@ -814,13 +838,18 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
 
   /** Issue an inflatable (IFA) asset — mapped like `listAssets().ifa` entries. */
   async issueAssetIfa(params: IssueAssetIfaRequestModel): Promise<AssetIfa> {
+    const precision = bridgeInteger(params.precision, 'precision', 0, 18);
+    const { amounts, inflationAmounts } = bridgeSupply(
+      params.amounts,
+      params.inflationAmounts
+    );
     return mapAssetIfa(
       await this.rln.rlnIssueAssetIfa(
         params.ticker,
         params.name,
-        bridgeInteger(params.precision, 'precision', 0, 18),
-        bridgeAmounts(params.amounts, 'amounts'),
-        bridgeAmounts(params.inflationAmounts, 'inflationAmounts'),
+        precision,
+        amounts,
+        inflationAmounts,
         params.rejectListUrl
       )
     );

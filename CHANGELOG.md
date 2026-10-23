@@ -18,7 +18,9 @@ __fixed__
 
 - Android `getPayment()` / `getLightningReceiveStatus()` now find inbound payments; they searched outbound payments only.
 - RLN payments report `paymentType` and `inbound` correctly. Neither platform's native spelling matched the wire type, so every payment was reported as inbound.
-- RLN `createUtxos()` returns the number of UTXOs it created instead of echoing `num`.
+- RLN `createUtxos()` returns the number of UTXOs it created instead of echoing `num`. The reads and the create run as one native-queue operation, so concurrent calls do not count each other's UTXOs.
+- RLN `issueAssetNia()`, `issueAssetCfa()` and `issueAssetIfa()` reject a total supply (with inflation) above `Number.MAX_SAFE_INTEGER` with `AMOUNT_OVERFLOW` before any native call, like RGB_L1.
+- Issuance file fields (`filePath`, `mediaFilePath`, `attachmentsFilePaths`) accept an absolute path or a `file://` URI on both protocols. URIs are decoded (for example `%20`) in JS; other schemes and relative paths are rejected with `ValidationError`. RGB_L1 used to pass URIs to rgb-lib, which rejected them.
 - RLN numeric inputs (`createUtxos`, `inflate`, `sendBtc`, issuance, receive, `failTransfers`, `estimateFeeRate`, `keysend`, `payLightningInvoice`) are rejected with `ValidationError` when the bridge would truncate them. Default `feeRate` for `createUtxos()` and `inflate()` is `1` (the old `1.5` was already truncated to 1).
 - RLN `estimateFeeRate()` rounds up to an integer, like RGB_L1.
 - `NativeExternalRLNSigner` unlock passes `ethRpcUrl` to RLN and rejects `gossipRgsServerUrl` instead of dropping it.

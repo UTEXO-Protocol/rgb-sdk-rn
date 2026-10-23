@@ -1990,7 +1990,8 @@ class RgbModule(reactContext: ReactApplicationContext) :
       try {
         val node = RlnNodeStore.get(nodeId.toInt())
           ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        val bytes = java.io.File(filePath.removePrefix("file://")).readBytes()
+        // JS passes an absolute path; file:// URIs are converted before the bridge.
+        val bytes = java.io.File(filePath).readBytes()
         val res = node.postassetmedia(SdkPostAssetMediaRequest(fileBytes = bytes.map { it.toUByte() }))
         withContext(Dispatchers.Main) { promise.resolve(res.digest) }
       } catch (e: Exception) {

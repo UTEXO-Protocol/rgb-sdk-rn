@@ -347,6 +347,14 @@ export interface IRLN {
     feeRate: number,
     skipSync: boolean
   ): Promise<void>;
+  /** Creates UTXOs atomically with the count of new colorable outpoints. */
+  rlnCreateUtxosCounted(
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<number>;
 
   // ── Backup ───────────────────────────────────────────────────────────────────
 

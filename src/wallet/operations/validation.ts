@@ -5,6 +5,31 @@ import type {
   ReceiveAssignmentKind,
 } from '../types';
 
+/**
+ * Accepts an absolute path or a `file://` URI, as React Native file APIs
+ * often return, and gives the absolute path both engines read from.
+ */
+export function localFilePath(value: unknown, field: string): string {
+  const invalid = () =>
+    new ValidationError(
+      `${field} must be an absolute path or a file:// URI`,
+      field
+    );
+  if (typeof value !== 'string') throw invalid();
+  let path = value;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+    const uri = /^file:\/\/(?:localhost)?(\/[^?#]*)$/i.exec(value);
+    if (!uri) throw invalid();
+    try {
+      path = decodeURIComponent(uri[1]!);
+    } catch {
+      throw invalid();
+    }
+  }
+  if (!path.startsWith('/') || path.includes('\0')) throw invalid();
+  return path;
+}
+
 export function validateConsignmentLookup(assetId: string, txid: string): void {
   if (
     typeof assetId !== 'string' ||

@@ -955,6 +955,33 @@ export class RLNBinding implements IRLN {
     );
   }
 
+  /**
+   * Creates UTXOs and returns how many new colorable ones appeared. The reads
+   * before and after run in the same queue entry as the create, so concurrent
+   * calls cannot count each other's UTXOs.
+   */
+  async rlnCreateUtxosCounted(
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<number> {
+    return this.withNodeOperation(async (nodeId) => {
+      // The baseline read performs the sync the caller asked for.
+      const before = new Set(
+        ((await Rgb.rlnListUnspents(nodeId, skipSync)) as RlnUnspent[]).map(
+          (u) => u.utxo.outpoint
+        )
+      );
+      await Rgb.rlnCreateUtxos(nodeId, upTo, num, size, feeRate, true);
+      const after = (await Rgb.rlnListUnspents(nodeId, true)) as RlnUnspent[];
+      return after.filter(
+        (u) => u.utxo.colorable && !before.has(u.utxo.outpoint)
+      ).length;
+    });
+  }
+
   // ── Backup ───────────────────────────────────────────────────────────────────
 
   /**

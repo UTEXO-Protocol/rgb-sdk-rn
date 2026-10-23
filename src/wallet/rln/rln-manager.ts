@@ -545,6 +545,22 @@ export class RLNManager implements IRLN {
     return this.rlnBinding.rlnCreateUtxos(upTo, num, size, feeRate, skipSync);
   }
 
+  rlnCreateUtxosCounted(
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: number,
+    skipSync: boolean
+  ): Promise<number> {
+    return this.rlnBinding.rlnCreateUtxosCounted(
+      upTo,
+      num,
+      size,
+      feeRate,
+      skipSync
+    );
+  }
+
   // ── Backup ───────────────────────────────────────────────────────────────────
 
   rlnBackup(backupPath: string, password: string): Promise<void> {

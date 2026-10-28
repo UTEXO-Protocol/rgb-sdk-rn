@@ -50,15 +50,6 @@ android {
     }
   }
 
-  // The rgb-lib AAR also ships libc++_shared.so, which React Native provides
-  // too; librgblibuniffi.so does not link it. This covers the SDK's own test
-  // APK only: apps need the same pickFirst until the AAR drops the file.
-  packagingOptions {
-    jniLibs {
-      pickFirsts += ["**/libc++_shared.so"]
-    }
-  }
-
   lintOptions {
     disable "GradleCompatible"
   }

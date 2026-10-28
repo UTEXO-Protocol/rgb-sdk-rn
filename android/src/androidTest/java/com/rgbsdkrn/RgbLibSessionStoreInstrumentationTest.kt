@@ -22,7 +22,7 @@ class RgbLibSessionStoreInstrumentationTest {
 
   /** Code the bridge reports for a real UniFFI error, exactly as JS receives it. */
   private fun rgbLibCode(block: () -> Any?): String? =
-    (runCatching(block).exceptionOrNull() as? uniffi.rgb_lib.RgbLibException)?.let(::rgbLibErrorCode)
+    (runCatching(block).exceptionOrNull() as? com.utexo.RgbLibException)?.let(::rgbLibErrorCode)
 
   private fun bridgeCode(block: () -> Any?): String? =
     (runCatching(block).exceptionOrNull() as? RgbLibBridgeError)?.code

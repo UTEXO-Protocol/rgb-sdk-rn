@@ -3,7 +3,7 @@ package com.rgbsdkrn
 
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
-import uniffi.rgb_lib.RgbLibException
+import com.utexo.RgbLibException
 
 @ReactModule(name = RgbLibModule.NAME)
 class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context) {

@@ -69,22 +69,6 @@ not created. The App Store rejects an
 embedded framework that needs a newer iOS than the app (ITMS-90208).
 On Android, the AAR includes `arm64-v8a` and `x86_64` only.
 
-The Android AAR also ships `libc++_shared.so`, which React Native already
-provides, so the app build fails in `merge*NativeLibs` with "2 files found with
-path 'lib/…/libc++_shared.so'". The rgb-lib library does not link it. Until
-the AAR drops the file, add to the app's `android/gradle.properties` (read by
-Expo's `app/build.gradle`):
-
-```properties
-android.packagingOptions.pickFirsts=**/libc++_shared.so
-```
-
-or, in any React Native app, to `android/app/build.gradle`:
-
-```groovy
-android { packagingOptions { jniLibs { pickFirsts += ["**/libc++_shared.so"] } } }
-```
-
 The podspec ships a privacy manifest (`ios/PrivacyInfo.xcprivacy`). It
 declares the required-reason APIs the rgb-lib and RLN libraries call: file
 timestamps (`C617.1`) and disk space (`E174.1`).

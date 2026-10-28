@@ -208,10 +208,13 @@ export class BurnOperations {
         if (record.state !== 'complete') {
           const failure = error as { code?: unknown; message?: unknown } | null;
           // These native errors occur while funding the PSBT, before broadcast.
+          // RLN reports its own codes; RGB Lib maps every Insufficient* variant
+          // (funds, assets, allocation slots) to INSUFFICIENT_FUNDS.
           const unfunded =
             !nativeReturned &&
             (failure?.code === 'InsufficientFunds' ||
-              failure?.code === 'NoAvailableUtxos');
+              failure?.code === 'NoAvailableUtxos' ||
+              failure?.code === 'INSUFFICIENT_FUNDS');
           await this.save({
             ...record,
             state: !invoked || unfunded ? 'cancelled' : 'pending',

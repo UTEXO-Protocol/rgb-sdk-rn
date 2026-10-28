@@ -8,7 +8,7 @@ import java.io.RandomAccessFile
 import java.nio.channels.FileLock
 import java.security.MessageDigest
 import java.util.UUID
-import uniffi.rgb_lib.*
+import com.utexo.*
 
 internal class RgbLibBridgeError(val code: String, message: String) : Exception(message)
 
@@ -285,11 +285,5 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
   companion object {
     private const val PROFILE="rgb-sdk-profile.json"
     private const val LOCK=".rgb-sdk.lock"
-    // The published AAR's Kotlin loads "uniffi_rgb_lib", but the library it
-    // ships is librgblibuniffi.so. UniFFI reads this override before loading.
-    private const val LIBRARY_OVERRIDE="uniffi.component.rgb_lib.libraryOverride"
-    init {
-      if (System.getProperty(LIBRARY_OVERRIDE) == null) System.setProperty(LIBRARY_OVERRIDE, "rgblibuniffi")
-    }
   }
 }

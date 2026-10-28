@@ -28,16 +28,15 @@ __fixed__
 
 __changed__
 
-- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.1` (`ad87acb`) to `v0.3.0-beta.7-upstream-dev-bfa.2` (`668151e`). It is no longer installed from a local bundle:
-  - **iOS:** `postinstall` downloads the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.2-bfa), verifies it and builds the frameworks.
-  - **Android:** Gradle resolves `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.2-bfa` from Maven Central.
+- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.1` (`ad87acb`) to `v0.3.0-beta.7-upstream-dev-bfa.3` (`4b78c22`). It is no longer installed from a local bundle:
+  - **iOS:** `postinstall` downloads the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.3-bfa), verifies it and builds the frameworks.
+  - **Android:** Gradle resolves `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.3-bfa` from Maven Central.
   - `--from` and `RGB_LIB_BINDINGS_DIR` are removed. RGB_L1 now needs iOS 16.0; on Android it is available on `arm64-v8a` and `x86_64` only.
 - iOS: the podspec ships `PrivacyInfo.xcprivacy` (file timestamp `C617.1`, disk space `E174.1`) for the required-reason APIs the native libraries call. When the rgb-lib iOS bindings are installed, the pod requires iOS 16.0.
 - rgb-lib `getRuntimeInfo` reports the version and source revision from the artifact's own `version.json`, not from constants in the bridge, so a mismatched native library is detected.
 - RGB_LN `createBackup()` rejects with `WalletBackendError` `UNSUPPORTED_CAPABILITY` in JS. The native `rlnBackup` stubs, which always failed, are removed from the TurboModule spec.
 - RLN `getBtcBalance()` throws `WalletError` for a malformed native balance instead of reporting zeros. The parser for the old Rust display string is removed.
-- Android: the Maven Central rgb-lib AAR's Kotlin loads `libuniffi_rgb_lib.so`, but the AAR ships `librgblibuniffi.so`. The session store sets `uniffi.component.rgb_lib.libraryOverride` so RGB_L1 loads; without it every rgb-lib call failed with `UnsatisfiedLinkError`.
-- Android: the AAR also ships `libc++_shared.so`, which conflicts with React Native's copy. Apps need `pickFirsts` for `**/libc++_shared.so` (see Readme); the SDK sets it for its own tests.
+- The Android AAR's Kotlin bindings use the `com.utexo` package instead of `uniffi.rgb_lib` and load `librgblibuniffi.so` themselves, so the `libraryOverride` workaround is removed. The AAR no longer ships `libc++_shared.so`, so apps do not need `pickFirsts` for it.
 - iOS: switches over RGBLib enums handle unknown cases, as library evolution requires.
 - Android registers `RgbLibModule` directly instead of looking it up by reflection.
 - The rgb-lib session store test runs as an Android instrumentation test against the Maven Central AAR, replacing the JVM test that needed a local desktop bundle.

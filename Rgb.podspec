@@ -33,6 +33,8 @@ Pod::Spec.new do |s|
     if Gem::Version.new(rgb_lib_ios) > Gem::Version.new(min_ios_version_supported)
       s.platforms = { :ios => rgb_lib_ios }
     end
+    # RgbLib.mm compiles only with this flag; the Swift side uses canImport(RGBLib).
+    s.pod_target_xcconfig = { "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) RGB_LIB_BINDINGS=1" }
     s.libraries = "c++", "resolv", "sqlite3"
     s.frameworks = "Security", "SystemConfiguration"
   end

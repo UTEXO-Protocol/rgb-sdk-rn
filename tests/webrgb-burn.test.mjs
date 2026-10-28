@@ -392,6 +392,25 @@ test('revocation during either journal write cancels before native invocation', 
     assert.equal(f.calls.length, 1);
   }
 });
+test('pre-broadcast funding errors cancel the burn instead of leaving it pending', async () => {
+  for (const code of ['InsufficientFunds', 'NoAvailableUtxos', 'INSUFFICIENT_FUNDS']) {
+    const f = fixture();
+    f.wallet.burn = async () => {
+      throw Object.assign(new Error('InsufficientAllocationSlots'), { code });
+    };
+    await assert.rejects(f.controller().burnAsset(args()), /InsufficientAllocationSlots/);
+    const [record] = await f.operations.records();
+    assert.equal(record.state, 'cancelled', code);
+    assert.equal(record.error, 'InsufficientAllocationSlots');
+  }
+  // An unknown native failure after invocation stays unresolved.
+  const f = fixture();
+  f.wallet.burn = async () => {
+    throw Object.assign(new Error('broadcast failed'), { code: 'NATIVE_ERROR' });
+  };
+  await assert.rejects(f.controller().burnAsset(args()));
+  assert.equal((await f.operations.records())[0].state, 'pending');
+});
 test('reconciliation requires a matching burn and independently verified proof', async () => {
   const f = fixture();
   await f.store.write({

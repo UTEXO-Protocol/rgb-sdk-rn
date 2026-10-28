@@ -393,12 +393,19 @@ test('revocation during either journal write cancels before native invocation', 
   }
 });
 test('pre-broadcast funding errors cancel the burn instead of leaving it pending', async () => {
-  for (const code of ['InsufficientFunds', 'NoAvailableUtxos', 'INSUFFICIENT_FUNDS']) {
+  for (const code of [
+    'InsufficientFunds',
+    'NoAvailableUtxos',
+    'INSUFFICIENT_FUNDS',
+  ]) {
     const f = fixture();
     f.wallet.burn = async () => {
       throw Object.assign(new Error('InsufficientAllocationSlots'), { code });
     };
-    await assert.rejects(f.controller().burnAsset(args()), /InsufficientAllocationSlots/);
+    await assert.rejects(
+      f.controller().burnAsset(args()),
+      /InsufficientAllocationSlots/
+    );
     const [record] = await f.operations.records();
     assert.equal(record.state, 'cancelled', code);
     assert.equal(record.error, 'InsufficientAllocationSlots');
@@ -406,7 +413,9 @@ test('pre-broadcast funding errors cancel the burn instead of leaving it pending
   // An unknown native failure after invocation stays unresolved.
   const f = fixture();
   f.wallet.burn = async () => {
-    throw Object.assign(new Error('broadcast failed'), { code: 'NATIVE_ERROR' });
+    throw Object.assign(new Error('broadcast failed'), {
+      code: 'NATIVE_ERROR',
+    });
   };
   await assert.rejects(f.controller().burnAsset(args()));
   assert.equal((await f.operations.records())[0].state, 'pending');

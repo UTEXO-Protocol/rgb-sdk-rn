@@ -591,14 +591,12 @@ public class RgbSwiftHelper: NSObject {
       let res = try node.decodeRgbInvoice(invoice: invoice)
       var dict: [String: Any] = [
         "recipientId": res.recipientId,
+        "proxyRecipientId": res.proxyRecipientId,
         "recipientType": res.recipientType,
         "assignment": res.assignment,
         "network": res.network,
         "transportEndpoints": res.transportEndpoints,
-        "encryption": res.encryption,
       ]
-      if let proxyRecipientId = res.proxyRecipientId { dict["proxyRecipientId"] = proxyRecipientId }
-      if let publicKey = res.publicKey { dict["publicKey"] = publicKey }
       if let schema = res.assetSchema { dict["assetSchema"] = schema }
       if let aid = res.assetId { dict["assetId"] = aid }
       if let exp = res.expirationTimestamp { dict["expirationTimestamp"] = NSNumber(value: exp) }
@@ -1260,45 +1258,6 @@ public class RgbSwiftHelper: NSObject {
               ]
             )
           ]
-        )
-      )
-      return [
-        "txid": res.txid,
-        "batchTransferIdx": NSNumber(value: res.batchTransferIdx),
-      ] as NSDictionary
-    } catch {
-      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
-    }
-  }
-
-  @objc(_rlnSendRgbInvoice:invoice:assetId:amount:witnessAmountSat:witnessBlinding:donation:feeRate:minConfirmations:)
-  public static func _rlnSendRgbInvoice(
-    _ nodeId: NSNumber,
-    invoice: String,
-    assetId: String,
-    amount: NSNumber,
-    witnessAmountSat: NSNumber?,
-    witnessBlinding: NSNumber?,
-    donation: Bool,
-    feeRate: NSNumber,
-    minConfirmations: NSNumber
-  ) -> NSDictionary {
-    do {
-      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
-        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
-      }
-      let witnessData: WitnessData? = witnessAmountSat.map {
-        WitnessData(amountSat: UInt64(truncating: $0), blinding: witnessBlinding.map { UInt64(truncating: $0) })
-      }
-      let res = try node.sendrgbinvoice(
-        request: SendRgbInvoiceRequest(
-          invoice: invoice,
-          assetId: assetId,
-          amount: UInt64(truncating: amount),
-          witnessData: witnessData,
-          donation: donation,
-          feeRate: UInt64(truncating: feeRate),
-          minConfirmations: UInt8(truncating: minConfirmations)
         )
       )
       return [

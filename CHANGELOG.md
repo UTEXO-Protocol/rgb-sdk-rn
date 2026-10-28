@@ -43,12 +43,11 @@ __changed__
 - Removed unused code left from the earlier rgb-lib integration: most of `Interfaces.ts`, `RgbError`, `src/constants`, and `AppConstants` on iOS and Android.
 - Readme: documented how backup differs between protocols. `createBackup()` is RGB_L1 only. `vssAllowEmptyRestore` means start empty when the VSS restore fails, which is unsafe with channels; the old description was wrong.
 - RGB Lib bridge version is `3` (new operations and parameters). Rebuild the app so the native module matches the JS SDK.
-- RLN `onchainSend()` sends through the new native `sendrgbinvoice` call ([rgb-lightning-node#212](https://github.com/UTEXO-Protocol/rgb-lightning-node/pull/212)). RLN now rejects proxy recipients built from decoded invoice fields. `amount` defaults to a fungible invoice amount, and a different explicit amount is rejected. `skipSync` is ignored.
-- RLN `decodeRGBInvoice()` returns `publicKey` and `encryption`. Raw `proxyRecipientId` is optional.
-- RLN `listOnchainTransfers()` reports rgb-lib-bfa `Mint` transfers as `Mint` instead of `Send`.
-- RLN `reuseAddresses: true` throws `ConfigurationError`; rgb-lib-bfa does not support address reuse.
+- RLN stays on `0.17.0-beta.3`; only rgb-lib moves to rgb-lib-bfa. The Swift bindings regenerated from [rgb-lightning-node#212](https://github.com/UTEXO-Protocol/rgb-lightning-node/pull/212) are reverted, because no RLN release ships that API yet.
+- RLN `onchainSend()` uses `amount` from a fungible invoice when it is omitted.
+- RLN `listOnchainTransfers()` passes a `Mint` transfer kind through instead of reporting it as `Send`.
 - RLN `onchainSend()` rejects values the bridge would truncate: `amount`, `feeRate`, `minConfirmations` and `witnessData` must be in-range integers (`ValidationError`). The default `feeRate` is now `1`. The old default `1.5` was already truncated to 1 sat/vB, so fees do not change.
-- Documented that `onchainSend()` ignores `skipSync` on both RGB_LN and RGB_L1.
+- Documented that RGB_L1 `onchainSend()` ignores `skipSync`.
 - RLN `onchainSend()` copies the request before decoding the invoice, so the invoice and amounts sent to native are the ones it validated even if the caller changes the object meanwhile.
 
 ## 1.0.0-beta.38

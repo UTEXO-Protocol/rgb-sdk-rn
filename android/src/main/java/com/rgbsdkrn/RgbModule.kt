@@ -43,7 +43,6 @@ import org.utexo.rgblightningnode.AssetIfa
 import org.utexo.rgblightningnode.AssetUda
 import org.utexo.rgblightningnode.RgbRecipient
 import org.utexo.rgblightningnode.SdkExternalUnlockRequest
-import org.utexo.rgblightningnode.SendRgbInvoiceRequest
 import org.utexo.rgblightningnode.SendRgbRequest
 import org.utexo.rgblightningnode.WitnessData
 import org.utexo.rgblightningnode.SdkLdkChainSync
@@ -932,7 +931,7 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val res = node.decodeRgbInvoice(invoice)
         val map = Arguments.createMap()
         map.putString("recipientId", res.recipientId)
-        res.proxyRecipientId?.let { map.putString("proxyRecipientId", it) }
+        map.putString("proxyRecipientId", res.proxyRecipientId)
         map.putString("recipientType", res.recipientType)
         res.assetSchema?.let { map.putString("assetSchema", it) }
         res.assetId?.let { map.putString("assetId", it) }
@@ -942,8 +941,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
         val endpointsArr = Arguments.createArray()
         res.transportEndpoints.forEach { endpointsArr.pushString(it) }
         map.putArray("transportEndpoints", endpointsArr)
-        res.publicKey?.let { map.putString("publicKey", it) }
-        map.putString("encryption", res.encryption)
         withContext(Dispatchers.Main) { promise.resolve(map) }
       } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -1622,48 +1619,6 @@ class RgbModule(reactContext: ReactApplicationContext) :
                 )
               )
             )
-          )
-        )
-        val map = Arguments.createMap()
-        map.putString("txid", res.txid)
-        map.putDouble("batchTransferIdx", res.batchTransferIdx.toDouble())
-        withContext(Dispatchers.Main) { promise.resolve(map) }
-      } catch (e: Exception) {
-        withContext(Dispatchers.Main) {
-          promise.reject(getErrorClassName(e), parseErrorMessage(e.message), e)
-        }
-      }
-    }
-  }
-
-  override fun rlnSendRgbInvoice(
-    nodeId: Double,
-    invoice: String,
-    assetId: String,
-    amount: Double,
-    witnessAmountSat: Double?,
-    witnessBlinding: Double?,
-    donation: Boolean,
-    feeRate: Double,
-    minConfirmations: Double,
-    promise: Promise
-  ) {
-    coroutineScope.launch(Dispatchers.IO) {
-      try {
-        val node = RlnNodeStore.get(nodeId.toInt())
-          ?: throw IllegalStateException("RLN node with id $nodeId not found")
-        val witnessData = witnessAmountSat?.let {
-          WitnessData(amountSat = it.toULong(), blinding = witnessBlinding?.toULong())
-        }
-        val res = node.sendrgbinvoice(
-          SendRgbInvoiceRequest(
-            invoice = invoice,
-            assetId = assetId,
-            amount = amount.toULong(),
-            witnessData = witnessData,
-            donation = donation,
-            feeRate = feeRate.toULong(),
-            minConfirmations = minConfirmations.toInt().toUByte(),
           )
         )
         val map = Arguments.createMap()

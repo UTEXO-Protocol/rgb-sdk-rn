@@ -206,7 +206,7 @@ options are defined in [config.ts](src/wallet/rgb-lib/config.ts).
 | `ldkPeerListeningPort` | `number` | LDK peer-to-peer port |
 | `network` | `string` | Bitcoin network (`'utexo'`, `'regtest'`, `'testnet'`, `'mainnet'`, …) |
 | `maxMediaUploadSizeMb` | `number?` | Max media upload size in MB (default 20) |
-| `reuseAddresses` | `boolean?` | Must be `false` or omitted; RLN on rgb-lib-bfa rejects address reuse |
+| `reuseAddresses` | `boolean?` | Reuse on-chain addresses (default `false`) |
 | `enableVirtualChannelsV0` | `boolean?` | Enable virtual channel support (required on both host and client) |
 | `virtualPeerPubkeys` | `string[]?` | Host pubkeys allowed to open inbound virtual channels. `null`/`[]` = accept from anyone |
 | `vssUrl` | `string?` | VSS server URL for encrypted remote backup |
@@ -376,7 +376,7 @@ See [docs/lsp.md](./docs/lsp.md) for `UtexoLsp` composed flows and full examples
 | Method | Description |
 |--------|-------------|
 | `onchainReceive({ assetId?, amount?, assignmentKind?, durationSeconds?, minConfirmations?, witness? })` | RGB invoice — witness by default (`witness: true`). Pass `witness: false` for a blinded invoice |
-| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, witnessData? })` | RGB send to an invoice. The whole invoice goes to RLN, so proxy invoices keep their recipient key, encryption and expiry. `assetId` and `amount` default to the invoice values. `feeRate` is an integer in sat/vB (default 1 on RLN, 2 on RGB_L1). `skipSync` is accepted but ignored by both engines; the send always syncs |
+| `onchainSend({ invoice, assetId?, amount?, donation?, feeRate?, minConfirmations?, skipSync?, witnessData? })` | RGB send via decoded invoice. `assetId` and `amount` default to the invoice values. `feeRate` is an integer in sat/vB (default 1 on RLN, 2 on RGB_L1). `skipSync` applies on RLN; RGB_L1 ignores it and always syncs |
 | `listOnchainTransfers(assetId?)` | RGB transfer history |
 
 #### RLN Extras — Node Info

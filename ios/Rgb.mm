@@ -922,29 +922,6 @@ minFinalCltvExpiryDelta:(NSNumber *)minFinalCltvExpiryDelta
     });
 }
 
-- (void)rlnSendRgbInvoice:(double)nodeId
-                  invoice:(NSString *)invoice
-                  assetId:(NSString *)assetId
-                   amount:(double)amount
-         witnessAmountSat:(NSNumber *)witnessAmountSat
-          witnessBlinding:(NSNumber *)witnessBlinding
-                 donation:(BOOL)donation
-                  feeRate:(double)feeRate
-         minConfirmations:(double)minConfirmations
-                  resolve:(RCTPromiseResolveBlock)resolve
-                   reject:(RCTPromiseRejectBlock)reject
-{
-    EXEC_ASYNC({
-        NSDictionary *result = [RgbSwiftHelper _rlnSendRgbInvoice:@(nodeId) invoice:invoice assetId:assetId amount:@(amount) witnessAmountSat:witnessAmountSat witnessBlinding:witnessBlinding donation:donation feeRate:@(feeRate) minConfirmations:@(minConfirmations)];
-        NSString *errorMessage = result[@"error"];
-        if (errorMessage != nil) {
-            reject(result[@"errorCode"] ?: @"RLN_SEND_RGB_INVOICE_ERROR", errorMessage, nil);
-        } else {
-            resolve(result);
-        }
-    });
-}
-
 - (void)rlnShutdown:(double)nodeId
             resolve:(RCTPromiseResolveBlock)resolve
              reject:(RCTPromiseRejectBlock)reject

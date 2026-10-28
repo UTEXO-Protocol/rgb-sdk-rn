@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ConfigurationError, ValidationError } from '@utexo/rgb-sdk-core';
+import { ValidationError } from '@utexo/rgb-sdk-core';
 import { RlnWallet } from '../lib/module/wallet/rln/rln-wallet.js';
 
 const params = { network: 'regtest', storageDirPath: '/wallets/rln/test' };
@@ -17,8 +17,6 @@ function decoded(overrides = {}) {
     network: 'Regtest',
     expirationTimestamp: 1_900_000_000,
     transportEndpoints: ['rpcs://proxy.example/json-rpc'],
-    publicKey: 'ab'.repeat(32),
-    encryption: 'Required',
     ...overrides,
   };
 }
@@ -40,10 +38,10 @@ function walletWith(manager) {
   return { wallet, calls };
 }
 
-test('onchainSend sends the whole invoice through rlnSendRgbInvoice', async () => {
+test('onchainSend sends the decoded recipient through rlnSendRgb', async () => {
   const { wallet, calls } = walletWith({
     rlnDecodeRgbInvoice: async () => decoded(),
-    rlnSendRgbInvoice: async () => ({ txid: 'tx', batchTransferIdx: 3 }),
+    rlnSendRgb: async () => ({ txid: 'tx', batchTransferIdx: 3 }),
   });
   const result = await wallet.onchainSend({
     invoice: INVOICE,
@@ -51,33 +49,34 @@ test('onchainSend sends the whole invoice through rlnSendRgbInvoice', async () =
     feeRate: 2,
   });
   assert.deepEqual(result, { txid: 'tx', batchTransferIdx: 3 });
-  const send = calls.find(([name]) => name === 'rlnSendRgbInvoice');
+  const send = calls.find(([name]) => name === 'rlnSendRgb');
   assert.deepEqual(send[1], [
-    INVOICE,
-    ASSET,
-    250,
     false,
     2,
     1,
+    false,
+    ASSET,
+    'recipient',
+    250,
+    ['rpcs://proxy.example/json-rpc'],
     { amountSat: 1000 },
   ]);
-  assert.ok(!calls.some(([name]) => name === 'rlnSendRgb'));
 });
 
 test('onchainSend prefers explicit asset and amount', async () => {
   const { wallet, calls } = walletWith({
     rlnDecodeRgbInvoice: async () =>
       decoded({ assetId: undefined, assignment: 'Any' }),
-    rlnSendRgbInvoice: async () => ({ txid: 'tx', batchTransferIdx: 0 }),
+    rlnSendRgb: async () => ({ txid: 'tx', batchTransferIdx: 0 }),
   });
   await wallet.onchainSend({
     invoice: INVOICE,
     assetId: 'rgb:other',
     amount: 7,
   });
-  const [, args] = calls.find(([name]) => name === 'rlnSendRgbInvoice');
-  assert.equal(args[1], 'rgb:other');
-  assert.equal(args[2], 7);
+  const [, args] = calls.find(([name]) => name === 'rlnSendRgb');
+  assert.equal(args[4], 'rgb:other');
+  assert.equal(args[6], 7);
 });
 
 test('onchainSend requires an amount for any-amount invoices', async () => {
@@ -104,15 +103,15 @@ test('onchainSend rejects invoice amounts beyond the safe integer range', async 
 test('onchainSend defaults to an integer fee rate', async () => {
   const { wallet, calls } = walletWith({
     rlnDecodeRgbInvoice: async () => decoded(),
-    rlnSendRgbInvoice: async () => ({ txid: 'tx', batchTransferIdx: 0 }),
+    rlnSendRgb: async () => ({ txid: 'tx', batchTransferIdx: 0 }),
   });
   await wallet.onchainSend({
     invoice: INVOICE,
     witnessData: { amountSat: 1000 },
   });
-  const [, args] = calls.find(([name]) => name === 'rlnSendRgbInvoice');
-  assert.equal(args[4], 1);
-  assert.equal(args[5], 1);
+  const [, args] = calls.find(([name]) => name === 'rlnSendRgb');
+  assert.equal(args[1], 1);
+  assert.equal(args[2], 1);
 });
 
 for (const [name, request, field] of [
@@ -136,7 +135,7 @@ for (const [name, request, field] of [
   test(`onchainSend rejects ${name} before calling native`, async () => {
     const { wallet, calls } = walletWith({
       rlnDecodeRgbInvoice: async () => decoded(),
-      rlnSendRgbInvoice: async () => ({ txid: 'tx', batchTransferIdx: 0 }),
+      rlnSendRgb: async () => ({ txid: 'tx', batchTransferIdx: 0 }),
     });
     await assert.rejects(
       wallet.onchainSend({ invoice: INVOICE, ...request }),
@@ -146,25 +145,15 @@ for (const [name, request, field] of [
   });
 }
 
-test('decodeRGBInvoice maps proxy invoice fields', async () => {
-  const { wallet } = walletWith({
-    rlnDecodeRgbInvoice: async () => decoded(),
-  });
-  const data = await wallet.decodeRGBInvoice({ invoice: INVOICE });
-  assert.equal(data.publicKey, 'ab'.repeat(32));
-  assert.equal(data.encryption, 'Required');
-  assert.equal(data.assignment.amount, 250);
-  assert.ok(!('proxyRecipientId' in data));
-});
-
-test('decodeRGBInvoice leaves unknown encryption modes unset', async () => {
+test('decodeRGBInvoice maps invoice fields', async () => {
   const { wallet } = walletWith({
     rlnDecodeRgbInvoice: async () =>
-      decoded({ publicKey: undefined, encryption: 'Future' }),
+      decoded({ proxyRecipientId: 'proxy-recipient' }),
   });
   const data = await wallet.decodeRGBInvoice({ invoice: INVOICE });
-  assert.equal(data.publicKey, undefined);
-  assert.equal(data.encryption, undefined);
+  assert.equal(data.recipientId, 'recipient');
+  assert.equal(data.assignment.amount, 250);
+  assert.ok(!('proxyRecipientId' in data));
 });
 
 test('listOnchainTransfers keeps rgb-lib-bfa Mint transfers', async () => {
@@ -178,15 +167,9 @@ test('listOnchainTransfers keeps rgb-lib-bfa Mint transfers', async () => {
   assert.deepEqual(kinds, ['Mint', 'Send']);
 });
 
-test('constructor rejects address reuse', () => {
-  assert.throws(
-    () => new RlnWallet({ ...params, reuseAddresses: true }, signer),
-    (error) =>
-      error instanceof ConfigurationError &&
-      /reuseAddresses/.test(error.message)
-  );
+test('constructor accepts address reuse', () => {
   assert.doesNotThrow(
-    () => new RlnWallet({ ...params, reuseAddresses: false }, signer)
+    () => new RlnWallet({ ...params, reuseAddresses: true }, signer)
   );
 });
 
@@ -465,7 +448,7 @@ test('onchainSend sends the request it validated even if the caller mutates it',
         finishDecode = () => resolve(decoded());
       });
     },
-    rlnSendRgbInvoice: async () => ({ txid: 'tx', batchTransferIdx: 1 }),
+    rlnSendRgb: async () => ({ txid: 'tx', batchTransferIdx: 1 }),
   });
   const request = {
     invoice: INVOICE,
@@ -482,14 +465,16 @@ test('onchainSend sends the request it validated even if the caller mutates it',
   await sending;
   const decode = calls.find(([name]) => name === 'rlnDecodeRgbInvoice');
   assert.deepEqual(decode[1], [INVOICE]);
-  const send = calls.find(([name]) => name === 'rlnSendRgbInvoice');
+  const send = calls.find(([name]) => name === 'rlnSendRgb');
   assert.deepEqual(send[1], [
-    INVOICE,
-    ASSET,
-    5,
     false,
     1,
     1,
+    false,
+    ASSET,
+    'recipient',
+    5,
+    ['rpcs://proxy.example/json-rpc'],
     { amountSat: 1000 },
   ]);
 });

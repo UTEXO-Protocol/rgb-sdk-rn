@@ -24,7 +24,6 @@ import type {
 } from '../types';
 import { getTransferAmount, parseTransferAssignment } from './transfer-amounts';
 import type { RefreshTransfersResult } from '../refresh-types';
-import type { WalletInvoiceData } from '../wallet-api';
 import type {
   IUTEXOProtocol,
   WalletCapabilities,
@@ -67,7 +66,6 @@ import type {
 } from '@utexo/rgb-sdk-core';
 import {
   AssetSchema,
-  ConfigurationError,
   ValidationError,
   WalletError,
   normalizeRlnNetwork,
@@ -162,10 +160,7 @@ export interface UTEXOWalletNodeParams extends Omit<
   vssAllowEmptyRestore?: boolean;
   lspBaseUrl?: string | null;
   lspBearerToken?: string | null;
-  /**
-   * Must be `false` or omitted. RLN on rgb-lib-bfa rejects address reuse;
-   * `true` throws `ConfigurationError` from the constructor.
-   */
+  /** Reuse on-chain addresses instead of deriving a fresh one per call. Defaults to false. */
   reuseAddresses?: boolean;
 }
 
@@ -491,26 +486,10 @@ function mapInvoiceReceiveData(r: RlnRgbInvoiceResponse): InvoiceReceiveData {
   };
 }
 
-type RlnInvoiceData = InvoiceData &
-  Pick<WalletInvoiceData, 'publicKey' | 'encryption'>;
-
-const INVOICE_ENCRYPTION: Record<
-  NonNullable<WalletInvoiceData['encryption']>,
-  true
-> = { Required: true, Optional: true, Unsupported: true };
-
-function tryNormalizeInvoiceEncryption(
-  value: string | null | undefined
-): WalletInvoiceData['encryption'] {
-  return value != null && isKnown(INVOICE_ENCRYPTION, value)
-    ? (value as WalletInvoiceData['encryption'])
-    : undefined;
-}
-
 function mapInvoiceData(
   r: RlnDecodeRgbInvoiceResponse,
   invoice: string
-): RlnInvoiceData {
+): InvoiceData {
   const schemaMap: Record<string, AssetSchema> = {
     Nia: AssetSchema.Nia,
     Uda: AssetSchema.Uda,
@@ -525,8 +504,6 @@ function mapInvoiceData(
     assignment: parseAssignment(r.assignment),
     expirationTimestamp: r.expirationTimestamp ?? null,
     transportEndpoints: r.transportEndpoints,
-    publicKey: r.publicKey ?? undefined,
-    encryption: tryNormalizeInvoiceEncryption(r.encryption),
   };
 }
 
@@ -573,12 +550,6 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
   private nodeCreated = false;
 
   constructor(params: UTEXOWalletNodeParams, signer: IRLNSigner) {
-    if (params.reuseAddresses === true) {
-      throw new ConfigurationError(
-        'reuseAddresses is not supported by RLN on rgb-lib-bfa',
-        'reuseAddresses'
-      );
-    }
     this.params = { ...params };
     this.signer = signer;
     this.rln = createRLNManager();
@@ -938,7 +909,7 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     );
   }
 
-  async decodeRGBInvoice(params: { invoice: string }): Promise<RlnInvoiceData> {
+  async decodeRGBInvoice(params: { invoice: string }): Promise<InvoiceData> {
     return mapInvoiceData(
       await this.rln.rlnDecodeRgbInvoice(params.invoice),
       params.invoice
@@ -1371,9 +1342,6 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
     // Own the request before the first await, so the invoice and numbers sent
     // to native are the ones checked here even if the caller mutates it.
     const params = snapshot(request);
-    // RLN rejects proxy recipients built from decoded fields, so the whole
-    // invoice goes to native. Decoding here only fills defaults. RLN syncs
-    // inside the send; `skipSync` does not apply.
     // The bridge truncates numbers to native integers, so reject anything
     // that would change value on the way.
     if (params.amount !== undefined)
@@ -1419,13 +1387,15 @@ export class RlnWallet implements IUTEXOProtocol<IRLNUnlockParams> {
         'UTEXOWallet.onchainSend: amount required',
         'amount'
       );
-    return this.rln.rlnSendRgbInvoice(
-      params.invoice,
-      assetId,
-      amount,
+    return this.rln.rlnSendRgb(
       params.donation ?? false,
       feeRate,
       minConfirmations,
+      params.skipSync ?? false,
+      assetId,
+      decoded.recipientId,
+      amount,
+      decoded.transportEndpoints,
       witnessData
     );
   }

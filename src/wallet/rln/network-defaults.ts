@@ -1,25 +1,13 @@
-import {
-  DEFAULT_INDEXER_URLS,
-  DEFAULT_TRANSPORT_ENDPOINTS,
-} from '@utexo/rgb-sdk-core';
-import type { Network } from '@utexo/rgb-sdk-core';
+import { getNetworkDefaults } from '../network-endpoints';
 import type { IRLNUnlockParams } from '../../binding/IRLN';
 
-export interface NetworkEndpoints {
-  indexerUrl: string;
-  proxyEndpoint: string;
-}
-
-/**
- * RLN-specific overrides for networks where the rgb-sdk-core defaults point to
- * the wrong endpoint for the RLN proxy infrastructure.
- */
-const RLN_NETWORK_OVERRIDES: Partial<
-  Record<string, Partial<NetworkEndpoints>>
-> = {
-  utexo: { proxyEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc' },
-  signet: { proxyEndpoint: 'rpcs://rgb-proxy.utexo.com/json-rpc' },
-};
+// Shared with RGB_L1; re-exported for import-site compatibility.
+export {
+  DEFAULT_INDEXER_URLS,
+  DEFAULT_TRANSPORT_ENDPOINTS,
+  getNetworkDefaults,
+} from '../network-endpoints';
+export type { NetworkEndpoints } from '../network-endpoints';
 
 // LSP defaults moved to @utexo/rgb-sdk-core (they were duplicated here and in
 // rgb-sdk-web). Re-exported for import-site compatibility.
@@ -28,19 +16,6 @@ export {
   getDefaultLspBaseUrl,
   resolveLspBaseUrl,
 } from '@utexo/rgb-sdk-core';
-
-export function getNetworkDefaults(
-  network: string
-): NetworkEndpoints | undefined {
-  const indexerUrl = DEFAULT_INDEXER_URLS[network as Network];
-  const proxyEndpoint = DEFAULT_TRANSPORT_ENDPOINTS[network as Network];
-  if (!indexerUrl || !proxyEndpoint) return undefined;
-  const overrides = RLN_NETWORK_OVERRIDES[network];
-  return {
-    indexerUrl: overrides?.indexerUrl ?? indexerUrl,
-    proxyEndpoint: overrides?.proxyEndpoint ?? proxyEndpoint,
-  };
-}
 
 /**
  * Fills indexerUrl and proxyEndpoint from network defaults when the caller

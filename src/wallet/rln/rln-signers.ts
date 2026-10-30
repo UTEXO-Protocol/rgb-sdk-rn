@@ -17,6 +17,11 @@ function toSeedHex(input: RLNKeyMaterial): string {
  * no state may ignore it.
  */
 export interface IRLNSigner {
+  /**
+   * Marks the signer as RLN-only. `new UTEXOWallet(params, signer)` reads it to
+   * type the wallet as RGB_LN; signers without it need the options form.
+   */
+  readonly protocol?: 'RGB_LN';
   /** Opt in only when this signer supports native RLN burn. */
   readonly supportsBurn?: boolean;
   /** Called once on first-time node creation. Sets up keys on disk. */
@@ -34,6 +39,7 @@ export interface IRLNSigner {
 // ── Password-based signer ─────────────────────────────────────────────────────
 
 export class PasswordRLNSigner implements IRLNSigner {
+  readonly protocol = 'RGB_LN' as const;
   readonly supportsBurn = true;
   private readonly password: string;
   private mnemonic: string | undefined;
@@ -62,6 +68,7 @@ export class PasswordRLNSigner implements IRLNSigner {
 // ── Native external signer ────────────────────────────────────────────────────
 
 export class NativeExternalRLNSigner implements IRLNSigner {
+  readonly protocol = 'RGB_LN' as const;
   private readonly seedHex: string;
   private readonly network: string;
   private readonly permissivePolicy?: boolean;

@@ -70,7 +70,7 @@ The native layers (iOS: `RlnNodeStore.swift`, Android: `RlnNodeStore.kt`) mainta
 
 ### `UTEXOWallet` — the primary public API
 
-The existing `new UTEXOWallet(params, signer)` constructor selects RLN and satisfies `IUTEXOProtocol` from `@utexo/rgb-sdk-core`. `new UTEXOWallet({ protocol: 'RGB_L1', params, keys })` selects rgb-lib and satisfies the on-chain API. `RgbLibWallet` is internal; the public entry point does not export an alternative wallet class or factory. `restoreFromBackup` (RGB_L1 only) is a separate pre-init operation in `wallet/rgb-lib/restore.ts`.
+`RGB_L1` is the default protocol: `new UTEXOWallet({ params, keys })` (or with `protocol: 'RGB_L1'`) selects rgb-lib and satisfies the on-chain API, and a bare `UTEXOWallet` type means `UTEXOWallet<'RGB_L1'>`. RLN is selected by `{ protocol: 'RGB_LN', params, signer }` or the legacy `new UTEXOWallet(params, signer)`, and satisfies `IUTEXOProtocol` from `@utexo/rgb-sdk-core`. The legacy form infers `RGB_LN` from the signer's `protocol: 'RGB_LN'` marker. `RgbLibWallet` is internal; the public entry point does not export an alternative wallet class or factory. `restoreFromBackup` (RGB_L1 only) is a separate pre-init operation in `wallet/rgb-lib/restore.ts`.
 
 Use `AnyUtexoWallet` for a wallet that can have either protocol and narrow `wallet.protocol` before unlock/reinit or Lightning calls. A wide `UTEXOWallet<WalletProtocol>` cannot safely call unlock/reinit. Protocol selects the engine; runtime capabilities still determine whether operations such as burn are supported.
 

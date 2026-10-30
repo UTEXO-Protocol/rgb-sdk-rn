@@ -28,6 +28,13 @@ __fixed__
 
 __changed__
 
+- Default endpoints differ from `@utexo/rgb-sdk-core`: `mainnet` uses the indexer `ssl://electrs-01.utexo.com:50002` and the proxy `rpcs://rgb-proxy.utexo.com/json-rpc`; `utexo` uses the indexer `https://dev.esplora-01.mint.utexo.com` and the proxy `rpcs://dev.rgb-proxy.utexo.com/json-rpc`; `signet` keeps the public signet indexer and uses the proxy `rpcs://staging.rgb-proxy.utexo.com/json-rpc`. The exported `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS` now hold these values (they were core's tables, which RGB_LN did not use for these networks) and are read-only.
+- RGB_L1 `goOnline()` / `unlock()` / `reinit()` fill a missing indexer or proxy from the same network defaults as RGB_LN; `goOnline()` accepts no arguments. Both fields used to be required.
+- **Breaking:** `RGB_L1` (rgb-lib) is the default `UTEXOWallet` protocol.
+  - `new UTEXOWallet({ params, keys })` selects RGB_L1; `protocol: 'RGB_L1'` is still accepted. RGB_LN options must set `protocol: 'RGB_LN'`; passing a `signer` without it throws `INVALID_CONFIG`.
+  - The generic default is `'RGB_L1'`: a bare `UTEXOWallet` annotation or `extends UTEXOWallet` now means RGB_L1. Annotate RLN wallets and subclasses as `UTEXOWallet<'RGB_LN'>`.
+  - The legacy `new UTEXOWallet(params, signer)` still selects RLN at runtime. TypeScript infers `RGB_LN` from the new `IRLNSigner.protocol` marker, which `PasswordRLNSigner` and `NativeExternalRLNSigner` set. A custom signer without `protocol: 'RGB_LN'` no longer compiles with this form; add the marker or use the options form.
+
 - rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.1` (`ad87acb`) to `v0.3.0-beta.7-upstream-dev-bfa.3` (`4b78c22`). It is no longer installed from a local bundle:
   - **iOS:** `postinstall` downloads the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.3-bfa), verifies it and builds the frameworks.
   - **Android:** Gradle resolves `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.3-bfa` from Maven Central.

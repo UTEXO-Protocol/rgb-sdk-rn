@@ -4,13 +4,22 @@ import { RgbLibWallet } from './rgb-lib/rgb-lib-wallet';
 import type { RgbLibUnlockParams } from './rgb-lib/config';
 import type { IRLNSigner } from './rln/rln-signers';
 import type { WalletProtocol } from './wallet-api';
-import type { WalletInit, UTEXOWalletOptions } from './wallet-options';
+import type {
+  RgbLibWalletInit,
+  WalletInit,
+  UTEXOWalletOptions,
+} from './wallet-options';
 import { WalletBackendError } from './wallet-errors';
 import type { BfaCapabilities, BurnParams, BurnResult } from './types';
 import { snapshot } from './runtime/snapshot';
 
 export type { UTEXOWalletNodeParams } from './rln/rln-wallet';
 export type { UTEXOWalletOptions } from './wallet-options';
+
+/** RGB_L1 options with `protocol` omitted. */
+type DefaultWalletInit = Omit<RgbLibWalletInit, 'protocol'> & {
+  protocol?: undefined;
+};
 
 /** A wallet with either protocol; narrow protocol before protocol-specific calls. */
 export type AnyUtexoWallet = UTEXOWallet<'RGB_LN'> | UTEXOWallet<'RGB_L1'>;
@@ -45,21 +54,26 @@ type VirtualAliases = {
 };
 
 /**
- * One public wallet constructor. The legacy two-argument form always selects RLN.
- * The options form infers the protocol, including its unlock and on-chain DTO types.
+ * One public wallet constructor. RGB_L1 is the default protocol: the options
+ * form selects it when `protocol` is omitted, and so does a bare `UTEXOWallet`
+ * annotation. The legacy two-argument form `(params, signer)` always selects
+ * RLN; its type comes from the signer's `protocol: 'RGB_LN'` marker.
  * Each instance owns exactly one implementation for its entire lifetime.
  */
-export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
+export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_L1'> {
   readonly psbt = undefined;
   readonly beginEnd = undefined;
   private readonly engine: RlnWallet | RgbLibWallet;
 
   constructor(
     params: [TProtocol] extends ['RGB_LN'] ? UTEXOWalletNodeParams : never,
-    signer: IRLNSigner
+    signer: IRLNSigner & { readonly protocol?: TProtocol }
   );
   constructor(options: UTEXOWalletOptions<TProtocol>);
-  constructor(input: UTEXOWalletNodeParams | WalletInit, signer?: IRLNSigner) {
+  constructor(
+    input: UTEXOWalletNodeParams | WalletInit | DefaultWalletInit,
+    signer?: IRLNSigner
+  ) {
     if (!input || typeof input !== 'object') {
       throw new WalletBackendError(
         'INVALID_CONFIG',
@@ -72,23 +86,30 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
         'Use protocol: RGB_L1 or RGB_LN to select the wallet mode'
       );
     }
-    if ('protocol' in input) {
+    // The options form carries `params`; legacy RLN node params never do.
+    if ('protocol' in input || 'params' in input) {
       if (signer !== undefined) {
         throw new WalletBackendError(
           'INVALID_CONFIG',
           'Pass credentials inside the protocol options'
         );
       }
-      if (input.protocol === 'RGB_L1') {
+      const protocol = input.protocol ?? 'RGB_L1';
+      if (protocol === 'RGB_L1') {
         if (input.signer !== undefined) {
           throw new WalletBackendError(
             'INVALID_CONFIG',
-            'RGB Lib requires a key provider',
+            input.protocol === undefined
+              ? 'RGB_L1 is the default protocol; pass protocol: RGB_LN to use an RLN signer'
+              : 'RGB Lib requires a key provider',
             undefined,
             'RGB_L1'
           );
         }
-        this.engine = new RgbLibWallet(input.params, input.keys);
+        this.engine = new RgbLibWallet(
+          (input as RgbLibWalletInit).params,
+          (input as RgbLibWalletInit).keys
+        );
       } else if (input.protocol === 'RGB_LN') {
         if (input.keys !== undefined || !input.signer) {
           throw new WalletBackendError(
@@ -181,10 +202,14 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_LN'> {
     return this.invoke('unlock', ...args);
   }
 
-  /** Connect an initialized RGB_L1 wallet; alias for unlock(params). */
+  /**
+   * Connect an initialized RGB_L1 wallet; alias for unlock(params). A missing
+   * indexer or proxy uses the network defaults (`DEFAULT_INDEXER_URLS`,
+   * `DEFAULT_TRANSPORT_ENDPOINTS`), the same as RGB_LN.
+   */
   async goOnline(
     this: UTEXOWallet<'RGB_L1'>,
-    params: RgbLibUnlockParams
+    params: RgbLibUnlockParams = {}
   ): Promise<void> {
     if (this.engine.protocol !== 'RGB_L1') {
       throw new WalletBackendError(

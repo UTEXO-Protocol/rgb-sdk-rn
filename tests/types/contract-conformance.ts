@@ -19,7 +19,7 @@ import type { RgbLibWallet } from '../../src/wallet/rgb-lib/rgb-lib-wallet';
 import type { OnchainWalletApi } from '../../src/wallet/wallet-api';
 import type { RgbLibUnlockParams } from '../../src/wallet/rgb-lib/config';
 
-declare const concrete: UTEXOWallet;
+declare const concrete: UTEXOWallet<'RGB_LN'>;
 declare const onchain: UTEXOWallet<'RGB_L1'>;
 type PublicMethods<T> = Pick<
   T,

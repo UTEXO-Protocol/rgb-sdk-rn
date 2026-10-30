@@ -19,6 +19,8 @@ export type RgbLibWalletInit = {
   signer?: never;
 };
 export type WalletInit = RlnWalletInit | RgbLibWalletInit;
-export type UTEXOWalletOptions<P extends WalletProtocol = WalletProtocol> = {
-  protocol: P;
-} & (P extends 'RGB_LN' ? RlnWalletInit : RgbLibWalletInit);
+/** `protocol` may be omitted for RGB_L1, the default protocol. RGB_LN must be named. */
+export type UTEXOWalletOptions<P extends WalletProtocol = WalletProtocol> =
+  P extends 'RGB_LN'
+    ? RlnWalletInit & { protocol: P }
+    : Omit<RgbLibWalletInit, 'protocol'> & { protocol?: P };

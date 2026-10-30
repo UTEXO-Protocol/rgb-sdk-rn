@@ -11,6 +11,7 @@ import {
   type UTEXOWalletNodeParams,
   type WalletProtocol,
   restoreFromBackup,
+  PasswordRLNSigner,
   type WalletRestoreResponse,
 } from '../../src';
 import type { RgbInfo } from '@utexo/webrgb';
@@ -18,7 +19,7 @@ import { WebRgbProvider } from '../../src/integrations/webrgb/provider';
 export { createDemoSession } from '../../examples/dual-backend';
 
 // Compile-only checks: demo-facing contracts must accept both implementations.
-export function sharedApi(rln: UTEXOWallet, rgb: UTEXOWallet<'RGB_L1'>) {
+export function sharedApi(rln: UTEXOWallet<'RGB_LN'>, rgb: UTEXOWallet) {
   const a: OnchainWalletApi<IRLNUnlockParams> = rln;
   const b: OnchainWalletApi<RgbLibUnlockParams> = rgb;
   const options = { origin: 'https://example.com', confirm: async () => true };
@@ -60,8 +61,24 @@ export async function constructorTypes(
   unlock: RgbLibUnlockParams,
   mixed: AnyUtexoWallet
 ) {
-  const legacy: UTEXOWallet = new UTEXOWallet(rlnParams, signer);
+  const legacy: UTEXOWallet<'RGB_LN'> = new UTEXOWallet(rlnParams, signer);
+  const legacyInferred = new UTEXOWallet(rlnParams, signer);
+  const legacyProtocol: 'RGB_LN' = legacyInferred.protocol;
+  const sdkSigner = new UTEXOWallet(rlnParams, new PasswordRLNSigner('pw'));
+  const sdkSignerProtocol: 'RGB_LN' = sdkSigner.protocol;
   const rgb = new UTEXOWallet({ protocol: 'RGB_L1', params, keys });
+  // RGB_L1 is the default protocol for the options form and bare annotations.
+  const defaulted = new UTEXOWallet({ params, keys });
+  const defaultedProtocol: 'RGB_L1' = defaulted.protocol;
+  const bare: UTEXOWallet = defaulted;
+  const bareProtocol: 'RGB_L1' = bare.protocol;
+  // @ts-expect-error RGB_LN options must name the protocol.
+  new UTEXOWallet({ params: rlnParams, signer });
+  // @ts-expect-error A signer object without the RGB_LN marker needs the options form.
+  new UTEXOWallet(rlnParams, {
+    initNode: async () => {},
+    unlockNode: async () => {},
+  });
   const explicitRln = new UTEXOWallet({
     protocol: 'RGB_LN',
     params: rlnParams,
@@ -76,17 +93,20 @@ export async function constructorTypes(
   const transfers: WalletTransfer[] = await rgb.listTransfers();
   await rgb.unlock(unlock);
   await rgb.goOnline(unlock);
+  // Network defaults fill a missing indexer and proxy, as on RGB_LN.
+  await rgb.goOnline();
+  await rgb.goOnline({ proxyEndpoint: 'rpcs://proxy.example/json-rpc' });
   await legacy.unlock({});
   // @ts-expect-error goOnline is specific to RGB_L1; RLN keeps unlock.
   void legacy.goOnline(unlock);
   // @ts-expect-error Explicit RLN options also exclude goOnline.
   void explicitRln.goOnline(unlock);
-  // @ts-expect-error goOnline requires the same complete config as unlock.
+  // goOnline accepts the same optional endpoints as unlock.
   void rgb.goOnline({});
   // @ts-expect-error A URL alone is not an RGB Lib connection config.
   void rgb.goOnline('tcp://localhost:50001');
   await explicitRln.createLightningInvoice({ amountSats: 1 });
-  // @ts-expect-error A new RGB Lib instance has no default endpoints.
+  // A missing indexer and proxy use the network defaults.
   void rgb.unlock({});
   // @ts-expect-error Lightning is only callable on an RLN wallet.
   void rgb.createLightningInvoice({ amountSats: 1 });
@@ -94,8 +114,8 @@ export async function constructorTypes(
   void rgb.getNodeInfo();
   // @ts-expect-error Native message signing belongs to RLN.
   void rgb.signMessage('message');
-  // @ts-expect-error The legacy wallet annotation continues to mean RLN.
-  const wrongLegacy: UTEXOWallet = rgb;
+  // @ts-expect-error A bare annotation now means RGB_L1, not RLN.
+  const wrongLegacy: UTEXOWallet = legacy;
   // @ts-expect-error A supplied generic cannot change the legacy constructor backend.
   new UTEXOWallet<'RGB_L1'>(rlnParams, signer);
   // @ts-expect-error RGB Lib credentials are required.
@@ -131,12 +151,15 @@ export async function constructorTypes(
     // @ts-expect-error Discriminant narrowing preserves the on-chain restriction.
     void mixed.createLightningInvoice({ amountSats: 1 });
   }
-  class AppWallet extends UTEXOWallet {
+  // RLN subclasses name the protocol; a bare `extends UTEXOWallet` is RGB_L1.
+  class AppWallet extends UTEXOWallet<'RGB_LN'> {
     override getAddress() {
       return super.getAddress();
     }
   }
-  const child: UTEXOWallet = new AppWallet(rlnParams, signer);
+  const child: UTEXOWallet<'RGB_LN'> = new AppWallet(rlnParams, signer);
+  class AppRgbWallet extends UTEXOWallet {}
+  const rgbChild: UTEXOWallet = new AppRgbWallet({ params, keys });
   return [
     rgbProtocol,
     rlnProtocol,
@@ -145,7 +168,12 @@ export async function constructorTypes(
     onchain,
     transfers,
     child,
+    rgbChild,
     wrongLegacy,
+    legacyProtocol,
+    sdkSignerProtocol,
+    defaultedProtocol,
+    bareProtocol,
     new WebRgbProvider(rgb, {
       origin: 'https://example.com',
       confirm: async () => true,

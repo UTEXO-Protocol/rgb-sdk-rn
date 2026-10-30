@@ -36,6 +36,8 @@ export type {
 export { WalletBackendError } from './wallet/wallet-errors';
 export type { WalletBackendErrorCode } from './wallet/wallet-errors';
 export {
+  DEFAULT_INDEXER_URLS,
+  DEFAULT_TRANSPORT_ENDPOINTS,
   getNetworkDefaults,
   resolveUnlockParams,
 } from './wallet/rln/network-defaults';
@@ -169,9 +171,6 @@ export {
   parseLightningAddress,
   UMA_PREFIX,
   UMA_MAX_USERNAME_LENGTH,
-  // UTEXO network config
-  DEFAULT_TRANSPORT_ENDPOINTS,
-  DEFAULT_INDEXER_URLS,
 } from '@utexo/rgb-sdk-core';
 
 export type {

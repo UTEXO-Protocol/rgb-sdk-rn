@@ -19,6 +19,11 @@ import {
 import * as amounts from '../lib/module/wallet/rgb-lib/amounts.js';
 import * as map from '../lib/module/wallet/rgb-lib/mappers.js';
 import { WebRgbProvider } from '../lib/module/integrations/webrgb/provider.js';
+import {
+  DEFAULT_INDEXER_URLS,
+  DEFAULT_TRANSPORT_ENDPOINTS,
+} from '../lib/module/wallet/network-endpoints.js';
+import * as rlnDefaults from '../lib/module/wallet/rln/network-defaults.js';
 
 const params = { network: 'regtest', storageDirPath: '/wallets/rgb-lib/test' };
 const config = {
@@ -343,6 +348,20 @@ test('options constructor preserves the legacy constructor and does not read cre
     () => new UTEXOWallet({ protocol: 'other', params }),
     code('INVALID_CONFIG')
   );
+});
+test('options without protocol select RGB_L1, the default protocol', () => {
+  const keys = { getMnemonic: async () => 'unused' };
+  const wallet = new UTEXOWallet({ params, keys });
+  assert.equal(wallet.protocol, 'RGB_L1');
+  assert.ok(wallet.capabilities);
+  assert.throws(
+    () => new UTEXOWallet({ params, signer: {} }),
+    (error) =>
+      error.code === 'INVALID_CONFIG' && /protocol: RGB_LN/.test(error.message)
+  );
+  assert.throws(() => new UTEXOWallet({ params }), code('INVALID_CONFIG'));
+  // The legacy two-argument form still selects RLN.
+  assert.equal(new UTEXOWallet(params, {}).protocol, 'RGB_LN');
 });
 test('legacy construction preserves signer lifecycle, method overrides and prototype calls', async () => {
   const calls = [];
@@ -1733,4 +1752,58 @@ test('rgb-lib issuance rejects non-file URIs and relative paths before native', 
     /attachmentsFilePaths/
   );
   assert.deepEqual(seen, []);
+});
+
+test('RGB_L1 fills a missing indexer and proxy from the same defaults as RGB_LN', () => {
+  for (const network of ['utexo', 'signet', 'mainnet', 'regtest']) {
+    const resolved = resolveRgbLibConfig({}, network);
+    assert.equal(resolved.indexer.url, DEFAULT_INDEXER_URLS[network]);
+    assert.equal(resolved.proxyEndpoint, DEFAULT_TRANSPORT_ENDPOINTS[network]);
+    assert.deepEqual(rlnDefaults.getNetworkDefaults(network), {
+      indexerUrl: DEFAULT_INDEXER_URLS[network],
+      proxyEndpoint: DEFAULT_TRANSPORT_ENDPOINTS[network],
+    });
+  }
+  assert.equal(rlnDefaults.DEFAULT_INDEXER_URLS, DEFAULT_INDEXER_URLS);
+  assert.equal(
+    DEFAULT_INDEXER_URLS.utexo,
+    'https://dev.esplora-01.mint.utexo.com'
+  );
+  assert.equal(
+    DEFAULT_TRANSPORT_ENDPOINTS.utexo,
+    'rpcs://dev.rgb-proxy.utexo.com/json-rpc'
+  );
+  assert.equal(
+    DEFAULT_TRANSPORT_ENDPOINTS.signet,
+    'rpcs://staging.rgb-proxy.utexo.com/json-rpc'
+  );
+  assert.equal(resolveRgbLibConfig({}, 'signet').indexer.type, 'electrum');
+  assert.equal(
+    DEFAULT_INDEXER_URLS.mainnet,
+    'ssl://electrs-01.utexo.com:50002'
+  );
+  assert.equal(
+    DEFAULT_TRANSPORT_ENDPOINTS.mainnet,
+    'rpcs://rgb-proxy.utexo.com/json-rpc'
+  );
+  assert.equal(resolveRgbLibConfig({}, 'mainnet').indexer.type, 'electrum');
+  assert.equal(resolveRgbLibConfig({}, 'utexo').indexer.type, 'esplora');
+  assert.equal(rlnDefaults.getNetworkDefaults('toString'), undefined);
+});
+
+test('RGB_L1 explicit endpoints override the defaults; without a network they stay required', () => {
+  const resolved = resolveRgbLibConfig(config, 'utexo');
+  assert.equal(resolved.indexer.url, 'http://localhost:3000');
+  assert.equal(resolved.proxyEndpoint, 'rpc://localhost:3001/json-rpc');
+  const proxyOnly = resolveRgbLibConfig(
+    { proxyEndpoint: 'rpcs://p.example/json-rpc' },
+    'utexo'
+  );
+  assert.equal(proxyOnly.indexer.url, DEFAULT_INDEXER_URLS.utexo);
+  assert.equal(proxyOnly.proxyEndpoint, 'rpcs://p.example/json-rpc');
+  assert.throws(() => resolveRgbLibConfig({}), code('INVALID_CONFIG'));
+  assert.throws(
+    () => resolveRgbLibConfig({ indexerUrl: 'http://localhost:3000' }),
+    code('INVALID_CONFIG')
+  );
 });

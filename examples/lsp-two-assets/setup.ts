@@ -29,7 +29,7 @@ export const PAYOUT_ASSET = 'rgb:...LNUSDT'; // what the LSP serves over channel
 export const BRIDGE_ASSET = 'rgb:...USDT'; // what senders hold on-chain
 
 export type Node = {
-  wallet: UTEXOWallet;
+  wallet: UTEXOWallet<'RGB_LN'>;
   lsp: UtexoLsp;
   pubkey: string;
 };

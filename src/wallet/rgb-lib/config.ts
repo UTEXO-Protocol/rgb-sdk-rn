@@ -1,4 +1,5 @@
 import type { BitcoinNetwork } from '@utexo/rgb-sdk-core';
+import { getNetworkDefaults } from '../network-endpoints';
 import { WalletBackendError } from '../wallet-errors';
 
 /** Release of the Swift and Kotlin bindings, as written in their `version.json`. */
@@ -26,15 +27,19 @@ export type RgbLibIndexer =
     };
 
 type RgbLibOnlineConfig = {
-  /** Explicit deployment configuration: old RLN proxies may not support this release. */
-  proxyEndpoint: string;
+  /**
+   * Defaults to `DEFAULT_TRANSPORT_ENDPOINTS[network]`. This release needs a
+   * protocol 1.0 proxy; older proxies may not support it.
+   */
+  proxyEndpoint?: string;
   evmRpcUrls?: Readonly<Record<string, string>>;
   proxyAuthKeys?: Readonly<Record<string, string>>;
 };
+/** Omit both `indexer` and `indexerUrl` to use `DEFAULT_INDEXER_URLS[network]`. */
 export type RgbLibUnlockParams = RgbLibOnlineConfig &
   (
     | { indexer: RgbLibIndexer; indexerUrl?: never }
-    | { indexerUrl: string; indexer?: never }
+    | { indexerUrl?: string; indexer?: never }
   );
 
 export interface ResolvedRgbLibConfig {
@@ -126,8 +131,13 @@ function proxyEndpoint(value: string) {
   return value.replace(/^https:/, 'rpcs:').replace(/^http:/, 'rpc:');
 }
 
+/**
+ * Validates online parameters. With `network`, a missing indexer or proxy
+ * falls back to the same network defaults RGB_LN uses.
+ */
 export function resolveRgbLibConfig(
-  params: RgbLibUnlockParams
+  params: RgbLibUnlockParams,
+  network?: string
 ): ResolvedRgbLibConfig {
   if (
     !params ||
@@ -135,9 +145,11 @@ export function resolveRgbLibConfig(
   ) {
     invalidConfig('Provide either indexer or indexerUrl');
   }
+  const defaults =
+    network === undefined ? undefined : getNetworkDefaults(network);
   let indexer = params.indexer;
   if (!indexer) {
-    const endpoint = params.indexerUrl;
+    const endpoint = params.indexerUrl ?? defaults?.indexerUrl;
     if (!endpoint) invalidConfig('An indexer is required');
     indexer = {
       type: /^(ssl|tcp):\/\//.test(endpoint) ? 'electrum' : 'esplora',
@@ -174,7 +186,9 @@ export function resolveRgbLibConfig(
   } else {
     indexer = { ...indexer };
   }
-  const proxy = proxyEndpoint(params.proxyEndpoint);
+  const requestedProxy = params.proxyEndpoint ?? defaults?.proxyEndpoint;
+  if (!requestedProxy) invalidConfig('A proxy endpoint is required');
+  const proxy = proxyEndpoint(requestedProxy);
   const evmRpcUrls = { ...params.evmRpcUrls };
   for (const [chainId, endpoint] of Object.entries(evmRpcUrls)) {
     if (

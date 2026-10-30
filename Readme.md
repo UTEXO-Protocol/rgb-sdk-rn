@@ -18,7 +18,7 @@ React Native SDK for on-device RGB assets, with on-chain operations via **rgb-li
 - iOS and Android
 - Android `minSdkVersion` 24
 - RLN: at `unlock()`, an Electrum indexer and/or bitcoind RPC, plus an RGB proxy endpoint (known networks get defaults — see [`IRLNUnlockParams`](#irlnunlockparams))
-- rgb-lib: at `goOnline()`, an Electrum, Esplora or bitcoind indexer configuration and an RGB proxy endpoint
+- rgb-lib: at `goOnline()`, an Electrum, Esplora or bitcoind indexer configuration and an RGB proxy endpoint (known networks get the same defaults as RLN)
 
 ## Install
 
@@ -149,7 +149,19 @@ await onchain.goOnline({
 
 `init()` opens the local wallet using the key provider; `goOnline()` connects it
 to the indexer and applies the proxy settings. `unlock(params)` remains supported
-with the same behavior. See [installation](#rgb-lib-rgb_l1) for native setup.
+with the same behavior. If you omit the indexer or the proxy, both protocols use
+the network defaults in `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS`
+(`await onchain.goOnline()` is enough on `utexo` and `signet`). See
+[installation](#rgb-lib-rgb_l1) for native setup.
+
+| Network | Default indexer | Default proxy |
+|---------|-----------------|---------------|
+| `mainnet` | `ssl://electrs-01.utexo.com:50002` | `rpcs://rgb-proxy.utexo.com/json-rpc` |
+| `utexo` | `https://dev.esplora-01.mint.utexo.com` | `rpcs://dev.rgb-proxy.utexo.com/json-rpc` |
+| `signet` | `ssl://electrum.iriswallet.com:50033` | `rpcs://staging.rgb-proxy.utexo.com/json-rpc` |
+
+Other networks use the `@utexo/rgb-sdk-core` defaults. rgb-lib needs a proxy
+that implements protocol 1.0.
 
 ### On-chain operations (both modes)
 
@@ -176,16 +188,21 @@ On-chain BTC/RGB operations remain available.
 
 | Mode | Constructor | Connect |
 |------|-------------|---------|
-| RLN | `new UTEXOWallet(params, signer)` | `unlock(params)` |
-| rgb-lib | `new UTEXOWallet({ protocol: 'RGB_L1', params, keys })` | `goOnline(params)` |
+| rgb-lib (default) | `new UTEXOWallet({ params, keys })` | `goOnline(params)` |
+| RLN | `new UTEXOWallet({ protocol: 'RGB_LN', params, signer })` | `unlock(params)` |
 
-An explicit RLN options form is also available:
-`new UTEXOWallet({ protocol: 'RGB_LN', params, signer })`.
+`RGB_L1` is the default protocol: options without `protocol` select rgb-lib, and
+`protocol: 'RGB_L1'` may still be passed explicitly. RLN must be named. The
+legacy `new UTEXOWallet(params, signer)` form still selects RLN; its type comes
+from the signer's `protocol: 'RGB_LN'` marker, which `PasswordRLNSigner` and
+`NativeExternalRLNSigner` set. A custom signer object without it needs the
+options form or `readonly protocol = 'RGB_LN'`.
 Both modes satisfy `instanceof UTEXOWallet`; `wallet.protocol` is read-only and
 `getWalletIdentity()` returns `{ id, network, protocol }`.
 
-TypeScript infers the selected protocol. Plain `UTEXOWallet` retains its existing
-RLN meaning. For a variable holding either mode, use `AnyUtexoWallet` and narrow
+TypeScript infers the selected protocol. Plain `UTEXOWallet` means
+`UTEXOWallet<'RGB_L1'>`; annotate RLN wallets and subclasses as
+`UTEXOWallet<'RGB_LN'>`. For a variable holding either mode, use `AnyUtexoWallet` and narrow
 `wallet.protocol` before `unlock()`, `goOnline()`, `reinit()` or Lightning calls.
 Avoid `UTEXOWallet<WalletProtocol>` for these calls: it loses the association
 between a protocol and its configuration. Unsupported JavaScript calls reject

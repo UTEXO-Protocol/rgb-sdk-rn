@@ -224,7 +224,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     let config: ResolvedRgbLibConfig;
     try {
       this.assertAccepting();
-      config = resolveRgbLibConfig(params);
+      config = resolveRgbLibConfig(params, this.params.network);
     } catch (error) {
       return Promise.reject(error);
     }
@@ -323,7 +323,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
           'RGB_L1'
         );
       }
-      if (params) resolveRgbLibConfig(params);
+      if (params) resolveRgbLibConfig(params, this.params.network);
       await this.init();
       if (params) await this.unlock(params);
     },

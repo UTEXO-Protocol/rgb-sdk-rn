@@ -206,6 +206,9 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_L1'> {
    * Connect an initialized RGB_L1 wallet; alias for unlock(params). A missing
    * indexer or proxy uses the network defaults (`DEFAULT_INDEXER_URLS`,
    * `DEFAULT_TRANSPORT_ENDPOINTS`), the same as RGB_LN.
+   *
+   * Optional except on regtest: without it, the first operation that needs the
+   * network connects with the defaults. Call it first to use other endpoints.
    */
   async goOnline(
     this: UTEXOWallet<'RGB_L1'>,

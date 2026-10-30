@@ -106,25 +106,64 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     } catch (error) {
       return Promise.reject(error);
     }
-    return this.queue.run(async () => {
-      if (!this.handle || !this.native) {
-        throw new WalletBackendError(
-          'WALLET_NOT_INITIALIZED',
-          'Call init() before this operation',
-          operation,
-          'RGB_L1'
-        );
-      }
-      if (requiresOnline && !this.online) {
-        throw new WalletBackendError(
-          'WALLET_OFFLINE',
-          'Call goOnline() or unlock() before this operation',
-          operation,
-          'RGB_L1'
-        );
-      }
-      return action(this.native, this.handle);
-    });
+    // Connect before entering the queue: unlock() queues its own native call.
+    const ready = requiresOnline
+      ? this.connectLazily(operation)
+      : Promise.resolve();
+    return ready.then(() =>
+      this.queue.run(async () => {
+        if (!this.handle || !this.native) {
+          throw new WalletBackendError(
+            'WALLET_NOT_INITIALIZED',
+            'Call init() before this operation',
+            operation,
+            'RGB_L1'
+          );
+        }
+        if (requiresOnline && !this.online) {
+          throw new WalletBackendError(
+            'WALLET_OFFLINE',
+            'Call goOnline() or unlock() before this operation',
+            operation,
+            'RGB_L1'
+          );
+        }
+        return action(this.native, this.handle);
+      })
+    );
+  }
+
+  /**
+   * goOnline() is optional: the first operation that needs a connection makes
+   * one with the network defaults. An explicit goOnline(params) that is
+   * already connecting is awaited instead.
+   */
+  private async connectLazily(operation: string): Promise<void> {
+    // Read through a function: the state changes across the await below.
+    const pending = () => this.connecting?.promise;
+    if (this.online) return;
+    if (pending()) return pending();
+    // An init() in progress is awaited; without one, the queue reports
+    // WALLET_NOT_INITIALIZED for the operation itself.
+    if (this.opening) await this.opening.catch(() => undefined);
+    if (this.online || !this.handle) return;
+    if (pending()) return pending();
+    // Regtest stacks are local and differ per setup, so they are never guessed.
+    let hasDefaults = this.params.network !== 'regtest';
+    try {
+      resolveRgbLibConfig({}, this.params.network);
+    } catch {
+      hasDefaults = false;
+    }
+    if (!hasDefaults) {
+      throw new WalletBackendError(
+        'WALLET_OFFLINE',
+        `${operation} needs a connection; on ${this.params.network} call goOnline(params) with the indexer and proxy first`,
+        operation,
+        'RGB_L1'
+      );
+    }
+    return this.unlock({});
   }
 
   private input<P, T>(

@@ -136,6 +136,23 @@ the network defaults in `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS`
 (`await onchain.goOnline()` is enough on `utexo` and `signet`). See
 [installation](#rgb-lib-rgb_l1) for native setup.
 
+On RGB_L1, `goOnline()` is optional except on `regtest`. After `init()`, offline
+operations (`getAddress`, `listAssets`, `issueAsset*`, `listTransfers`,
+`createBackup`…) work at once, and the first operation that needs the network
+(`getBtcBalance`, `createUtxos`, `sendBtc`, `onchainSend`, receives, `burn`…)
+connects with the defaults. Call `goOnline(params)` before that first operation
+to use other endpoints: once connected, a different configuration needs
+`shutdown()` and `reinit(params)`. A failed connection rejects that operation,
+and the next one tries again. On `regtest` there is no lazy connection, so call
+`goOnline(params)` with the local indexer and proxy.
+
+```ts
+const wallet = new UTEXOWallet({ params: { network: 'utexo', storageDirPath }, keys });
+await wallet.init();
+await wallet.getAddress(); // offline
+await wallet.getBtcBalance(); // connects with the utexo defaults
+```
+
 | Network | Default indexer | Default proxy |
 |---------|-----------------|---------------|
 | `mainnet` | `ssl://electrs-01.utexo.com:50002` | `rpcs://rgb-proxy.utexo.com/json-rpc` |
@@ -293,7 +310,7 @@ can later be opened with its mnemonic.
 | Operation | RLN | rgb-lib |
 |-----------|-----|---------|
 | `init()` | Create the node and initialize a new profile | Open the local wallet using `keys` |
-| Connect | `unlock(params)` | `goOnline(params)`; `unlock(params)` is also supported |
+| Connect | `unlock(params)` | `goOnline(params)`; `unlock(params)` is also supported. Optional except on `regtest`: the first online operation connects with the defaults |
 | `shutdown()` | Stop the session, preserving data on disk | Same |
 | `reinit(params)` | Restart the node and unlock | Reopen the wallet and connect |
 | `destroy()` / `dispose()` | Release the session permanently; use a new instance afterward | Same |

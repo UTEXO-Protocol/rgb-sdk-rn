@@ -74,7 +74,7 @@ The native layers (iOS: `RlnNodeStore.swift`, Android: `RlnNodeStore.kt`) mainta
 
 Use `AnyUtexoWallet` for a wallet that can have either protocol and narrow `wallet.protocol` before unlock/reinit or Lightning calls. A wide `UTEXOWallet<WalletProtocol>` cannot safely call unlock/reinit. Protocol selects the engine; runtime capabilities still determine whether operations such as burn are supported.
 
-The facade owns public aliases and subclass dispatch. Keep `initialize()` calling `this.init()`, `dispose()` calling `this.destroy()`, and `refreshWallet()` calling `this.refreshTransfers()`. For `RGB_L1`, prefer `init()` followed by `goOnline(params)`; `goOnline()` guards the protocol and calls `this.unlock(params)` so subclass overrides run. Existing `unlock(params)` calls remain supported. The implementation classes own lifecycle and mapping. Web-only PSBT and begin/end carriers are absent.
+The facade owns public aliases and subclass dispatch. Keep `initialize()` calling `this.init()`, `dispose()` calling `this.destroy()`, and `refreshWallet()` calling `this.refreshTransfers()`. For `RGB_L1`, prefer `init()` followed by `goOnline(params)`; `goOnline()` guards the protocol and calls `this.unlock(params)` so subclass overrides run. `goOnline()` is optional except on `regtest`: the backend's `connectLazily()` connects with the network defaults before the first online operation, outside the serial queue (unlock queues its own call). Existing `unlock(params)` calls remain supported. The implementation classes own lifecycle and mapping. Web-only PSBT and begin/end carriers are absent.
 
 **RLN node lifecycle:**
 1. `init()` — `rlnCreateNode` + `signer.initNode` (writes keys to `storageDirPath`)

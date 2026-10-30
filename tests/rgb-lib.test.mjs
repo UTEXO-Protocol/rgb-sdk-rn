@@ -679,6 +679,108 @@ test('online methods reject before unlock; matching config is idempotent and cha
     code('WALLET_CONFIG_MISMATCH')
   );
 });
+// goOnline() is optional on networks with defaults; regtest still needs it.
+const utexoFixture = (overrides = {}) =>
+  publicWalletFixture(
+    {
+      async getWalletIdentity() {
+        return {
+          id: 'identity',
+          network: 'signet',
+          masterFingerprint: 'abc12345',
+        };
+      },
+      ...overrides,
+    },
+    { ...params, network: 'utexo' }
+  );
+const onlineCalls = (calls) =>
+  calls.filter((c) => Array.isArray(c) && c[0] === 'online');
+
+test('without goOnline, the first online operation connects once with the network defaults', async () => {
+  const { wallet, calls } = utexoFixture();
+  await wallet.init();
+  // Offline operations never connect.
+  assert.equal(await wallet.getAddress(), 'address');
+  assert.equal(onlineCalls(calls).length, 0);
+  // Concurrent first calls share one connection.
+  await Promise.all([
+    wallet.sendBtc({ address: 'btc', amount: 1 }),
+    wallet.sendBtc({ address: 'btc', amount: 2 }),
+  ]);
+  const online = onlineCalls(calls);
+  assert.equal(online.length, 1);
+  assert.equal(online[0][3], DEFAULT_INDEXER_URLS.utexo);
+  await wallet.sendBtc({ address: 'btc', amount: 3 });
+  assert.equal(onlineCalls(calls).length, 1);
+  // An explicit goOnline() with the defaults is now a no-op; other endpoints need a restart.
+  await wallet.goOnline();
+  await assert.rejects(wallet.goOnline(config), code('WALLET_CONFIG_MISMATCH'));
+  await wallet.dispose();
+});
+
+test('an explicit goOnline keeps its endpoints, even while it is still connecting', async () => {
+  const gate = deferred();
+  const { wallet, calls } = utexoFixture({
+    async goOnline(...args) {
+      calls.push(['online', ...args]);
+      await gate.promise;
+    },
+  });
+  await wallet.init();
+  const connecting = wallet.goOnline(config);
+  const send = wallet.sendBtc({ address: 'btc', amount: 1 });
+  gate.resolve();
+  await connecting;
+  assert.equal(await send, 'txid');
+  const online = onlineCalls(calls);
+  assert.equal(online.length, 1);
+  assert.equal(online[0][3], config.indexerUrl);
+  await wallet.dispose();
+});
+
+test('a failed lazy connection reaches the caller and the next operation retries', async () => {
+  let attempts = 0;
+  const { wallet, calls } = utexoFixture({
+    async goOnline(...args) {
+      calls.push(['online', ...args]);
+      if (++attempts === 1) throw new Error('indexer unavailable');
+    },
+  });
+  await wallet.init();
+  await assert.rejects(
+    wallet.sendBtc({ address: 'btc', amount: 1 }),
+    /indexer unavailable/
+  );
+  assert.equal(await wallet.sendBtc({ address: 'btc', amount: 1 }), 'txid');
+  assert.equal(onlineCalls(calls).length, 2);
+  await wallet.dispose();
+});
+
+test('regtest never connects lazily and online operations before init report WALLET_NOT_INITIALIZED', async () => {
+  const { wallet, calls } = fixture();
+  await assert.rejects(
+    wallet.sendBtc({ address: 'btc', amount: 1 }),
+    code('WALLET_NOT_INITIALIZED')
+  );
+  await wallet.init();
+  await assert.rejects(
+    wallet.sendBtc({ address: 'btc', amount: 1 }),
+    (error) => {
+      assert.equal(error.code, 'WALLET_OFFLINE');
+      assert.match(error.message, /goOnline\(params\)/);
+      return true;
+    }
+  );
+  assert.equal(onlineCalls(calls).length, 0);
+  // An init() in progress is awaited before deciding.
+  const u = utexoFixture();
+  const opening = u.wallet.init();
+  assert.equal(await u.wallet.sendBtc({ address: 'btc', amount: 1 }), 'txid');
+  await opening;
+  await u.wallet.dispose();
+});
+
 test('shutdown waits for accepted operations, rejects later work, and supports reopening', async () => {
   const gate = deferred(),
     started = deferred();

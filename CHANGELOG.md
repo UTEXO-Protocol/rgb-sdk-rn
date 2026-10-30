@@ -28,6 +28,8 @@ __fixed__
 
 __changed__
 
+- **RLN (`RGB_LN`) is temporarily disabled.** `rgbSdk.rln` in `package.json` is `false`: `postinstall` no longer downloads `RGBLightningNode.xcframework`, Gradle no longer resolves `com.utexo:rgb-lightning-node-android`, and the RLN native sources are left out of the iOS and Android builds. Set it to `true` to build RLN again.
+- The RLN native module (`Rgb`) is optional at runtime. Without it the SDK still imports and RGB_L1 works; creating an RGB_LN wallet (options or legacy form) throws `WalletBackendError` `NATIVE_BACKEND_UNAVAILABLE` with `protocol: 'RGB_LN'`, and any RLN native call rejects with the same error. Before, importing the SDK threw.
 - Default endpoints differ from `@utexo/rgb-sdk-core`: `mainnet` uses the indexer `ssl://electrs-01.utexo.com:50002` and the proxy `rpcs://rgb-proxy.utexo.com/json-rpc`; `utexo` uses the indexer `https://dev.esplora-01.mint.utexo.com` and the proxy `rpcs://dev.rgb-proxy.utexo.com/json-rpc`; `signet` keeps the public signet indexer and uses the proxy `rpcs://staging.rgb-proxy.utexo.com/json-rpc`. The exported `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS` now hold these values (they were core's tables, which RGB_LN did not use for these networks) and are read-only.
 - RGB_L1 `goOnline()` / `unlock()` / `reinit()` fill a missing indexer or proxy from the same network defaults as RGB_LN; `goOnline()` accepts no arguments. Both fields used to be required.
 - **Breaking:** `RGB_L1` (rgb-lib) is the default `UTEXOWallet` protocol.

@@ -17,8 +17,27 @@ Pod::Spec.new do |s|
   # frameworks themselves: CocoaPods applies exclude_files to those as well.
   s.source_files = "ios/*.{h,m,mm,swift,cpp}"
   s.private_header_files = "ios/*.h"
-    
-  native_frameworks = ["ios/RGBLightningNode.xcframework"]
+
+  # RLN (RGB_LN) is switched by `rgbSdk.rln` in package.json. When off, the
+  # framework is not downloaded and its sources are left out of the build.
+  rln_enabled = package.dig("rgbSdk", "rln") == true
+  native_frameworks = []
+  if rln_enabled
+    unless File.directory?(File.join(__dir__, "ios/RGBLightningNode.xcframework"))
+      raise "RLN is enabled but RGBLightningNode.xcframework is missing. Run `node scripts/download-rln-bindings.mjs` in the SDK package."
+    end
+    native_frameworks << "ios/RGBLightningNode.xcframework"
+  else
+    # RlnStorageClaim.swift stays: RGB Lib uses it to guard its data directory.
+    s.exclude_files = [
+      "ios/Rgb.h",
+      "ios/Rgb.mm",
+      "ios/RgbSwiftHelper.swift",
+      "ios/RlnNodeStore.swift",
+      "ios/RGBLightningNode.swift",
+      "ios/RGBLightningNodeFFI.h",
+    ]
+  end
   if File.file?(File.join(__dir__, "ios/RgbLibBindings/manifest.json"))
     pin = JSON.parse(File.read(File.join(__dir__, "src/bindings/rgb-lib/manifest.json")))
     installed = JSON.parse(File.read(File.join(__dir__, "ios/RgbLibBindings/manifest.json")))

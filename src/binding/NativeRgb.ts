@@ -301,4 +301,5 @@ export interface Spec extends TurboModule {
   rlnVssBackup(nodeId: number): Promise<number>;
 }
 
-export default TurboModuleRegistry.getEnforcing<Spec>('Rgb');
+// Optional: an app may be built without RLN. RLNBinding reports the missing module.
+export default TurboModuleRegistry.get<Spec>('Rgb');

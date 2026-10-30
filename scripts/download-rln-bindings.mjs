@@ -77,7 +77,22 @@ function unzip(zipPath, outDir) {
   });
 }
 
+function rlnEnabled() {
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')
+  );
+  return pkg.rgbSdk?.rln === true;
+}
+
 async function setupIos() {
+  // RLN is switched by `rgbSdk.rln` in package.json.
+  if (!rlnEnabled()) {
+    console.log(
+      '[rln] RLN is disabled in this SDK release; skipping download.'
+    );
+    return;
+  }
+
   if (process.platform !== 'darwin') {
     console.log('[rln] Skipping iOS framework: not macOS.');
     return;

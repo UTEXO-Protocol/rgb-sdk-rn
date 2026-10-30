@@ -7,6 +7,10 @@
 
 React Native SDK for on-device RGB assets, with on-chain operations via **rgb-lib** and Lightning payments via the **RGB Lightning Node (RLN)**.
 
+> **RLN is temporarily disabled in this release.** Its native bindings are not
+> downloaded or linked, and creating an `RGB_LN` wallet throws
+> `WalletBackendError` `NATIVE_BACKEND_UNAVAILABLE`. Use `RGB_L1` (rgb-lib).
+
 [![npm version](https://img.shields.io/npm/v/@utexo/rgb-sdk-rn)](https://www.npmjs.com/package/@utexo/rgb-sdk-rn)
 [![license](https://img.shields.io/npm/l/@utexo/rgb-sdk-rn)](https://www.npmjs.com/package/@utexo/rgb-sdk-rn)
 
@@ -28,9 +32,12 @@ npm install @utexo/rgb-sdk-rn
 
 ### RLN (`RGB_LN`)
 
-RLN bindings are installed by default: `postinstall` downloads
+RLN is switched by `rgbSdk.rln` in the SDK's `package.json`; it is `false` in
+this release. When it is `true`, `postinstall` downloads
 `RGBLightningNode.xcframework` on iOS, and Gradle resolves
-`com.utexo:rgb-lightning-node-android` from Maven Central on Android.
+`com.utexo:rgb-lightning-node-android` from Maven Central on Android. When it is
+`false`, neither is installed and the RLN native sources are left out of the
+build.
 
 ### rgb-lib (`RGB_L1`)
 

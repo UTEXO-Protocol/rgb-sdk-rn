@@ -28,7 +28,7 @@ int main(void) {
     ffi_rgb_lightning_node_rustbuffer_free(health, &status);
     check(status.code == 0, "RLN buffer cleanup failed");
     NSDictionary *runtime = call(@"getRuntimeInfo", @{});
-    check([runtime[@"bridgeVersion"] isEqual:@3], "Wrong bridge version");
+    check([runtime[@"bridgeVersion"] isEqual:@4], "Wrong bridge version");
     // Read from the framework's copy of the release version.json.
     check([runtime[@"sourceRevision"] length] == 40 && [runtime[@"version"] length] > 0, "Missing artifact provenance");
 
@@ -171,8 +171,33 @@ int main(void) {
     check([identity isEqual:call(@"getWalletIdentity", @{@"handle":handle})], "Restored identity changed");
     check([address isEqual:call(@"getAddress", @{@"handle":handle, @"rotate":@NO})], "Restored address changed");
     call(@"closeWallet", @{@"handle":handle});
+
+    // Watch-only: public keys from the profile, no mnemonic.
+    NSDictionary *profile = [NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:[restored stringByAppendingPathComponent:@"rgb-sdk-profile.json"]] options:0 error:nil];
+    NSMutableDictionary *watch = [params mutableCopy];
+    watch[@"dataDir"] = [base stringByAppendingPathComponent:@"watch"];
+    watch[@"mnemonic"] = NSNull.null;
+    watch[@"accountXpubVanilla"] = profile[@"accountXpubVanilla"];
+    watch[@"accountXpubColored"] = profile[@"accountXpubColored"];
+    watch[@"masterFingerprint"] = profile[@"masterFingerprint"];
+    handle = call(@"openWallet", watch);
+    check([identity isEqual:call(@"getWalletIdentity", @{@"handle":handle})], "Watch-only identity differs from the full wallet");
+    check([address isEqual:call(@"getAddress", @{@"handle":handle, @"rotate":@NO})], "Watch-only address differs from the full wallet");
+    call(@"closeWallet", @{@"handle":handle});
+    // The same keys reopen the full wallet's storage watch-only.
+    watch[@"dataDir"] = restored;
+    call(@"closeWallet", @{@"handle":call(@"openWallet", watch)});
+    // Mnemonic plus matching keys opens; mismatching keys are rejected before storage is touched.
+    NSMutableDictionary *both = [watch mutableCopy];
+    both[@"mnemonic"] = params[@"mnemonic"];
+    call(@"closeWallet", @{@"handle":call(@"openWallet", both)});
+    both[@"accountXpubColored"] = profile[@"accountXpubVanilla"];
+    check([[RgbLibSwiftHelper execute:@"openWallet" params:both][@"error"][@"code"] isEqual:@"INVALID_CONFIG"], "Mismatching public keys were accepted");
+    NSMutableDictionary *none = [watch mutableCopy];
+    none[@"accountXpubVanilla"] = NSNull.null;
+    check([[RgbLibSwiftHelper execute:@"openWallet" params:none][@"error"][@"code"] isEqual:@"INVALID_CONFIG"], "A wallet opened without a mnemonic or public keys");
     [[NSFileManager defaultManager] removeItemAtPath:base error:nil];
-    puts("Direct UniFFI: RLN coexistence and storage exclusion, wallet lifecycle, storage lock, invoice/history, send invoice checks and encrypted backup/restore passed");
+    puts("Direct UniFFI: RLN coexistence and storage exclusion, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore and watch-only open passed");
   }
   return 0;
 }

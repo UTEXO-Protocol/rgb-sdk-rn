@@ -23,7 +23,13 @@ export type {
   RgbLibIndexer,
 } from './wallet/rgb-lib/config';
 export { CallbackRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
-export type { IRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
+export type {
+  IRgbLibKeyProvider,
+  RgbLibKeys,
+  RgbLibMnemonicReader,
+  RgbLibMnemonicResult,
+  RgbLibPublicKeys,
+} from './wallet/rgb-lib/key-provider';
 export type {
   WalletProtocol,
   WalletIdentity,

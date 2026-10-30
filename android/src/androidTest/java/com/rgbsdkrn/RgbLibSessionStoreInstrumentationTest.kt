@@ -33,7 +33,7 @@ class RgbLibSessionStoreInstrumentationTest {
   @Test
   fun runtimeInfo_reportsTheAarProvenance() {
     val info = store.execute("getRuntimeInfo", emptyMap()) as Map<String, Any?>
-    assertEquals(3, info["bridgeVersion"])
+    assertEquals(4, info["bridgeVersion"])
     assertTrue("version from the AAR asset", (info["version"] as String).isNotEmpty())
     assertEquals(40, (info["sourceRevision"] as String).length)
   }
@@ -133,6 +133,42 @@ class RgbLibSessionStoreInstrumentationTest {
       assertEquals(address, call("getAddress", mapOf("rotate" to false)))
     } finally {
       if (active != null) call("closeWallet")
+      root.deleteRecursively()
+    }
+  }
+
+  @Test
+  fun watch_only_open_from_public_keys() {
+    val root = File(context.cacheDir, "rgb-lib-watch-only-${System.nanoTime()}")
+    val full = mapOf<String, Any?>(
+      "dataDir" to root.resolve("full").path, "network" to "regtest",
+      "witnessVersion" to "taproot", "maxAllocationsPerUtxo" to 5.0, "reuseAddresses" to true,
+      "mnemonic" to "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    )
+    fun open(values: Map<String, Any?>) = store.execute("openWallet", values) as String
+    fun close(handle: String) = store.execute("closeWallet", mapOf("handle" to handle))
+    try {
+      var handle = open(full)
+      val identity = store.execute("getWalletIdentity", mapOf("handle" to handle))
+      val address = store.execute("getAddress", mapOf("handle" to handle, "rotate" to false))
+      close(handle)
+      val profile = org.json.JSONObject(root.resolve("full").resolve("rgb-sdk-profile.json").readText())
+      val keys = mapOf(
+        "accountXpubVanilla" to profile.getString("accountXpubVanilla"),
+        "accountXpubColored" to profile.getString("accountXpubColored"),
+        "masterFingerprint" to profile.getString("masterFingerprint")
+      )
+      val watch = full + keys + mapOf("mnemonic" to null, "dataDir" to root.resolve("watch").path)
+      handle = open(watch)
+      assertEquals(identity, store.execute("getWalletIdentity", mapOf("handle" to handle)))
+      assertEquals(address, store.execute("getAddress", mapOf("handle" to handle, "rotate" to false)))
+      close(handle)
+      // The same keys reopen the full wallet's storage, with or without the mnemonic.
+      close(open(watch + ("dataDir" to full["dataDir"])))
+      close(open(full + keys))
+      assertEquals("INVALID_CONFIG", bridgeCode { open(full + keys + ("accountXpubColored" to keys["accountXpubVanilla"])) })
+      assertEquals("INVALID_CONFIG", bridgeCode { open(watch + ("accountXpubVanilla" to null)) })
+    } finally {
       root.deleteRecursively()
     }
   }

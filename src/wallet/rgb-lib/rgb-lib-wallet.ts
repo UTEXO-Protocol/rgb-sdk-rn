@@ -11,7 +11,7 @@ import type {
 
 import { RgbLibWalletBackend } from './backend';
 import type { RgbLibUnlockParams, RgbLibWalletParams } from './config';
-import type { IRgbLibKeyProvider } from './key-provider';
+import type { RgbLibKeys } from './key-provider';
 import { getRgbLibBinding } from './native';
 
 /** Internal on-chain adapter; the backend owns native sessions and serialization. */
@@ -27,7 +27,7 @@ export class RgbLibWallet
 
   constructor(
     params: RgbLibWalletParams,
-    keys: IRgbLibKeyProvider,
+    keys: RgbLibKeys,
     loadBinding: typeof getRgbLibBinding = getRgbLibBinding
   ) {
     this.ports = new RgbLibWalletBackend(params, keys, loadBinding);

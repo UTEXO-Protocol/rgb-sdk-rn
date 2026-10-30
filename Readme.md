@@ -128,10 +128,9 @@ initialized RLN node, see the [session example](examples/dual-backend.ts).
 
 ### rgb-lib (`RGB_L1`)
 
-`readRgbLibMnemonic` is your app's `() => Promise<string>` callback that reads a
-separately generated, saved mnemonic from secure storage. Configure an indexer
-and proxy compatible with the pinned rgb-lib release; do not assume RLN's proxy
-supports the same version.
+`keys` reads the wallet mnemonic; see [RGB_L1 keys](#rgb_l1-keys) for every
+form, including watch-only. Configure an indexer and proxy compatible with the
+pinned rgb-lib release; do not assume RLN's proxy supports the same version.
 
 `utexo` uses standard Bitcoin signet (`sb` in RGB invoices). The public SDK and
 WebRGB network name remains `utexo`. Older experimental rgb-lib profiles created
@@ -139,12 +138,12 @@ on custom signet (`sbc`) cannot reopen as standard signet; preserve their data
 and use a separate new profile for testing. Generate new invoices after switching.
 
 ```typescript
-import { UTEXOWallet, CallbackRgbLibKeyProvider } from '@utexo/rgb-sdk-rn';
+import * as SecureStore from 'expo-secure-store';
+import { UTEXOWallet } from '@utexo/rgb-sdk-rn';
 
 const onchain = new UTEXOWallet({
-  protocol: 'RGB_L1',
   params: { network: 'utexo', storageDirPath: '/path/to/rgb-lib-storage' },
-  keys: new CallbackRgbLibKeyProvider(readRgbLibMnemonic),
+  keys: () => SecureStore.getItemAsync('rgb-lib-mnemonic'),
 });
 
 await onchain.init();
@@ -154,7 +153,7 @@ await onchain.goOnline({
 });
 ```
 
-`init()` opens the local wallet using the key provider; `goOnline()` connects it
+`init()` opens the local wallet using `keys`; `goOnline()` connects it
 to the indexer and applies the proxy settings. `unlock(params)` remains supported
 with the same behavior. If you omit the indexer or the proxy, both protocols use
 the network defaults in `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS`
@@ -252,14 +251,40 @@ Pass an `IRLNSigner` to the RLN constructor:
   signer. It accepts a mnemonic or raw BIP39 seed bytes; see the
   [custom signer example](examples/custom-signer) for extending signer behavior.
 
-rgb-lib uses `IRgbLibKeyProvider` instead. Its `getMnemonic()` callback is read on
-each new native session; storage and authentication remain the app's responsibility.
+rgb-lib takes `keys` instead.
+
+### RGB_L1 keys
+
+| `keys` | Mode |
+|--------|------|
+| `'word1 word2 …'` | Full. The SDK keeps the string in memory for the wallet's lifetime |
+| `() => SecureStore.getItemAsync('mnemonic')` | Full. Recommended: read on each `init()` / `reinit()` |
+| `{ mnemonic }` or `{ getMnemonic() { … } }` | Full; `getMnemonic` is called on the object, so service classes keep `this` |
+| either of the above plus `accountXpubVanilla`, `accountXpubColored`, `masterFingerprint` | Full. Native checks that the keys match the mnemonic |
+| `{ accountXpubVanilla, accountXpubColored, masterFingerprint }` | Watch-only |
+
+The mode follows the configuration, never the reader's result. A reader that
+returns `null`, `undefined` or a blank string, or that throws, rejects `init()`
+with `WalletBackendError` `KEYS_UNAVAILABLE`; a thrown error is kept as `cause`.
+`SDKError.toJSON()` includes `cause.message`, so do not put secrets in reader
+errors. The SDK does not cache what the reader returns between sessions. Invalid
+`keys` (wrong type, incomplete public keys, both `mnemonic` and `getMnemonic`)
+throw `INVALID_CONFIG` from the constructor.
+
+A watch-only wallet reads balances, addresses, assets and transfers, syncs and
+receives. Operations that sign (`send`, `sendBtc`, `createUtxos`, `drainTo` and
+others rgb-lib refuses without a mnemonic) reject with `UNSUPPORTED_CAPABILITY`.
+Take the public keys from `generateKeys()` or `deriveKeysFromMnemonic()` for the
+same network: account xpubs must be `xpub` on `mainnet` and `tpub` elsewhere, and
+the SDK cannot check that they were derived for the wallet's `witnessVersion`.
+The same keys give the same wallet `id` in both modes, so a watch-only profile
+can later be opened with its mnemonic.
 
 ### Lifecycle
 
 | Operation | RLN | rgb-lib |
 |-----------|-----|---------|
-| `init()` | Create the node and initialize a new profile | Open the local wallet using its key provider |
+| `init()` | Create the node and initialize a new profile | Open the local wallet using `keys` |
 | Connect | `unlock(params)` | `goOnline(params)`; `unlock(params)` is also supported |
 | `shutdown()` | Stop the session, preserving data on disk | Same |
 | `reinit(params)` | Restart the node and unlock | Reopen the wallet and connect |
@@ -495,9 +520,8 @@ await restoreFromBackup({
   dataDir: '/path/to/restored-storage',
 });
 const restored = new UTEXOWallet({
-  protocol: 'RGB_L1',
   params: { network: 'utexo', storageDirPath: '/path/to/restored-storage' },
-  keys: new CallbackRgbLibKeyProvider(readRgbLibMnemonic),
+  keys: () => SecureStore.getItemAsync('rgb-lib-mnemonic'),
 });
 await restored.init();
 ```

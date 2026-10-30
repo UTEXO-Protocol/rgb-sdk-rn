@@ -40,7 +40,7 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
   }
   override fun getRuntimeInfo(promise: Promise) = invoke("getRuntimeInfo", mapOf(), promise)
 
-  override fun openWallet(dataDir: String, network: String, mnemonic: String, witnessVersion: String, maxAllocationsPerUtxo: Double, reuseAddresses: Boolean, promise: Promise) = invoke("openWallet", mapOf("dataDir" to dataDir, "network" to network, "mnemonic" to mnemonic, "witnessVersion" to witnessVersion, "maxAllocationsPerUtxo" to maxAllocationsPerUtxo, "reuseAddresses" to reuseAddresses), promise)
+  override fun openWallet(dataDir: String, network: String, mnemonic: String?, accountXpubVanilla: String?, accountXpubColored: String?, masterFingerprint: String?, witnessVersion: String, maxAllocationsPerUtxo: Double, reuseAddresses: Boolean, promise: Promise) = invoke("openWallet", mapOf("dataDir" to dataDir, "network" to network, "mnemonic" to mnemonic, "accountXpubVanilla" to accountXpubVanilla, "accountXpubColored" to accountXpubColored, "masterFingerprint" to masterFingerprint, "witnessVersion" to witnessVersion, "maxAllocationsPerUtxo" to maxAllocationsPerUtxo, "reuseAddresses" to reuseAddresses), promise)
 
   override fun closeWallet(handle: String, promise: Promise) = invoke("closeWallet", mapOf("handle" to handle), promise)
 

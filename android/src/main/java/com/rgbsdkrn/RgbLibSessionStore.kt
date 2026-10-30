@@ -107,16 +107,27 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       "segwit-v0" -> WitnessVersion.SEG_WIT_V0
       else -> fail("Unsupported witness version")
     }
-    val keys = restoreKeys(network(net), p.getString("mnemonic"), witness)
+    // A mnemonic, public keys, or both (which must match). Keys alone are watch-only.
+    val mnemonic = optional(p, "mnemonic")
+    val given = optional(p, "accountXpubVanilla")?.let {
+      Triple(it, p.getString("accountXpubColored"), p.getString("masterFingerprint"))
+    }
+    val derived = mnemonic?.let { restoreKeys(network(net), it, witness) }
+    if (derived != null && given != null &&
+      (derived.accountXpubVanilla != given.first || derived.accountXpubColored != given.second ||
+        !derived.masterFingerprint.equals(given.third, ignoreCase = true)))
+      fail("The public keys do not match the mnemonic")
+    val keys = derived?.let { Triple(it.accountXpubVanilla, it.accountXpubColored, it.masterFingerprint) }
+      ?: given ?: fail("A mnemonic or public keys are required")
     val max = number(p,"maxAllocationsPerUtxo",0xffffffffL).toUInt()
     if (max == 0U) fail("maxAllocationsPerUtxo must be positive")
-    val identity = "$net:${p.getString("witnessVersion")}:${keys.accountXpubVanilla}:${keys.accountXpubColored}"
+    val identity = "$net:${p.getString("witnessVersion")}:${keys.first}:${keys.second}"
     val id = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     val expected = JSONObject(mapOf(
       "formatVersion" to 1,"backend" to "rgb-lib","id" to id,"network" to net,
       "witnessVersion" to p.getString("witnessVersion"),"maxAllocations" to max.toLong(),
-      "masterFingerprint" to keys.masterFingerprint,"accountXpubVanilla" to keys.accountXpubVanilla,
-      "accountXpubColored" to keys.accountXpubColored
+      "masterFingerprint" to keys.third,"accountXpubVanilla" to keys.first,
+      "accountXpubColored" to keys.second
     ))
     val lease = Lease(File(p.getString("dataDir")))
     var wallet: Wallet? = null
@@ -132,7 +143,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       }
       wallet = Wallet(
         WalletData(lease.root.path, network(net), DatabaseType.SQLITE, max, AssetSchema.entries.toList()),
-        SinglesigKeys(keys.accountXpubVanilla, keys.accountXpubColored, null, keys.masterFingerprint, keys.mnemonic, witness)
+        SinglesigKeys(keys.first, keys.second, null, keys.third, mnemonic, witness)
       )
       val session = Session(wallet, lease, profile, p.getBoolean("reuseAddresses"))
       save(session)
@@ -196,7 +207,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     when(operation) {
       "getRuntimeInfo" -> {
         val artifact = runCatching { JSONObject(artifactInfo()!!) }.getOrNull()
-        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 3,"burn" to true,"consignment" to true,"bfa" to true)
+        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 4,"burn" to true,"consignment" to true,"bfa" to true)
       }
       "openWallet" -> return open(p)
       "restoreBackup" -> { restore(p); return null }

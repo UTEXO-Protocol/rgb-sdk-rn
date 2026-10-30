@@ -165,16 +165,34 @@ public final class RgbLibSwiftHelper: NSObject {
     case "segwit-v0": witness = .segWitV0
     default: throw rgbInvalid("Unsupported witness version")
     }
-    let keys = try RGBLib.restoreKeys(bitcoinNetwork: rgbNetworkFromName(net), mnemonic: p.string("mnemonic"), witnessVersion: witness)
+    // A mnemonic, public keys, or both (which must match). Keys alone are watch-only.
+    let mnemonic = p.optional("mnemonic")
+    var given: (vanilla: String, colored: String, fingerprint: String)?
+    if let vanilla = p.optional("accountXpubVanilla") {
+      given = (vanilla, try p.string("accountXpubColored"), try p.string("masterFingerprint"))
+    }
+    var keys: (vanilla: String, colored: String, fingerprint: String)
+    if let mnemonic {
+      let derived = try RGBLib.restoreKeys(bitcoinNetwork: rgbNetworkFromName(net), mnemonic: mnemonic, witnessVersion: witness)
+      keys = (derived.accountXpubVanilla, derived.accountXpubColored, derived.masterFingerprint)
+      if let given, given.vanilla != keys.vanilla || given.colored != keys.colored
+        || given.fingerprint.lowercased() != keys.fingerprint.lowercased() {
+        throw rgbInvalid("The public keys do not match the mnemonic")
+      }
+    } else if let given {
+      keys = given
+    } else {
+      throw rgbInvalid("A mnemonic or public keys are required")
+    }
     let max = try p.number("maxAllocationsPerUtxo", UInt32.self)
     guard max > 0 else { throw rgbInvalid("maxAllocationsPerUtxo must be positive") }
-    let text = "\(net):\(witnessName):\(keys.accountXpubVanilla):\(keys.accountXpubColored)"
+    let text = "\(net):\(witnessName):\(keys.vanilla):\(keys.colored)"
     let id = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     let expected: [String: Any] = [
       "formatVersion": 1, "backend": "rgb-lib", "id": id, "network": net,
       "witnessVersion": witnessName, "maxAllocations": NSNumber(value: max),
-      "masterFingerprint": keys.masterFingerprint, "accountXpubVanilla": keys.accountXpubVanilla,
-      "accountXpubColored": keys.accountXpubColored
+      "masterFingerprint": keys.fingerprint, "accountXpubVanilla": keys.vanilla,
+      "accountXpubColored": keys.colored
     ]
     let lease = try RgbLibLease(p.string("dataDir"))
     let marker = lease.root.appendingPathComponent(rgbProfileName)
@@ -193,7 +211,7 @@ public final class RgbLibSwiftHelper: NSObject {
     }
     let wallet = try RGBLib.Wallet(
       walletData: RGBLib.WalletData(dataDir: lease.root.path, bitcoinNetwork: rgbNetworkFromName(net), databaseType: .sqlite, maxAllocationsPerUtxo: max, supportedSchemas: [.nia, .uda, .cfa, .ifa, .bfa]),
-      keys: RGBLib.SinglesigKeys(accountXpubVanilla: keys.accountXpubVanilla, accountXpubColored: keys.accountXpubColored, vanillaKeychain: nil, masterFingerprint: keys.masterFingerprint, mnemonic: keys.mnemonic, witnessVersion: witness)
+      keys: RGBLib.SinglesigKeys(accountXpubVanilla: keys.vanilla, accountXpubColored: keys.colored, vanillaKeychain: nil, masterFingerprint: keys.fingerprint, mnemonic: mnemonic, witnessVersion: witness)
     )
     let session = RgbLibSession(wallet: wallet, lease: lease, profile: profile, reuse: try p.bool("reuseAddresses"))
     try session.save()
@@ -268,7 +286,7 @@ public final class RgbLibSwiftHelper: NSObject {
     switch operation {
     case "getRuntimeInfo":
       let artifact = rgbArtifactInfo()
-      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 3, "burn": true, "consignment": true, "bfa": true]
+      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 4, "burn": true, "consignment": true, "bfa": true]
     case "openWallet": return try open(p)
     case "restoreBackup": try restore(p); return NSNull()
     default: break

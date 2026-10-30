@@ -18,6 +18,7 @@ import {
 } from '../lib/module/wallet/rgb-lib/config.js';
 import * as amounts from '../lib/module/wallet/rgb-lib/amounts.js';
 import * as map from '../lib/module/wallet/rgb-lib/mappers.js';
+import { toBackendError } from '../lib/module/wallet/rgb-lib/errors.js';
 import { WebRgbProvider } from '../lib/module/integrations/webrgb/provider.js';
 import {
   DEFAULT_INDEXER_URLS,
@@ -921,7 +922,7 @@ test('native rejections reach callers only as SDK errors and map to WebRGB codes
   );
   await wallet.dispose();
 });
-test('init and restore translate native rejections without changing key-provider errors', async () => {
+test('init and restore translate native rejections; key reader failures become KEYS_UNAVAILABLE', async () => {
   const opening = fixture({
     async openWallet() {
       throw Object.assign(new Error('Storage busy'), {
@@ -935,7 +936,13 @@ test('init and restore translate native rejections without changing key-provider
   locked.keys.getMnemonic = async () => {
     throw keyError;
   };
-  await assert.rejects(locked.wallet.init(), (error) => error === keyError);
+  await assert.rejects(locked.wallet.init(), (error) => {
+    assert.ok(error instanceof WalletBackendError);
+    assert.equal(error.code, 'KEYS_UNAVAILABLE');
+    assert.equal(error.protocol, 'RGB_L1');
+    assert.equal(error.cause, keyError);
+    return true;
+  });
   await assert.rejects(
     restoreFromBackupWith(
       {
@@ -1806,4 +1813,157 @@ test('RGB_L1 explicit endpoints override the defaults; without a network they st
     () => resolveRgbLibConfig({ indexerUrl: 'http://localhost:3000' }),
     code('INVALID_CONFIG')
   );
+});
+
+// ── keys forms ───────────────────────────────────────────────────────────────
+
+const PUBLIC_KEYS = {
+  accountXpubVanilla: 'tpubVanilla',
+  accountXpubColored: 'tpubColored',
+  masterFingerprint: 'ABCDEF12',
+};
+
+/** Opens a wallet with `keys` and returns the mnemonic and public keys sent to native. */
+async function openWith(keys) {
+  const { native, calls } = fixture();
+  const wallet = new RgbLibWallet(params, keys, () => native);
+  await wallet.init();
+  const open = calls.find((c) => Array.isArray(c) && c[0] === 'open');
+  await wallet.dispose();
+  return open.slice(3, 7);
+}
+
+test('keys accepts a mnemonic string, a sync or async function, and a provider object', async () => {
+  const fromMnemonic = ['words', null, null, null];
+  assert.deepEqual(await openWith('words'), fromMnemonic);
+  assert.deepEqual(await openWith(() => 'words'), fromMnemonic);
+  assert.deepEqual(await openWith(async () => 'words'), fromMnemonic);
+  assert.deepEqual(await openWith({ mnemonic: 'words' }), fromMnemonic);
+  class KeychainService {
+    constructor() {
+      this.secret = 'words';
+    }
+    async getMnemonic() {
+      return this.secret;
+    }
+  }
+  assert.deepEqual(await openWith(new KeychainService()), fromMnemonic);
+});
+
+test('keys with a mnemonic and public keys send both; public keys alone open watch-only', async () => {
+  const sent = ['tpubVanilla', 'tpubColored', 'abcdef12'];
+  assert.deepEqual(await openWith({ mnemonic: 'words', ...PUBLIC_KEYS }), [
+    'words',
+    ...sent,
+  ]);
+  assert.deepEqual(
+    await openWith({ getMnemonic: () => 'words', ...PUBLIC_KEYS }),
+    ['words', ...sent]
+  );
+  assert.deepEqual(await openWith(PUBLIC_KEYS), [null, ...sent]);
+});
+
+test('the mnemonic reader is called on each native session and never cached', async () => {
+  let reads = 0;
+  const { native } = fixture();
+  const wallet = new RgbLibWallet(
+    params,
+    () => {
+      reads += 1;
+      return 'words';
+    },
+    () => native
+  );
+  await wallet.init();
+  await wallet.shutdown();
+  await wallet.reinit();
+  assert.equal(reads, 2);
+  await wallet.dispose();
+});
+
+test('a reader with no mnemonic or a failing reader rejects init with KEYS_UNAVAILABLE', async () => {
+  for (const value of [null, undefined, '', '   ']) {
+    await assert.rejects(
+      openWith(() => value),
+      code('KEYS_UNAVAILABLE')
+    );
+  }
+  const keychain = new Error('keychain locked');
+  for (const reader of [
+    () => {
+      throw keychain;
+    },
+    async () => {
+      throw keychain;
+    },
+  ]) {
+    await assert.rejects(openWith(reader), (error) => {
+      assert.equal(error.code, 'KEYS_UNAVAILABLE');
+      assert.equal(error.cause, keychain);
+      assert.doesNotMatch(error.message, /keychain locked/);
+      return true;
+    });
+  }
+  // A reader that is called but does not return text is a programming error.
+  await assert.rejects(
+    openWith(() => 42),
+    code('INVALID_CONFIG')
+  );
+});
+
+test('a mismatch reported by native keeps its own code after the mnemonic is read', async () => {
+  const { native } = fixture({
+    async openWallet() {
+      throw Object.assign(
+        new Error('Storage belongs to a different wallet profile'),
+        {
+          code: 'WALLET_PROFILE_MISMATCH',
+        }
+      );
+    },
+  });
+  const wallet = new RgbLibWallet(params, 'words', () => native);
+  await assert.rejects(wallet.init(), code('WALLET_PROFILE_MISMATCH'));
+});
+
+test('invalid keys are rejected at construction with INVALID_CONFIG', () => {
+  const { native } = fixture();
+  const reject = (keys, message) =>
+    assert.throws(
+      () => new RgbLibWallet(params, keys, () => native),
+      (error) => {
+        assert.equal(error.code, 'INVALID_CONFIG');
+        assert.equal(error.protocol, 'RGB_L1');
+        if (message) assert.match(error.message, message);
+        return true;
+      }
+    );
+  reject(undefined);
+  reject(42);
+  reject('  ', /must not be empty/);
+  reject({}, /need a mnemonic/);
+  reject({ getMnemonic: 'words' }, /getMnemonic must be a function/);
+  reject({ mnemonic: 'a', getMnemonic: () => 'b' }, /not both/);
+  reject(
+    { accountXpubVanilla: 'tpubVanilla' },
+    /missing accountXpubColored, masterFingerprint/
+  );
+  reject({ mnemonic: 'words', masterFingerprint: 'abcdef12' }, /incomplete/);
+  reject({ ...PUBLIC_KEYS, masterFingerprint: 'xyz' }, /8 hex characters/);
+  reject(
+    { ...PUBLIC_KEYS, accountXpubColored: 'xpubColored' },
+    /must be a tpub for network regtest/
+  );
+});
+
+test('watch-only signing failures map to UNSUPPORTED_CAPABILITY', () => {
+  const error = toBackendError(
+    Object.assign(new Error('Invalid operation for a watch only wallet'), {
+      code: 'RGB_LIB_WatchOnly',
+    }),
+    'sendBtc'
+  );
+  assert.equal(error.code, 'UNSUPPORTED_CAPABILITY');
+  assert.equal(error.operation, 'sendBtc');
+  assert.match(error.message, /watch-only/);
 });

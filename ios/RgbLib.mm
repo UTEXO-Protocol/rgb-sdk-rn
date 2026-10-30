@@ -39,8 +39,8 @@ RCT_EXPORT_MODULE(RgbLib)
   [self invoke:@"getRuntimeInfo" params:@{} resolve:resolve reject:reject];
 }
 
-- (void)openWallet:(NSString *)dataDir network:(NSString *)network mnemonic:(NSString *)mnemonic witnessVersion:(NSString *)witnessVersion maxAllocationsPerUtxo:(double)maxAllocationsPerUtxo reuseAddresses:(BOOL)reuseAddresses resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
-  [self invoke:@"openWallet" params:@{@"dataDir": dataDir ?: [NSNull null], @"network": network ?: [NSNull null], @"mnemonic": mnemonic ?: [NSNull null], @"witnessVersion": witnessVersion ?: [NSNull null], @"maxAllocationsPerUtxo": @(maxAllocationsPerUtxo), @"reuseAddresses": @(reuseAddresses)} resolve:resolve reject:reject];
+- (void)openWallet:(NSString *)dataDir network:(NSString *)network mnemonic:(NSString *)mnemonic accountXpubVanilla:(NSString *)accountXpubVanilla accountXpubColored:(NSString *)accountXpubColored masterFingerprint:(NSString *)masterFingerprint witnessVersion:(NSString *)witnessVersion maxAllocationsPerUtxo:(double)maxAllocationsPerUtxo reuseAddresses:(BOOL)reuseAddresses resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"openWallet" params:@{@"dataDir": dataDir ?: [NSNull null], @"network": network ?: [NSNull null], @"mnemonic": mnemonic ?: [NSNull null], @"accountXpubVanilla": accountXpubVanilla ?: [NSNull null], @"accountXpubColored": accountXpubColored ?: [NSNull null], @"masterFingerprint": masterFingerprint ?: [NSNull null], @"witnessVersion": witnessVersion ?: [NSNull null], @"maxAllocationsPerUtxo": @(maxAllocationsPerUtxo), @"reuseAddresses": @(reuseAddresses)} resolve:resolve reject:reject];
 }
 
 - (void)closeWallet:(NSString *)handle resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {

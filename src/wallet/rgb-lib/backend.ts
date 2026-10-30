@@ -3,7 +3,8 @@ import type { ReceiveParams } from '../types';
 import { getRgbLibBinding, assertRuntime } from './native';
 import type { NativeRuntimeInfo, Spec } from '../../binding/NativeRgbLib';
 import { toNativeNetwork } from '../../binding/Interfaces';
-import type { IRgbLibKeyProvider } from './key-provider';
+import { readRgbLibMnemonic, resolveRgbLibKeys } from './key-provider';
+import type { ResolvedRgbLibKeys, RgbLibKeys } from './key-provider';
 import type { OnchainWalletBackend, WalletIdentity } from '../wallet-api';
 import { WalletBackendError } from '../wallet-errors';
 import { SerialExecutor } from '../runtime/serial-executor';
@@ -59,21 +60,15 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   private stopRequested = false;
   private disposeRequested = false;
   private disposed = false;
+  private readonly keys: ResolvedRgbLibKeys;
 
   constructor(
     params: RgbLibWalletParams,
-    private readonly keys: IRgbLibKeyProvider,
+    keys: RgbLibKeys,
     private readonly loadBinding: () => Spec = getRgbLibBinding
   ) {
     validateWalletParams(params);
-    if (!keys || typeof keys.getMnemonic !== 'function') {
-      throw new WalletBackendError(
-        'INVALID_CONFIG',
-        'An RGB Lib key provider is required',
-        undefined,
-        'RGB_L1'
-      );
-    }
+    this.keys = resolveRgbLibKeys(keys, params.network);
     this.params = Object.freeze({ ...params });
   }
 
@@ -155,27 +150,27 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       // Keep the public deployment name, but use the same chain mapping as RLN.
       // Passing "utexo" directly selects custom signet (sbc) in these bindings.
       const nativeNetwork = toNativeNetwork(this.params.network);
-      let mnemonic: string | undefined = await this.keys.getMnemonic();
-      if (typeof mnemonic !== 'string' || mnemonic.trim().length === 0) {
-        throw new WalletBackendError(
-          'INVALID_CONFIG',
-          'The key provider returned no mnemonic',
-          undefined,
-          'RGB_L1'
-        );
-      }
+      // Without a mnemonic source the wallet opens watch-only from public keys.
+      // The reader's result is not cached between sessions.
+      let mnemonic: string | null = this.keys.readMnemonic
+        ? await readRgbLibMnemonic(this.keys.readMnemonic, 'init')
+        : null;
+      const publicKeys = this.keys.publicKeys;
       let handle: string;
       try {
         handle = await native.openWallet(
           this.params.storageDirPath,
           nativeNetwork,
           mnemonic,
+          publicKeys?.accountXpubVanilla ?? null,
+          publicKeys?.accountXpubColored ?? null,
+          publicKeys?.masterFingerprint ?? null,
           this.params.witnessVersion ?? 'taproot',
           this.params.maxAllocationsPerUtxo ?? 5,
           this.params.reuseAddresses ?? false
         );
       } finally {
-        mnemonic = undefined;
+        mnemonic = null;
       }
       this.native = native;
       this.handle = handle;

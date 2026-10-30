@@ -7,6 +7,8 @@ import {
   type IRLNUnlockParams,
   type RgbLibWalletParams,
   type IRgbLibKeyProvider,
+  type RgbLibKeys,
+  type RgbLibPublicKeys,
   type IRLNSigner,
   type UTEXOWalletNodeParams,
   type WalletProtocol,
@@ -230,3 +232,30 @@ export const restoreShape: Promise<WalletRestoreResponse> = restoreFromBackup({
 const renamed = { backupPath: '/b', password: 'pw', storageDirPath: '/w' };
 // @ts-expect-error The old field names are required.
 void restoreFromBackup(renamed);
+
+// Compile-only coverage of every `keys` form.
+declare const SecureStore: {
+  getItemAsync(key: string): Promise<string | null>;
+};
+export function keysForms(
+  params: RgbLibWalletParams,
+  publicKeys: RgbLibPublicKeys
+) {
+  const forms: RgbLibKeys[] = [
+    'mnemonic words',
+    () => SecureStore.getItemAsync('mnemonic'),
+    () => 'mnemonic words',
+    { mnemonic: 'mnemonic words' },
+    { getMnemonic: () => SecureStore.getItemAsync('mnemonic') },
+    { mnemonic: 'mnemonic words', ...publicKeys },
+    publicKeys,
+  ];
+  const wallets = forms.map((keys) => new UTEXOWallet({ params, keys }));
+  // @ts-expect-error A mnemonic source must not be given twice.
+  new UTEXOWallet({ params, keys: { mnemonic: 'a', getMnemonic: () => 'b' } });
+  // @ts-expect-error Without a mnemonic, all public keys are required.
+  new UTEXOWallet({ params, keys: { accountXpubVanilla: 'tpub' } });
+  // @ts-expect-error The reader returns the mnemonic as text.
+  new UTEXOWallet({ params, keys: () => 42 });
+  return wallets;
+}

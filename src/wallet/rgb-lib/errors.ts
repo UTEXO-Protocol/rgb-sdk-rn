@@ -19,6 +19,7 @@ const BRIDGE_CODES: readonly WalletBackendErrorCode[] = [
 /** rgb-lib error variants, without the `RGB_LIB_` bridge prefix. */
 function libraryCode(variant: string): WalletBackendErrorCode {
   if (variant === 'AssetNotFound') return 'ASSET_NOT_FOUND';
+  if (variant === 'WatchOnly') return 'UNSUPPORTED_CAPABILITY';
   if (variant.startsWith('Invalid')) return 'INVALID_PARAMS';
   if (variant.startsWith('Insufficient')) return 'INSUFFICIENT_FUNDS';
   return 'NATIVE_ERROR';
@@ -41,6 +42,15 @@ export function toBackendError(
 ): WalletBackendError {
   if (error instanceof WalletBackendError) return error;
   const native = error as { code?: unknown; message?: unknown } | null;
+  if (native?.code === 'RGB_LIB_WatchOnly') {
+    return new WalletBackendError(
+      'UNSUPPORTED_CAPABILITY',
+      `${operation} needs the mnemonic; this RGB_L1 wallet was opened watch-only from public keys`,
+      operation,
+      'RGB_L1',
+      error instanceof Error ? error : undefined
+    );
+  }
   return new WalletBackendError(
     rgbLibErrorCode(native?.code),
     typeof native?.message === 'string' && native.message

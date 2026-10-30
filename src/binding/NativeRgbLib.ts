@@ -144,10 +144,17 @@ export type NativeIdentity = {
 
 export interface Spec extends TurboModule {
   getRuntimeInfo(): Promise<NativeRuntimeInfo>;
+  /**
+   * Pass a mnemonic, public keys, or both (they must match). Public keys
+   * without a mnemonic open the wallet watch-only.
+   */
   openWallet(
     dataDir: string,
     network: string,
-    mnemonic: string,
+    mnemonic: string | null,
+    accountXpubVanilla: string | null,
+    accountXpubColored: string | null,
+    masterFingerprint: string | null,
     witnessVersion: string,
     maxAllocationsPerUtxo: number,
     reuseAddresses: boolean

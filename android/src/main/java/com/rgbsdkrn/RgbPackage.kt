@@ -9,8 +9,10 @@ import java.util.HashMap
 
 class RgbPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
-    return if (name == RgbModule.NAME) {
-      RgbModule(reactContext)
+    return if (name == RlnModules.NAME) {
+      RlnModules.create(reactContext)
+    } else if (name == RgbLibModule.NAME) {
+      RgbLibModule(reactContext)
     } else {
       null
     }
@@ -19,9 +21,19 @@ class RgbPackage : BaseReactPackage() {
   override fun getReactModuleInfoProvider(): ReactModuleInfoProvider {
     return ReactModuleInfoProvider {
       val moduleInfos: MutableMap<String, ReactModuleInfo> = HashMap()
-      moduleInfos[RgbModule.NAME] = ReactModuleInfo(
-        RgbModule.NAME,
-        RgbModule.NAME,
+      if (RlnModules.ENABLED) {
+        moduleInfos[RlnModules.NAME] = ReactModuleInfo(
+          RlnModules.NAME,
+          RlnModules.NAME,
+          false,  // canOverrideExistingModule
+          false,  // needsEagerInit
+          false,  // isCxxModule
+          true // isTurboModule
+        )
+      }
+      moduleInfos[RgbLibModule.NAME] = ReactModuleInfo(
+        RgbLibModule.NAME,
+        RgbLibModule.NAME,
         false,  // canOverrideExistingModule
         false,  // needsEagerInit
         false,  // isCxxModule

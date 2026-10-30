@@ -1,14 +1,21 @@
 /* eslint no-unused-vars: "off", "@typescript-eslint/no-unused-vars": "error" -- TypeScript signatures. */
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import type { BurnParams, BurnResult } from '../types';
+import { WalletBackendError } from '../wallet-errors';
 import { validateBurnParams } from './validation';
 import { encodeBurnRecipient } from './recipient';
+import {
+  burnDestinationHash,
+  validateBurnDestination,
+  type BurnDestination,
+} from './burn-destination';
 
 /** Wallet-owned context, retained across transport sessions and app restarts. */
 export interface BurnOperationMetadata {
   origin: string;
   network: string;
   payout: { chainId: string; address: string };
+  burnDestination?: BurnDestination;
 }
 export interface BurnOperationRecord {
   version: 2;
@@ -74,10 +81,16 @@ export function normalizeBurnRecord(value: unknown): BurnOperationRecord {
     typeof record.metadata.payout?.chainId !== 'string'
   )
     throw new Error('Invalid burn journal record');
-  if (
-    encodeBurnRecipient(record.metadata.payout) !==
-    record.params.burnRecipient?.toLowerCase()
-  )
+  const committedRecipient =
+    record.metadata.burnDestination === undefined
+      ? encodeBurnRecipient(record.metadata.payout)
+      : burnDestinationHash(
+          validateBurnDestination(
+            record.metadata.burnDestination,
+            record.metadata.payout
+          )
+        ).slice(2);
+  if (committedRecipient !== record.params.burnRecipient?.toLowerCase())
     throw new Error('Burn journal recipient does not match payout metadata');
   if (record.state === 'complete') validateResult(record.result);
   return record;
@@ -96,6 +109,8 @@ function validateResult(
 
 interface BurnWallet {
   burn(params: BurnParams): Promise<BurnResult>;
+  /** When present, a wallet that reports `burn: false` is refused before any record. */
+  getBfaCapabilities?(): Promise<{ burn: boolean }>;
   listTransfers(
     assetId: string
   ): Promise<{ txid?: string | null; kind: string }[]>;
@@ -153,9 +168,25 @@ export class BurnOperations {
   ): Promise<BurnOperationRecord> {
     // Copy before entering the queue: caller mutations cannot change approved data.
     const request = { ...params };
-    const context = { ...metadata, payout: { ...metadata.payout } };
+    const context = {
+      ...metadata,
+      payout: { ...metadata.payout },
+      ...(metadata.burnDestination && {
+        burnDestination: { ...metadata.burnDestination },
+      }),
+    };
     return this.exclusive(async () => {
       validateBurnParams(request);
+      // e.g. a watch-only RGB_L1 wallet: refuse before journaling anything.
+      if (
+        this.wallet.getBfaCapabilities &&
+        !(await this.wallet.getBfaCapabilities()).burn
+      )
+        throw new WalletBackendError(
+          'UNSUPPORTED_CAPABILITY',
+          'This wallet cannot burn',
+          'burn'
+        );
       await this.flush();
       if ((await this.records()).some((record) => record.state === 'pending'))
         throw new Error(
@@ -190,10 +221,16 @@ export class BurnOperations {
         if (record.state !== 'complete') {
           const failure = error as { code?: unknown; message?: unknown } | null;
           // These native errors occur while funding the PSBT, before broadcast.
+          // RLN reports its own codes; RGB Lib maps every Insufficient* variant
+          // (funds, assets, allocation slots) to INSUFFICIENT_FUNDS.
+          // UNSUPPORTED_CAPABILITY (including rgb-lib WatchOnly) is refused
+          // before anything is signed, so nothing can have been broadcast.
           const unfunded =
             !nativeReturned &&
             (failure?.code === 'InsufficientFunds' ||
-              failure?.code === 'NoAvailableUtxos');
+              failure?.code === 'NoAvailableUtxos' ||
+              failure?.code === 'INSUFFICIENT_FUNDS' ||
+              failure?.code === 'UNSUPPORTED_CAPABILITY');
           await this.save({
             ...record,
             state: !invoked || unfunded ? 'cancelled' : 'pending',

@@ -1,8 +1,8 @@
 /* eslint no-unused-vars: "off", "@typescript-eslint/no-unused-vars": "error" -- TypeScript signatures. */
 /**
  * Optional WebRGB burn/proof extension. Receiving and read methods work without it.
- * Use an unlocked BFA wallet with ethRpcUrl and a burn-capable signer
- * (PasswordRLNSigner; NativeExternalRLNSigner does not support burn).
+ * Use a connected BFA wallet with native burn and consignment capabilities.
+ * RLN requires ethRpcUrl and PasswordRLNSigner; RGB Lib uses its native keys.
  *
  * Setup: share one BurnOperations service and durable BurnOperationStore per
  * wallet across sessions. The store implements readAll() and write(record),
@@ -31,9 +31,10 @@
  * and proof sharing. The host serializes approval dialogs. The operation service
  * serializes burns, persists prepared -> pending before invoking native burn,
  * and saves the result as complete. Failure before invocation cancels the record.
- * EVM and Tron recipients encode 12 zero bytes followed by 20 account bytes;
- * Tron addresses retain Base58Check casing in prompts and stored metadata;
- * the requested payout chain is confirmed and saved in operation metadata.
+ * Set destinationRoutes to the bridge deployment's payout routes to commit a V1
+ * hash of the chain, route and recipient in the proof. Without it, legacy burns
+ * encode 12 zero bytes followed by 20 account bytes. Tron addresses retain
+ * Base58Check casing in prompts and stored metadata.
  *
  * Proof export returns Base64, byte length, and a Keccak-256 digest (16 MiB limit).
  * Local paths stay inside the wallet; another origin's proof needs fresh consent.
@@ -60,14 +61,29 @@ import {
 } from '../../wallet/operations/validation';
 import type { BurnOperations } from '../../wallet/operations/burn';
 import { WebRgbError } from './errors';
-import type { UTEXOWallet } from '../../wallet/utexo-wallet';
+import type { OnchainWalletApi } from '../../wallet/wallet-api';
+import {
+  burnDestinationHash,
+  createBurnDestination,
+  validateBurnDestination,
+  type BurnDestination,
+  type BurnDestinationRoute,
+} from '../../wallet/operations/burn-destination';
 
 const MAX_CONSIGNMENT_BYTES = 16 * 1024 * 1024;
 export interface WebRgbBurnOptions {
   operations: BurnOperations;
+  /** Enable V1 commitments for these deployment-verified payout routes. */
+  destinationRoutes?: readonly BurnDestinationRoute[];
 }
+export type WebRgbBurnAssetArgs = RgbBurnAssetArgs & {
+  burnDestination?: BurnDestination;
+};
+export type WebRgbBurnAssetResult = RgbBurnAssetResult & {
+  burnDestination?: BurnDestination;
+};
 type Wallet = Pick<
-  UTEXOWallet,
+  OnchainWalletApi<unknown>,
   | 'getNetwork'
   | 'getBfaCapabilities'
   | 'burn'
@@ -87,6 +103,7 @@ interface Host {
   ): Promise<boolean>;
 }
 export class WebRgbBurnController {
+  private readonly destinationRoutes?: BurnDestinationRoute[];
   private exports = new Set<string>();
   private proof?: { key: string; bytes: Uint8Array; digest: `0x${string}` };
   revoke() {
@@ -97,7 +114,39 @@ export class WebRgbBurnController {
     private wallet: Wallet,
     private host: Host,
     private options: WebRgbBurnOptions
-  ) {}
+  ) {
+    if (options.destinationRoutes) {
+      const chains = new Set<string>();
+      this.destinationRoutes = options.destinationRoutes.map(
+        ({ chainId, dstEid }) => {
+          if (
+            !/^(eip155|tron):[1-9][0-9]*$/.test(chainId) ||
+            !Number.isSafeInteger(Number(chainId.split(':')[1])) ||
+            !Number.isInteger(dstEid) ||
+            dstEid < 0 ||
+            dstEid > 0xffffffff ||
+            (chainId.startsWith('tron:') && dstEid === 0) ||
+            chains.has(chainId)
+          )
+            throw new Error('Invalid or duplicate V1 payout route');
+          chains.add(chainId);
+          return { chainId, dstEid };
+        }
+      );
+      if (!this.destinationRoutes.length)
+        throw new Error('V1 payout routes cannot be empty');
+    }
+  }
+  destinationCapabilities() {
+    return this.destinationRoutes
+      ? {
+          burnDestinationVersion: 1 as const,
+          burnDestinationRoutes: this.destinationRoutes.map((route) => ({
+            ...route,
+          })),
+        }
+      : {};
+  }
   private requireEnabled() {
     if (!this.host.enabled())
       throw new WebRgbError('NOT_ENABLED', 'Session is no longer active');
@@ -109,7 +158,7 @@ export class WebRgbBurnController {
       ...(caps.consignment ? ['getConsignment'] : []),
     ];
   }
-  async burnAsset(args: RgbBurnAssetArgs): Promise<RgbBurnAssetResult> {
+  async burnAsset(args: WebRgbBurnAssetArgs): Promise<WebRgbBurnAssetResult> {
     this.requireEnabled();
     if (!(await this.methods()).includes('burnAsset'))
       throw new WebRgbError(
@@ -135,7 +184,7 @@ export class WebRgbBurnController {
     )
       throw new WebRgbError('INVALID_PARAMS', 'Invalid confirmation count');
     let recipient: string;
-    const request: RgbBurnAssetArgs = {
+    const request: WebRgbBurnAssetArgs = {
       network: args.network,
       assetId: args.assetId,
       amount: args.amount,
@@ -145,7 +194,28 @@ export class WebRgbBurnController {
     };
     try {
       request.burnRecipient = normalizeBurnRecipient(request.burnRecipient);
-      recipient = encodeBurnRecipient(request.burnRecipient);
+      if (this.destinationRoutes) {
+        const expected = createBurnDestination(
+          request.burnRecipient,
+          this.destinationRoutes
+        );
+        if (args.burnDestination !== undefined) {
+          const supplied = validateBurnDestination(
+            args.burnDestination,
+            request.burnRecipient
+          );
+          if (supplied.dstEid !== expected.dstEid)
+            throw new Error(
+              'Burn destination route does not match wallet configuration'
+            );
+        }
+        request.burnDestination = expected;
+        recipient = burnDestinationHash(expected).slice(2);
+      } else {
+        if (args.burnDestination !== undefined)
+          throw new Error('V1 burn destinations are not configured');
+        recipient = encodeBurnRecipient(request.burnRecipient);
+      }
       validateBurnParams({
         ...request,
         burnRecipient: recipient,
@@ -191,6 +261,9 @@ export class WebRgbBurnController {
         origin: this.host.origin,
         network: request.network,
         payout: request.burnRecipient,
+        ...(request.burnDestination && {
+          burnDestination: request.burnDestination,
+        }),
       },
       () => this.requireEnabled()
     );
@@ -200,6 +273,9 @@ export class WebRgbBurnController {
       assetId: request.assetId,
       amount: request.amount,
       burnRecipient: request.burnRecipient,
+      ...(request.burnDestination && {
+        burnDestination: request.burnDestination,
+      }),
       status: 'WaitingConfirmations',
       minConfirmations: request.minConfirmations!,
     };
@@ -212,7 +288,8 @@ export class WebRgbBurnController {
     await this.options.operations.retryPersistence();
     const record = (await this.options.operations.records()).find(
       (item) =>
-        item.metadata.origin === this.host.origin &&
+        (item.metadata.origin === this.host.origin ||
+          this.exports.has(`${item.params.assetId}:${item.result?.txid}`)) &&
         item.result?.txid === id &&
         (!assetId || item.params.assetId === assetId)
     );
@@ -244,6 +321,9 @@ export class WebRgbBurnController {
           ? Number(record.params.amount)
           : undefined,
         burnRecipient: record.metadata.payout,
+        ...(record.metadata.burnDestination && {
+          burnDestination: record.metadata.burnDestination,
+        }),
         txid: record.result.txid,
         batchTransferIdx: record.result.batchTransferIdx,
         status: transfer?.status ?? 'WaitingConfirmations',
@@ -302,7 +382,6 @@ export class WebRgbBurnController {
       )
         throw new WebRgbError('USER_REJECTED', 'Proof export declined');
       this.requireEnabled();
-      this.exports.add(key);
     }
     const transfers = await this.wallet.listTransfers(args.assetId);
     if (
@@ -330,6 +409,7 @@ export class WebRgbBurnController {
     this.requireEnabled();
     if (!this.proof.bytes.length)
       throw new WebRgbError('INTERNAL_ERROR', 'Saved consignment is empty');
+    this.exports.add(key);
     return this.proof;
   }
 }

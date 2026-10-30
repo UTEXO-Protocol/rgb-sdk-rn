@@ -93,6 +93,11 @@ public class RgbSwiftHelper: NSObject {
             let maxMediaUploadSizeMb = request["maxMediaUploadSizeMb"] as? NSNumber else {
         return ["error": "Invalid rlnCreateNode request"] as NSDictionary
       }
+      // Claim the engine before native creation. An RGB Lib profile must never be
+      // opened as an RLN node, including concurrent opens of an empty directory.
+      if let rejected = try RlnStorageClaim.claim(storageDirPath) {
+        return rejected
+      }
       let virtualPeerPubkeys: [String]? = (request["virtualPeerPubkeys"] as? [String]).flatMap { $0.isEmpty ? nil : $0 }
       let initReq = SdkInitRequest(
         storageDirPath: storageDirPath,
@@ -220,6 +225,19 @@ public class RgbSwiftHelper: NSObject {
         "numUsableChannels": NSNumber(value: info.numUsableChannels),
         "localBalanceSat": NSNumber(value: info.localBalanceSat),
         "numPeers": NSNumber(value: info.numPeers),
+        "eventualCloseFeesSat": NSNumber(value: info.eventualCloseFeesSat),
+        "pendingOutboundPaymentsSat": NSNumber(value: info.pendingOutboundPaymentsSat),
+        "accountXpubVanilla": info.accountXpubVanilla,
+        "accountXpubColored": info.accountXpubColored,
+        "maxMediaUploadSizeMb": NSNumber(value: info.maxMediaUploadSizeMb),
+        "rgbHtlcMinMsat": NSNumber(value: info.rgbHtlcMinMsat),
+        "rgbChannelCapacityMinSat": NSNumber(value: info.rgbChannelCapacityMinSat),
+        "channelCapacityMinSat": NSNumber(value: info.channelCapacityMinSat),
+        "channelCapacityMaxSat": NSNumber(value: info.channelCapacityMaxSat),
+        "channelAssetMinAmount": NSNumber(value: info.channelAssetMinAmount),
+        "channelAssetMaxAmount": NSNumber(value: info.channelAssetMaxAmount),
+        "networkNodes": NSNumber(value: info.networkNodes),
+        "networkChannels": NSNumber(value: info.networkChannels),
         "latestRgsSnapshotTimestamp": info.latestRgsSnapshotTimestamp.map { NSNumber(value: $0) } as Any,
       ] as NSDictionary
     } catch {
@@ -379,7 +397,7 @@ public class RgbSwiftHelper: NSObject {
         [
           "paymentHash": p.paymentHash,
           "status": "\(p.status)".uppercased(),
-          "paymentType": "\(p.paymentType)".uppercased(),
+          "paymentType": "\(p.paymentType)",
           "assetId": p.assetId as Any,
           "amtMsat": p.amtMsat.map { NSNumber(value: $0) } as Any,
           "assetAmount": p.assetAmount.map { NSNumber(value: $0) } as Any,
@@ -461,18 +479,6 @@ public class RgbSwiftHelper: NSObject {
         "offchainOutbound": NSNumber(value: b.offchainOutbound),
         "offchainInbound": NSNumber(value: b.offchainInbound),
       ] as NSDictionary
-    } catch {
-      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
-    }
-  }
-
-  @objc(_rlnBackup:backupPath:password:)
-  public static func _rlnBackup(_ nodeId: NSNumber, backupPath: String, password: String) -> NSDictionary {
-    do {
-      guard RlnNodeStore.shared.get(id: nodeId.intValue) != nil else {
-        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
-      }
-      throw NSError(domain: "RlnError", code: -1, userInfo: [NSLocalizedDescriptionKey: "rlnBackup is not supported in this version of the RLN node"])
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }
@@ -561,6 +567,7 @@ public class RgbSwiftHelper: NSObject {
         "timestamp": NSNumber(value: res.timestamp),
         "paymentHash": res.paymentHash,
         "paymentSecret": res.paymentSecret,
+        "minFinalCltvExpiryDelta": NSNumber(value: res.minFinalCltvExpiryDelta),
         "network": res.network,
       ]
       if let amt = res.amtMsat { dict["amtMsat"] = NSNumber(value: amt) }
@@ -641,7 +648,7 @@ public class RgbSwiftHelper: NSObject {
     var dict: [String: Any] = [
       "paymentHash": p.paymentHash,
       "status": "\(p.status)".uppercased(),
-      "paymentType": "\(p.paymentType)".uppercased(),
+      "paymentType": "\(p.paymentType)",
       "createdAt": NSNumber(value: p.createdAt),
       "updatedAt": NSNumber(value: p.updatedAt),
       "payeePubkey": p.payeePubkey,
@@ -955,7 +962,7 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnLnInvoice:amtMsat:expirySec:assetId:assetAmount:paymentHash:minFinalCltvExpiryDelta:descriptionHash:)
+  @objc(_rlnLnInvoice:amtMsat:expirySec:assetId:assetAmount:paymentHash:minFinalCltvExpiryDelta:descriptionHash:description:)
   public static func _rlnLnInvoice(
     _ nodeId: NSNumber,
     amtMsat: NSNumber?,
@@ -964,7 +971,8 @@ public class RgbSwiftHelper: NSObject {
     assetAmount: NSNumber?,
     paymentHash: String?,
     minFinalCltvExpiryDelta: NSNumber?,
-    descriptionHash: String?
+    descriptionHash: String?,
+    description: String?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -977,6 +985,7 @@ public class RgbSwiftHelper: NSObject {
           assetId: assetId,
           assetAmount: assetAmount.map { UInt64(truncating: $0) },
           paymentHash: paymentHash,
+          description: description,
           descriptionHash: descriptionHash,
           minFinalCltvExpiryDelta: minFinalCltvExpiryDelta.map { UInt16(truncating: $0) }
         )
@@ -1639,7 +1648,7 @@ public class RgbSwiftHelper: NSObject {
     }
   }
 
-  @objc(_rlnUnlockNodeWithNativeExternalSigner:signerId:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:gossipRgsServerUrl:)
+  @objc(_rlnUnlockNodeWithNativeExternalSigner:signerId:bitcoindRpcUsername:bitcoindRpcPassword:bitcoindRpcHost:bitcoindRpcPort:indexerUrl:proxyEndpoint:announceAddresses:announceAlias:ethRpcUrl:)
   public static func _rlnUnlockNodeWithNativeExternalSigner(
     _ nodeId: NSNumber,
     signerId: NSNumber,
@@ -1651,7 +1660,7 @@ public class RgbSwiftHelper: NSObject {
     proxyEndpoint: String?,
     announceAddresses: [String],
     announceAlias: String?,
-    gossipRgsServerUrl: String?
+    ethRpcUrl: String?
   ) -> NSDictionary {
     do {
       guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
@@ -1660,19 +1669,22 @@ public class RgbSwiftHelper: NSObject {
       guard let signer = RlnNodeStore.shared.getSigner(id: signerId.intValue) else {
         return ["error": "Native signer with id \(signerId) not found"] as NSDictionary
       }
-      try node.unlockWithNativeExternalSigner(
+      try node.unlockWithNativeExternalSignerRequest(
         signer: signer,
-        ldkChainSync: try ldkChainSync(
-          bitcoindRpcUsername: bitcoindRpcUsername,
-          bitcoindRpcPassword: bitcoindRpcPassword,
-          bitcoindRpcHost: bitcoindRpcHost,
-          bitcoindRpcPort: bitcoindRpcPort,
-          indexerUrl: indexerUrl
-        ),
-        indexerUrl: indexerUrl,
-        proxyEndpoint: proxyEndpoint,
-        announceAddresses: announceAddresses,
-        announceAlias: announceAlias
+        request: SdkExternalUnlockRequest(
+          ldkChainSync: try ldkChainSync(
+            bitcoindRpcUsername: bitcoindRpcUsername,
+            bitcoindRpcPassword: bitcoindRpcPassword,
+            bitcoindRpcHost: bitcoindRpcHost,
+            bitcoindRpcPort: bitcoindRpcPort,
+            indexerUrl: indexerUrl
+          ),
+          indexerUrl: indexerUrl,
+          proxyEndpoint: proxyEndpoint,
+          announceAddresses: announceAddresses,
+          announceAlias: announceAlias,
+          ethRpcUrl: ethRpcUrl
+        )
       )
       return [:] as NSDictionary
     } catch {
@@ -1696,6 +1708,45 @@ public class RgbSwiftHelper: NSObject {
       }
       let version = try node.vssBackup()
       return ["value": NSNumber(value: version)] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnPostAssetMedia:filePath:)
+  public static func _rlnPostAssetMedia(_ nodeId: NSNumber, filePath: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      // JS passes an absolute path; file:// URIs are converted before the bridge.
+      let bytes = [UInt8](try Data(contentsOf: URL(fileURLWithPath: filePath)))
+      let res = try node.postassetmedia(request: SdkPostAssetMediaRequest(fileBytes: bytes))
+      return ["digest": res.digest] as NSDictionary
+    } catch {
+      return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
+    }
+  }
+
+  @objc(_rlnAssetMetadata:assetId:)
+  public static func _rlnAssetMetadata(_ nodeId: NSNumber, assetId: String) -> NSDictionary {
+    do {
+      guard let node = RlnNodeStore.shared.get(id: nodeId.intValue) else {
+        return ["error": "RLN node with id \(nodeId) not found"] as NSDictionary
+      }
+      let m = try node.assetMetadata(assetId: assetId)
+      var dict: [String: Any] = [
+        "assetSchema": m.assetSchema,
+        "initialSupply": String(m.initialSupply),
+        "maxSupply": String(m.maxSupply),
+        "knownCirculatingSupply": String(m.knownCirculatingSupply),
+        "timestamp": NSNumber(value: m.timestamp),
+        "name": m.name,
+        "precision": NSNumber(value: m.precision),
+      ]
+      if let ticker = m.ticker { dict["ticker"] = ticker }
+      if let details = m.details { dict["details"] = details }
+      return dict as NSDictionary
     } catch {
       return ["error": parseErrorMessage(error), "errorCode": getErrorClassName(error)] as NSDictionary
     }

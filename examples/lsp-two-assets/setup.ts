@@ -29,7 +29,7 @@ export const PAYOUT_ASSET = 'rgb:...LNUSDT'; // what the LSP serves over channel
 export const BRIDGE_ASSET = 'rgb:...USDT'; // what senders hold on-chain
 
 export type Node = {
-  wallet: UTEXOWallet;
+  wallet: UTEXOWallet<'RGB_LN'>;
   lsp: UtexoLsp;
   pubkey: string;
 };
@@ -48,16 +48,17 @@ export async function startNode(
 ): Promise<Node> {
   const keys = await createWallet('regtest');
 
-  const wallet = new UTEXOWallet(
-    {
+  const wallet = new UTEXOWallet({
+    protocol: 'RGB_LN',
+    params: {
       storageDirPath,
       daemonListeningPort: port,
       ldkPeerListeningPort: port + 1,
       network: 'regtest',
       lspBaseUrl: LSP_PEER.baseUrl,
     },
-    new PasswordRLNSigner(password, keys.mnemonic)
-  );
+    signer: new PasswordRLNSigner(password, keys.mnemonic),
+  });
 
   const lsp = await wallet.createLsp(LSP_PEER);
   await wallet.init();

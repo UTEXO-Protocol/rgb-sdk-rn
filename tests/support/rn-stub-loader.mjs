@@ -1,0 +1,46 @@
+/**
+ * ESM loader hook that stubs `react-native` for Node.
+ *
+ * `src/binding/NativeRgb.ts` calls `TurboModuleRegistry.get('Rgb')` at
+ * module load, and react-native's entry point is Flow-typed source Node cannot
+ * parse. The contract checks in `check-contract.mjs` only inspect class fields
+ * and getters — they never touch the native module — so a stub is enough and
+ * keeps this package free of a test toolchain it does not otherwise need.
+ * Runtime tests can still install a fake transport, see below.
+ */
+
+const STUB = `
+// Tests may install fakes in globalThis.__RN_NATIVE__[moduleName]; lookup is
+// per call, so the order of imports does not matter.
+const fakeModule = (name) => new Proxy({}, { get: (_, prop) => (...args) => {
+  const fake = globalThis.__RN_NATIVE__?.[name]?.[prop];
+  if (typeof fake === 'function') return fake(...args);
+  throw new Error('react-native stub: native module is not available in Node');
+}});
+// The RLN module is present unless RN_STUB_WITHOUT_RLN=1 (an app built without
+// RLN). Other optional modules are absent; their tests inject a transport.
+const withoutRln = globalThis.process?.env?.RN_STUB_WITHOUT_RLN === '1';
+export const TurboModuleRegistry = {
+  getEnforcing: fakeModule,
+  get: (name) => (name === 'Rgb' && !withoutRln ? fakeModule(name) : null),
+};
+export const NativeModules = {};
+export const Platform = { OS: 'node', select: (o) => o.default ?? o.native };
+export default { TurboModuleRegistry, NativeModules, Platform };
+`;
+
+const STUB_URL = 'rn-stub:react-native';
+
+export async function resolve(specifier, context, next) {
+  if (specifier === 'react-native') {
+    return { url: STUB_URL, shortCircuit: true };
+  }
+  return next(specifier, context);
+}
+
+export async function load(url, context, next) {
+  if (url === STUB_URL) {
+    return { format: 'module', source: STUB, shortCircuit: true };
+  }
+  return next(url, context);
+}

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`@utexo/rgb-sdk-rn` is a React Native SDK for the Bitcoin RGB Protocol. It provides TypeScript bindings for an on-device RGB Lightning Node (RLN) — a native LDK-based Lightning node that runs directly on iOS and Android. The library uses the React Native new architecture (TurboModules + Codegen).
+`@utexo/rgb-sdk-rn` is a React Native SDK for the Bitcoin RGB Protocol. It supports on-chain operations via rgb-lib and Lightning payments via the on-device RGB Lightning Node (RLN) through one `UTEXOWallet` facade. RLN also supports on-chain operations. Both engines use upstream UniFFI bindings on iOS and Android; this SDK does not build a Rust adapter. The library uses the React Native new architecture (TurboModules + Codegen).
 
 ## Commands
 
@@ -34,10 +34,12 @@ yarn clean
 cd ios && pod install
 
 # Download/refresh iOS xcframework (runs automatically on postinstall; Android AAR comes from Maven Central via Gradle)
-node scripts/download-rln-bindings.js
+node scripts/download-rln-bindings.mjs
 ```
 
-There is no JavaScript test runner. Android instrumentation tests live in `android/src/androidTest/`.
+Tests use Node's built-in test runner. Run `npm test` for typecheck, runtime contract checks, rgb-lib tests and WebRGB tests. `tests/types/` contains compile-only API regressions (including facade method coverage); `tests/*.test.mjs` contains JavaScript tests. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run the native smoke sources in `tests/native/`. The Android script uses the host JVM and needs no native artifacts. The rgb-lib session store runs against the Maven Central AAR as an instrumentation test (`android/src/androidTest/`, `RgbLibSessionStoreInstrumentationTest`), on an emulator or device.
+
+Use `.mjs` (ES modules) for Node scripts, runtime tests and ESLint config. `babel.config.cjs` stays CommonJS for synchronous config loading. SDK source stays TypeScript; generated JavaScript in `lib/` is managed by Bob.
 
 Publishing bumps version, pushes a tag, and publishes to npm:
 ```bash
@@ -50,11 +52,14 @@ npm run version:patch   # or version:minor / version:major
 
 ```
 UTEXOWallet (src/wallet/utexo-wallet.ts)
-    └── RLNManager (src/wallet/rln-manager.ts)       ← thin facade, delegates everything
-            └── RLNBinding (src/binding/RLNBinding.ts) ← queues calls, manages lifecycle state
-                    └── NativeRgb (src/binding/NativeRgb.ts) ← TurboModule spec ('Rgb')
-                            ├── RgbModule.kt (Android)
-                            └── Rgb.mm + RgbSwiftHelper.swift (iOS)
+    ├── RGB_LN: RlnWallet (wallet/rln/rln-wallet.ts)
+    │     └── RLNManager → RLNBinding → NativeRgb ('Rgb')
+    │           ├── RgbModule.kt (Android)
+    │           └── Rgb.mm + RgbSwiftHelper.swift (iOS)
+    └── RGB_L1: RgbLibWallet (wallet/rgb-lib/rgb-lib-wallet.ts)
+          └── RgbLibWalletBackend → native.ts → NativeRgbLib ('RgbLib')
+                ├── RgbLibModule.kt → RgbLibDispatcher → RgbLibSessionStore
+                └── RgbLib.mm → RgbLibDispatcher → RgbLibSwiftHelper
 ```
 
 ### `RLNBinding` — the serialization layer
@@ -65,9 +70,13 @@ The native layers (iOS: `RlnNodeStore.swift`, Android: `RlnNodeStore.kt`) mainta
 
 ### `UTEXOWallet` — the primary public API
 
-Implements the shared `IUTEXOProtocol` contract (from `@utexo/rgb-sdk-core`). It owns the node lifecycle and type-mapping between RLN-native types (`Rln*` prefixed) and core SDK types. Web-only surface (PSBT signing, begin/end flows) lives on optional carriers that are absent here — e.g. `createUtxos()` works; the `createUtxosBegin/End()` carrier methods are not exposed.
+`RGB_L1` is the default protocol: `new UTEXOWallet({ params, keys })` (or with `protocol: 'RGB_L1'`) selects rgb-lib and satisfies the on-chain API, and a bare `UTEXOWallet` type means `UTEXOWallet<'RGB_L1'>`. RLN is selected by `{ protocol: 'RGB_LN', params, signer }` or the legacy `new UTEXOWallet(params, signer)`, and satisfies `IUTEXOProtocol` from `@utexo/rgb-sdk-core`. The legacy form infers `RGB_LN` from the signer's `protocol: 'RGB_LN'` marker. `RgbLibWallet` is internal; the public entry point does not export an alternative wallet class or factory. `restoreFromBackup` (RGB_L1 only) is a separate pre-init operation in `wallet/rgb-lib/restore.ts`. RGB_L1 `keys` (`wallet/rgb-lib/key-provider.ts`) is a mnemonic string, a reader function, `{ mnemonic }` / `{ getMnemonic }`, optionally with public keys, or public keys alone (watch-only). `resolveRgbLibKeys` validates the shape in the constructor (`INVALID_CONFIG`); `readRgbLibMnemonic` wraps only the reader call (`KEYS_UNAVAILABLE` with `cause`), so `openWallet` errors keep their codes. Native `open` derives xpubs from the mnemonic, checks given public keys against them, or opens watch-only with `mnemonic: nil`; rgb-lib's `WatchOnly` maps to `UNSUPPORTED_CAPABILITY`.
 
-**Node lifecycle:**
+Use `AnyUtexoWallet` for a wallet that can have either protocol and narrow `wallet.protocol` before unlock/reinit or Lightning calls. A wide `UTEXOWallet<WalletProtocol>` cannot safely call unlock/reinit. Protocol selects the engine; runtime capabilities still determine whether operations such as burn are supported.
+
+The facade owns public aliases and subclass dispatch. Keep `initialize()` calling `this.init()`, `dispose()` calling `this.destroy()`, and `refreshWallet()` calling `this.refreshTransfers()`. For `RGB_L1`, prefer `init()` followed by `goOnline(params)`; `goOnline()` guards the protocol and calls `this.unlock(params)` so subclass overrides run. `goOnline()` is optional except on `regtest`: the backend's `connectLazily()` connects with the network defaults before the first online operation, outside the serial queue (unlock queues its own call). Existing `unlock(params)` calls remain supported. The implementation classes own lifecycle and mapping. Web-only PSBT and begin/end carriers are absent.
+
+**RLN node lifecycle:**
 1. `init()` — `rlnCreateNode` + `signer.initNode` (writes keys to `storageDirPath`)
 2. `unlock(params)` — connects to bitcoind/electrum/proxy
 3. `shutdown()` — graceful stop; node state on disk is preserved
@@ -76,7 +85,7 @@ Implements the shared `IUTEXOProtocol` contract (from `@utexo/rgb-sdk-core`). It
 
 `initialize()` is a backward-compat alias for `init()`.
 
-### Signers (`src/wallet/rln-signers.ts`)
+### Signers (`src/wallet/rln/rln-signers.ts`)
 
 Two implementations of `IRLNSigner`:
 
@@ -91,13 +100,17 @@ The signer is created with a disk-backed VLS store (`NativeExternalSigner.newWit
 
 **iOS**: `Rgb.mm` (ObjC++ bridge) dispatches to `RgbSwiftHelper.swift` synchronous static methods, returning NSDictionary results. The `.mm` file bridges async Promise calls into those sync helpers via Grand Central Dispatch.
 
-**Android**: `RgbModule.kt` extends the codegen-generated `NativeRgbSpec`, dispatches each bridge call via Kotlin coroutines (`Dispatchers.IO`). The Android binding (`com.utexo:rgb-lightning-node-android:0.17.0-beta.3`) is resolved from Maven Central. JNA (`net.java.dev.jna:jna:5.17.0@aar`) is required for UniFFI.
+**Android**: `RgbModule.kt` (in `android/src/rln/java/`) extends the codegen-generated `NativeRgbSpec`, dispatches each bridge call via Kotlin coroutines (`Dispatchers.IO`). The Android binding (`com.utexo:rgb-lightning-node-android:0.17.0-beta.3`) is resolved from Maven Central. JNA (`net.java.dev.jna:jna:5.17.0@aar`) is required for UniFFI.
 
-**iOS native framework**: `RGBLightningNode.xcframework` is downloaded from GitHub releases during `postinstall` (`scripts/download-rln-bindings.js`). It is not committed. Version is pinned at `0.17.0-beta.3`; `ios/.rln-ios-version` tracks the installed release so older or unversioned frameworks are replaced. Only the pinned release is used; local archives and environment overrides are not supported.
+**RLN switch**: `rgbSdk.rln` in `package.json` (currently `false`) is read by `scripts/download-rln-bindings.mjs`, `Rgb.podspec` and `android/build.gradle`. When off, the xcframework is not downloaded, the podspec excludes `Rgb.mm`, `Rgb.h`, `RgbSwiftHelper.swift`, `RlnNodeStore.swift` and the generated RLN Swift files, and Gradle drops the RLN AAR and builds `android/src/noRln/` instead of `android/src/rln/` (`RgbModule.kt`, `RlnNodeStore.kt`, `RlnBurnRequest.kt`; tests in `src/rlnTest/` and `src/rlnAndroidTest/`). `RlnStorageClaim` stays in both builds because RGB Lib uses it. `RgbPackage` registers `Rgb` through `RlnModules`. In JS, `NativeRgb.ts` uses `TurboModuleRegistry.get`, and `RLNBinding` throws `NATIVE_BACKEND_UNAVAILABLE` from its constructor and every native call when the module is missing.
+
+**iOS native framework**: `RGBLightningNode.xcframework` is downloaded from GitHub releases during `postinstall` (`scripts/download-rln-bindings.mjs`). It is not committed. Version is pinned at `0.17.0-beta.3`; `ios/.rln-ios-version` tracks the installed release so older or unversioned frameworks are replaced. Only the pinned release is used; local archives and environment overrides are not supported.
 
 ### Type mapping
 
-`src/binding/rln-types.ts` defines raw types as the native layer returns them. `utexo-wallet.ts` contains a set of private `map*` functions (e.g. `mapAssetNia`, `mapTransaction`, `mapTransfer`) that convert these to the `@utexo/rgb-sdk-core` types that callers expect. When the native layer returns BtcBalance as a Rust Display string (e.g. `"BtcBalance(settled=100, ...)"`) `RLNBinding.normalizeBtcBalance` parses it.
+`src/binding/rln-types.ts` defines raw types as the native layer returns them. `wallet/rln/rln-wallet.ts` contains a set of private `map*` functions (e.g. `mapAssetNia`, `mapTransaction`, `mapTransfer`) that convert these to the `@utexo/rgb-sdk-core` types that callers expect. Both bridges return BtcBalance as `{ vanilla, colored }` records; `RLNBinding.normalizeBtcBalance` throws `WalletError` on any other shape.
+
+RGB Lib DTO-to-domain mapping lives in `wallet/rgb-lib/mappers.ts`; u64 input validation lives in `amounts.ts`. Native wire u64 values remain decimal strings until an explicit safe public conversion. `native.ts` shares runtime-version validation between init and restore. The bridges report `version` and `sourceRevision` from the artifact's own `version.json` (the AAR asset `rgb-lib-bfa-version.json`, and the copy the installer puts in `RGBLib.framework`), never from constants. `WalletBackendError` extends core `SDKError` and carries an optional `protocol`; do not label an unknown configuration as a particular engine.
 
 ### Core dependency
 
@@ -107,13 +120,17 @@ The signer is created with a disk-backed VLS store (`NativeExternalSigner.newWit
 
 The TurboModule spec is `src/binding/NativeRgb.ts` (module name `'Rgb'`, package `com.rgbsdkrn`). After changing the spec, run `yarn codegen` to regenerate `android/build/generated/source/codegen/`. The Android `build.gradle` sources `generated/java` and `generated/jni`.
 
+For rgb-lib, edit `src/binding/NativeRgbLib.ts`, run `npm run codegen:rgb-lib`, and implement native behavior in the platform session helpers. The generated bridge and DTO files are checked by `npm test`. Keep them in the current native locations: the podspec uses a nonrecursive `ios/*` source glob, and `RgbPackage` registers `RgbLibModule` directly.
+
+`src/bindings/rgb-lib/manifest.json` pins the upstream artifacts. On iOS, `scripts/setup-rgb-lib-bindings.mjs` (run by `postinstall`, or `npm run bindings:rgb-lib`) downloads the pinned rgb-lib-swift release, verifies its SHA-256 and `version.json`, and builds `ios/RgbLibBindings/` (a dynamic `rgb_libFFI` wrapper of the release library plus the `RGBLib` Swift module). On Android, Gradle resolves `com.utexo:rgb-lib-bfa-android` from Maven Central. When bumping rgb-lib, update the manifest and `RGB_LIB_VERSION`/`RGB_LIB_REVISION` in `config.ts` together; `npm test` checks they agree. Rebuild the application after changing native artifacts.
+
 ### Build output
 
 `react-native-builder-bob` builds from `src/` to `lib/`:
 - `lib/module/` — ESM JS
 - `lib/typescript/` — type declarations
 
-The `lib/` directory and native binary artifacts (`ios/RGBLightningNode.xcframework`, `android/src/main/jniLibs/`) are excluded from git and must be built/downloaded locally.
+The `lib/` directory and native binary artifacts (`ios/RGBLightningNode.xcframework`, `ios/RgbLibBindings/`) are excluded from git and are downloaded or built by the install scripts.
 
 ## Stack
 
@@ -133,28 +150,33 @@ The `lib/` directory and native binary artifacts (`ios/RGBLightningNode.xcframew
 
 ```
 src/
-  index.ts                      Public entry — re-exports core surface + RN-specific
-  binding/
-    NativeRgb.ts                TurboModule spec (module name 'Rgb', package com.rgbsdkrn)
-    RLNBinding.ts               Sequential call queue (withNodeQueue), lifecycle state machine,
-                                normalizeBtcBalance parser
-    rln-types.ts                Raw Wire types as returned by native layer (Rln* prefix)
+  index.ts                     Public exports; keep legacy names stable
+  binding/                     TurboModule specs, RLN transport and raw DTOs
+  bindings/rgb-lib/manifest.json  Native artifact pin (not a JS transport)
   wallet/
-    utexo-wallet.ts             UTEXOWallet — public API, implements IUTEXOProtocol,
-                                owns map* converters (Wire → domain types)
-    rln-manager.ts              RLNManager — thin facade over RLNBinding
-    rln-signers.ts              PasswordRLNSigner, NativeExternalRLNSigner (IRLNSigner)
-  scripts/
-    download-rln-bindings.js    Downloads iOS xcframework from GitHub releases
-android/
-  src/main/java/com/rgbsdkrn/
-    RgbModule.kt                NativeRgbSpec impl, dispatches via Dispatchers.IO
-    RlnNodeStore.kt             Integer-keyed registry of live SdkNode instances
-ios/
-  Rgb.mm                        ObjC++ bridge → RgbSwiftHelper.swift (sync static methods)
-  RgbSwiftHelper.swift          Swift wrappers around RGBLightningNode.xcframework
-  RlnNodeStore.swift            Integer-keyed registry of live SdkNode instances
+    utexo-wallet.ts             Public constructor, protocol typing, aliases
+    wallet-options.ts          Constructor options for both protocols
+    wallet-api.ts              Shared on-chain contracts
+    wallet-errors.ts           SDKError-compatible wallet errors
+    types.ts, refresh-types.ts Shared domain types
+    wallet-manager.ts          Legacy createWallet key-generation utility
+    rln/                       RLN wallet, manager, signers, defaults, mappers
+    rgb-lib/                   Wallet adapter, session backend, native loader,
+                               restore, config, amounts, mapping, key provider
+    operations/                Shared burn workflow and validation
+    runtime/                   Queue and input snapshot helpers
+  integrations/webrgb/         Optional WebRGB entry point
+scripts/                       Install scripts, generators and test runners
+tests/
+  *.test.mjs                   Runtime tests
+  types/                       Compile-only contracts and API regressions
+  support/                     React Native stub for Node tests
+  native/                      JVM and iOS smoke sources
+android/src/main/java/com/rgbsdkrn/  Native module implementations
+ios/                           Native bridge and Swift session helpers
 ```
+
+The package allowlist includes production source/build output and only the two install scripts. Tests, generators and check runners are repository tools; do not publish their sources or type declarations.
 
 ## Code Conventions
 
@@ -164,24 +186,24 @@ ios/
 
 **Naming**
 - `Rln*` prefix — raw types from the native layer (Wire types).
-- `map*` — converter functions from `Rln*` Wire types to `@utexo/rgb-sdk-core` domain types; live in `utexo-wallet.ts`.
+- `map*` — converter functions from `Rln*` Wire types to `@utexo/rgb-sdk-core` domain types; live in `wallet/rln/rln-wallet.ts`.
 - `I*` — interfaces.
 - `normalize*` — throws on invalid input; `tryNormalize*` — returns `undefined`.
 
-**Node queue discipline** — all native calls must go through `withNodeQueue()` in `RLNBinding`. Never call native methods directly from `UTEXOWallet` or `RLNManager`. Queue ensures serial execution and blocks non-lifecycle calls during shutdown/destroy.
+**Node queue discipline** — RLN calls must go through `withNodeQueue()` in `RLNBinding`. RGB Lib calls go through the backend SerialExecutor and its guarded native transport. Never call native methods directly from `UTEXOWallet` or `RLNManager`. Queue ensures serial execution and blocks non-lifecycle calls during shutdown/destroy.
 
 **Enum normalization** — Android returns `SCREAMING_SNAKE_CASE`, iOS returns `lowerCamelCase`. Always pass raw native enum values through `canonicalEnum()` before use. Never hard-code platform-specific enum strings outside the normalizer.
 
 **Null vs undefined at bridge boundary** — native layer returns `null` for missing values; TypeScript surface uses `undefined`. `map*` functions must convert `null → undefined` explicitly.
 
-**Type mappers** — `map*` functions in `utexo-wallet.ts` must strip all `Rln*`-prefixed keys before returning domain objects. No Wire keys must leak into the public surface.
+**Type mappers** — `map*` functions in `wallet/rln/rln-wallet.ts` must strip all `Rln*`-prefixed keys before returning domain objects. No Wire keys must leak into the public surface.
 
 **Adding a new native method**:
 1. Add to `NativeRgb.ts` spec
 2. Run `yarn codegen`
 3. Implement in `RgbModule.kt` (Android) and `RgbSwiftHelper.swift` + `Rgb.mm` (iOS)
 4. Add wrapper in `RLNBinding.ts` (through `withNodeQueue`)
-5. Expose via `RLNManager.ts` and `UTEXOWallet`/`IUTEXOProtocol` if public
+5. Expose via `rln/rln-manager.ts`, `rln/rln-wallet.ts`, and `UTEXOWallet` if public; type conformance must continue to pass
 
 ## Code Review Focus Areas
 

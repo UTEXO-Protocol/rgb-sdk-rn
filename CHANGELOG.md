@@ -1,5 +1,73 @@
 # Changelog
 
+## 1.0.0-beta.40
+
+__added__
+
+- `issueAssetCfa()` and `issueAssetUda()` on both protocols. RGB_LN uploads `filePath` / `mediaFilePath` / `attachmentsFilePaths` to the node and issues with their digests; RGB_L1 passes the paths to rgb-lib.
+- `getAssetMetadata(assetId)` on both protocols; supplies are exact u64 decimal strings.
+- RGB_L1 `restoreFromBackup({ backupFilePath, password, dataDir })` restores a `createBackup()` file into an empty directory before `init()`. It has the name and shape of the function removed in `1.0.0-beta.10`, and now also passes `dataDir` to native (the old version ignored it). It returns `{ message }`.
+- `checkIndexerUrl(url)` is shared (was RGB_LN only) and returns a lowercase `indexerProtocol` on both.
+- RGB_L1 only: `drainTo({ address, feeRate? })` and `deleteTransfers({ batchTransferIdx?, noAssetOnly? })`.
+- `assignmentKind` for `blindReceive()`, `witnessReceive()` and `onchainReceive()` (`Fungible`, `NonFungible`, `InflationRight`, `MintRight`, `Any`). Both engines validate it the same way; `MintRight` is RGB_L1 only.
+- `listAssets({ filterAssetSchemas })`, and `{ skipSync }` for `getBtcBalance()`, `listUnspents()`, `listTransactions()` and `createUtxos()` on both protocols.
+- RLN `createLightningInvoice()` / `createHodlInvoice()` accept `description`.
+- RLN `getNodeInfo()` returns the channel and HTLC limits, network graph size, `eventualCloseFeesSat`, `pendingOutboundPaymentsSat` and account xpubs. Both bridges used to drop them.
+- RLN `decodeLnInvoice()` returns `minFinalCltvExpiryDelta`.
+
+__fixed__
+
+- Android `getPayment()` / `getLightningReceiveStatus()` now find inbound payments; they searched outbound payments only.
+- RLN payments report `paymentType` and `inbound` correctly. Neither platform's native spelling matched the wire type, so every payment was reported as inbound.
+- RLN `createUtxos()` returns the number of UTXOs it created instead of echoing `num`. The reads and the create run as one native-queue operation, so concurrent calls do not count each other's UTXOs.
+- RLN `issueAssetNia()`, `issueAssetCfa()` and `issueAssetIfa()` reject a total supply (with inflation) above `Number.MAX_SAFE_INTEGER` with `AMOUNT_OVERFLOW` before any native call, like RGB_L1.
+- Issuance file fields (`filePath`, `mediaFilePath`, `attachmentsFilePaths`) accept an absolute path or a `file://` URI on both protocols. URIs are decoded (for example `%20`) in JS; other schemes and relative paths are rejected with `ValidationError`. RGB_L1 used to pass URIs to rgb-lib, which rejected them.
+- RLN numeric inputs (`createUtxos`, `inflate`, `sendBtc`, issuance, receive, `failTransfers`, `estimateFeeRate`, `keysend`, `payLightningInvoice`) are rejected with `ValidationError` when the bridge would truncate them. Default `feeRate` for `createUtxos()` and `inflate()` is `1` (the old `1.5` was already truncated to 1).
+- RLN `estimateFeeRate()` rounds up to an integer, like RGB_L1.
+- RGB_L1 public keys are decoded in full (base58 checksum, version and key), not checked by prefix only, and an invalid key throws `INVALID_CONFIG` from the constructor. If rgb-lib still rejects the keys when a wallet is created, both bridges remove the profile they wrote, so the directory can be opened again with the right keys. Before, it failed with `WALLET_PROFILE_MISMATCH`.
+- A watch-only RGB_L1 wallet reports `burn: false` from `getBfaCapabilities()`, so WebRGB does not offer `burnAsset`, and `burn()` rejects with `UNSUPPORTED_CAPABILITY` before calling native. `BurnOperations` refuses a wallet that reports `burn: false` before writing a record. An `UNSUPPORTED_CAPABILITY` failure from `burn()` cancels the record instead of leaving it pending, which blocked the next burn.
+- The iOS native smoke test (`npm run test:rgb-lib:ios`) links RLN only when `rgbSdk.rln` is enabled. Before, it failed after a clean install without RLN.
+- `NativeExternalRLNSigner` unlock passes `ethRpcUrl` to RLN and rejects `gossipRgsServerUrl` instead of dropping it.
+
+__changed__
+
+- RGB_L1 `keys` accepts a mnemonic string, a function that returns the mnemonic (sync or async, `string | null | undefined`, so `() => SecureStore.getItemAsync(key)` works directly), `{ mnemonic }`, `{ getMnemonic() }`, or public keys (`accountXpubVanilla`, `accountXpubColored`, `masterFingerprint`). With a mnemonic, public keys are optional and native checks that they match. Public keys alone open the wallet **watch-only**; operations rgb-lib cannot sign reject with `UNSUPPORTED_CAPABILITY`. `CallbackRgbLibKeyProvider` is deprecated; pass the function.
+- A reader that throws, or returns no mnemonic, rejects `init()` / `reinit()` with the new code `KEYS_UNAVAILABLE` (the thrown error is the `cause`). Before, an empty result gave `INVALID_CONFIG` and a thrown error reached the caller unchanged. Invalid `keys` throw `INVALID_CONFIG` from the constructor.
+- The RGB Lib bridge version is 4: `openWallet` takes optional public keys. Rebuild the app after updating.
+- **RLN (`RGB_LN`) is temporarily disabled.** `rgbSdk.rln` in `package.json` is `false`: `postinstall` no longer downloads `RGBLightningNode.xcframework`, Gradle no longer resolves `com.utexo:rgb-lightning-node-android`, and the RLN native sources are left out of the iOS and Android builds. Set it to `true` to build RLN again.
+- The RLN native module (`Rgb`) is optional at runtime. Without it the SDK still imports and RGB_L1 works; creating an RGB_LN wallet (options or legacy form) throws `WalletBackendError` `NATIVE_BACKEND_UNAVAILABLE` with `protocol: 'RGB_LN'`, and any RLN native call rejects with the same error. Before, importing the SDK threw.
+- Default endpoints differ from `@utexo/rgb-sdk-core`: `mainnet` uses the indexer `ssl://electrs-01.utexo.com:50002` and the proxy `rpcs://rgb-proxy.utexo.com/json-rpc`; `utexo` uses the indexer `https://dev.esplora-01.mint.utexo.com` and the proxy `rpcs://dev.rgb-proxy.utexo.com/json-rpc`; `signet` keeps the public signet indexer and uses the proxy `rpcs://staging.rgb-proxy.utexo.com/json-rpc`. The exported `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS` now hold these values (they were core's tables, which RGB_LN did not use for these networks) and are read-only.
+- RGB_L1 `goOnline()` / `unlock()` / `reinit()` fill a missing indexer or proxy from the same network defaults as RGB_LN; `goOnline()` accepts no arguments. Both fields used to be required.
+- RGB_L1 `goOnline()` is optional except on `regtest`. Without it, the first operation that needs the network connects once with the network defaults; offline operations work right after `init()`. An explicit `goOnline(params)` still sets other endpoints if it comes first, and an operation started while it connects waits for it. On `regtest`, online operations still reject with `WALLET_OFFLINE` until `goOnline(params)`. The lazy connection calls the engine directly, so a subclass `unlock()` override does not run for it.
+- **Breaking:** `RGB_L1` (rgb-lib) is the default `UTEXOWallet` protocol.
+  - `new UTEXOWallet({ params, keys })` selects RGB_L1; `protocol: 'RGB_L1'` is still accepted. RGB_LN options must set `protocol: 'RGB_LN'`; passing a `signer` without it throws `INVALID_CONFIG`.
+  - The generic default is `'RGB_L1'`: a bare `UTEXOWallet` annotation or `extends UTEXOWallet` now means RGB_L1. Annotate RLN wallets and subclasses as `UTEXOWallet<'RGB_LN'>`.
+  - The legacy `new UTEXOWallet(params, signer)` still selects RLN at runtime. TypeScript infers `RGB_LN` from the new `IRLNSigner.protocol` marker, which `PasswordRLNSigner` and `NativeExternalRLNSigner` set. A custom signer without `protocol: 'RGB_LN'` no longer compiles with this form; add the marker or use the options form.
+
+- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.1` (`ad87acb`) to `v0.3.0-beta.7-upstream-dev-bfa.5` (`0a9d352`). It is no longer installed from a local bundle:
+  - **iOS:** `postinstall` downloads the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.5-bfa), verifies it and builds the frameworks.
+  - **Android:** Gradle resolves `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.5-bfa` from Maven Central.
+  - bfa.5 is rebased on newer upstream rgb-lib (RGB 0.11.2-rc.2). Behaviour visible through the SDK: coin selection skips UTXOs that would exceed `maxAllocationsPerUtxo`; operations whose PSBT is too large fail before broadcast; incoming consignments that pay an invoice more than one allocation, or would freeze the receiving UTXO, are refused; the reject list is checked for every operation; operations must expire at least the clock-skew margin in the future.
+  - rgb-lib adds IFA/BFA links. RGB_L1 history maps the `Link` transfer kind and `LinkRight` assignments, and `getAssetMetadata()` returns `linkedFromContract` / `linkedToContract`. Issuing linked assets and the `link` operation are not exposed yet; `issueAssetIfa()` issues without a link right, as before.
+  - `--from` and `RGB_LIB_BINDINGS_DIR` are removed. RGB_L1 now needs iOS 16.0; on Android it is available on `arm64-v8a` and `x86_64` only.
+- iOS: the podspec ships `PrivacyInfo.xcprivacy` (file timestamp `C617.1`, disk space `E174.1`) for the required-reason APIs the native libraries call. When the rgb-lib iOS bindings are installed, the pod requires iOS 16.0.
+- rgb-lib `getRuntimeInfo` reports the version and source revision from the artifact's own `version.json`, not from constants in the bridge, so a mismatched native library is detected.
+- RGB_LN `createBackup()` rejects with `WalletBackendError` `UNSUPPORTED_CAPABILITY` in JS. The native `rlnBackup` stubs, which always failed, are removed from the TurboModule spec.
+- RLN `getBtcBalance()` throws `WalletError` for a malformed native balance instead of reporting zeros. The parser for the old Rust display string is removed.
+- The Android AAR's Kotlin bindings use the `com.utexo` package instead of `uniffi.rgb_lib` and load `librgblibuniffi.so` themselves, so the `libraryOverride` workaround is removed. The AAR no longer ships `libc++_shared.so`, so apps do not need `pickFirsts` for it.
+- iOS: switches over RGBLib enums handle unknown cases, as library evolution requires.
+- Android registers `RgbLibModule` directly instead of looking it up by reflection.
+- The rgb-lib session store test runs as an Android instrumentation test against the Maven Central AAR, replacing the JVM test that needed a local desktop bundle.
+- Removed unused code left from the earlier rgb-lib integration: most of `Interfaces.ts`, `RgbError`, `src/constants`, and `AppConstants` on iOS and Android.
+- Readme: documented how backup differs between protocols. `createBackup()` is RGB_L1 only. `vssAllowEmptyRestore` means start empty when the VSS restore fails, which is unsafe with channels; the old description was wrong.
+- RGB Lib bridge version is `3` (new operations and parameters). Rebuild the app so the native module matches the JS SDK.
+- RLN stays on `0.17.0-beta.3`; only rgb-lib moves to rgb-lib-bfa. The Swift bindings regenerated from [rgb-lightning-node#212](https://github.com/UTEXO-Protocol/rgb-lightning-node/pull/212) are reverted, because no RLN release ships that API yet.
+- RLN `onchainSend()` uses `amount` from a fungible invoice when it is omitted.
+- RLN `listOnchainTransfers()` passes a `Mint` transfer kind through instead of reporting it as `Send`.
+- RLN `onchainSend()` rejects values the bridge would truncate: `amount`, `feeRate`, `minConfirmations` and `witnessData` must be in-range integers (`ValidationError`). The default `feeRate` is now `1`. The old default `1.5` was already truncated to 1 sat/vB, so fees do not change.
+- Documented that RGB_L1 `onchainSend()` ignores `skipSync`.
+- RLN `onchainSend()` copies the request before decoding the invoice, so the invoice and amounts sent to native are the ones it validated even if the caller changes the object meanwhile.
+
 ## 1.0.0-beta.38
 
 __changed__

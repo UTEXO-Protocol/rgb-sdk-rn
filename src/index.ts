@@ -2,21 +2,57 @@
 export { createWallet } from './wallet/wallet-manager';
 
 // RLN node manager
-export { RLNManager, createRLNManager } from './wallet/rln-manager';
+export { RLNManager, createRLNManager } from './wallet/rln/rln-manager';
 
-// UTEXO wallet — implements the shared IUTEXOProtocol contract, backed by RLN.
+// UTEXO wallet — legacy RLN constructor plus an optional on-chain rgb-lib mode.
 export { UTEXOWallet } from './wallet/utexo-wallet';
-export type { UTEXOWalletNodeParams } from './wallet/utexo-wallet';
+export type {
+  UTEXOWalletNodeParams,
+  UTEXOWalletOptions,
+  AnyUtexoWallet,
+} from './wallet/utexo-wallet';
+export { restoreFromBackup } from './wallet/rgb-lib/restore';
+export type {
+  WalletInit,
+  RlnWalletInit,
+  RgbLibWalletInit,
+} from './wallet/wallet-options';
+export type {
+  RgbLibWalletParams,
+  RgbLibUnlockParams,
+  RgbLibIndexer,
+} from './wallet/rgb-lib/config';
+export { CallbackRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
+export type {
+  IRgbLibKeyProvider,
+  RgbLibKeys,
+  RgbLibMnemonicReader,
+  RgbLibMnemonicResult,
+  RgbLibPublicKeys,
+} from './wallet/rgb-lib/key-provider';
+export type {
+  WalletProtocol,
+  WalletIdentity,
+  OnchainWalletApi,
+  WalletTransfer,
+  WalletAssignment,
+  WalletInvoiceData,
+  WalletUnspent,
+} from './wallet/wallet-api';
+export { WalletBackendError } from './wallet/wallet-errors';
+export type { WalletBackendErrorCode } from './wallet/wallet-errors';
 export {
+  DEFAULT_INDEXER_URLS,
+  DEFAULT_TRANSPORT_ENDPOINTS,
   getNetworkDefaults,
   resolveUnlockParams,
-} from './wallet/network-defaults';
-export type { NetworkEndpoints } from './wallet/network-defaults';
+} from './wallet/rln/network-defaults';
+export type { NetworkEndpoints } from './wallet/rln/network-defaults';
 export {
   PasswordRLNSigner,
   NativeExternalRLNSigner,
-} from './wallet/rln-signers';
-export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln-signers';
+} from './wallet/rln/rln-signers';
+export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln/rln-signers';
 
 // Binding and signer (for advanced / testing use)
 export { RLNBinding } from './binding/RLNBinding';
@@ -141,9 +177,6 @@ export {
   parseLightningAddress,
   UMA_PREFIX,
   UMA_MAX_USERNAME_LENGTH,
-  // UTEXO network config
-  DEFAULT_TRANSPORT_ENDPOINTS,
-  DEFAULT_INDEXER_URLS,
 } from '@utexo/rgb-sdk-core';
 
 export type {
@@ -227,6 +260,18 @@ export type {
   Transfer,
   TransferAssignment,
   TransferAmount,
+  LightningNodeDetails,
+  DecodedLnInvoiceDetails,
+  AssetSchemaName,
+  ReceiveAssignmentKind,
+  ReceiveParams,
+  OnchainReceiveParams,
+  ReadOptions,
+  IssueAssetCfaParams,
+  IssueAssetUdaParams,
+  AssetMetadata,
+  RestoreFromBackupParams,
+  WalletRestoreResponse,
 } from './wallet/types';
 
 export { BurnOperations, normalizeBurnRecord } from './wallet/operations/burn';

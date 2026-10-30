@@ -25,17 +25,27 @@ export async function walletCall<T>(action: () => Promise<T>): Promise<T> {
     const code =
       typeof native?.code === 'string' ? native.code : native?.code?.type;
     let mapped: ProviderErrorCode = 'INTERNAL_ERROR';
-    if (code === 'AssetNotFound' || code === 'UnknownAsset')
+    // RLN codes, then WalletBackendError codes (rgb-lib errors are normalized to these).
+    if (
+      code === 'AssetNotFound' ||
+      code === 'UnknownAsset' ||
+      code === 'ASSET_NOT_FOUND'
+    )
       mapped = 'ASSET_NOT_FOUND';
     else if (
       code === 'InvalidAssetId' ||
       code === 'InvalidInvoice' ||
-      code === 'InvalidAmount'
+      code === 'InvalidAmount' ||
+      code === 'INVALID_PARAMS' ||
+      code === 'INVALID_AMOUNT' ||
+      code === 'AMOUNT_OVERFLOW' ||
+      code === 'FEE_RATE_UNSUPPORTED'
     )
       mapped = 'INVALID_PARAMS';
     else if (
       code === 'METHOD_NOT_SUPPORTED' ||
-      code === 'UnsupportedInExternalSignerMode'
+      code === 'UnsupportedInExternalSignerMode' ||
+      code === 'UNSUPPORTED_CAPABILITY'
     )
       mapped = 'METHOD_NOT_SUPPORTED';
     throw new WebRgbError(mapped, native?.message ?? 'Wallet operation failed');

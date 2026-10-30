@@ -25,6 +25,7 @@ func rgbDto(_ v: RGBLib.Assignment) -> [String: Any] {
   case .any: return ["type":"Any","amount":NSNull()]
   case .nonFungible: return ["type":"NonFungible","amount":NSNull()]
   case .mintRight: return ["type":"MintRight","amount":NSNull()]
+  case .linkRight: return ["type":"LinkRight","amount":NSNull()]
   // JS rejects an unknown assignment type instead of guessing one.
   @unknown default: return ["type":rgbEnum(v),"amount":NSNull()]
   }
@@ -174,6 +175,8 @@ func rgbDto(_ v: RGBLib.Metadata) -> [String: Any] {
     "ticker": v.ticker.map { $0 as Any } ?? NSNull(),
     "details": v.details.map { $0 as Any } ?? NSNull(),
     "rejectListUrl": v.rejectListUrl.map { $0 as Any } ?? NSNull(),
+    "linkedFromContract": v.linkedFromContract.map { $0 as Any } ?? NSNull(),
+    "linkedToContract": v.linkedToContract.map { $0 as Any } ?? NSNull(),
   ]
   return result
 }

@@ -39,7 +39,7 @@ export interface WalletIdentity {
 }
 /** Additions in RGB 0.11.2 without changing the legacy RLN/core declarations. */
 export interface WalletAssignment {
-  type: AssignmentType | 'MintRight';
+  type: AssignmentType | 'MintRight' | 'LinkRight';
   amount?: number;
   amountBaseUnits?: string;
 }
@@ -47,7 +47,7 @@ export type WalletTransfer = Omit<
   Transfer,
   'kind' | 'assignments' | 'requestedAssignment'
 > & {
-  kind: TransferKind | 'Mint';
+  kind: TransferKind | 'Mint' | 'Link';
   assignments: WalletAssignment[];
   requestedAssignment?: WalletAssignment;
 };

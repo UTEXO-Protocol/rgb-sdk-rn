@@ -56,7 +56,14 @@ export function balance(value: NativeBalance) {
 export function assignment(value: NativeAssignment): WalletAssignment {
   const type = known(
     value.type,
-    ['Fungible', 'NonFungible', 'InflationRight', 'MintRight', 'Any'] as const,
+    [
+      'Fungible',
+      'NonFungible',
+      'InflationRight',
+      'MintRight',
+      'LinkRight',
+      'Any',
+    ] as const,
     'assignment'
   );
   if (type === 'Fungible' || type === 'InflationRight') {
@@ -129,6 +136,7 @@ export function transfer(value: NativeTransfer): WalletTransfer {
         'Inflation',
         'Burn',
         'Mint',
+        'Link',
       ] as const,
       'transfer kind'
     ),
@@ -281,6 +289,8 @@ export function assetMetadata(value: NativeAssetMetadata): AssetMetadata {
     maxSupply: value.maxSupply,
     knownCirculatingSupply: value.knownCirculatingSupply,
     rejectListUrl: value.rejectListUrl ?? undefined,
+    linkedFromContract: value.linkedFromContract ?? undefined,
+    linkedToContract: value.linkedToContract ?? undefined,
   };
 }
 export function assets(values: NativeAsset[]): ListAssets {

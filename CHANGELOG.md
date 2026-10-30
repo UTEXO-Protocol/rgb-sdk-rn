@@ -40,9 +40,11 @@ __changed__
   - The generic default is `'RGB_L1'`: a bare `UTEXOWallet` annotation or `extends UTEXOWallet` now means RGB_L1. Annotate RLN wallets and subclasses as `UTEXOWallet<'RGB_LN'>`.
   - The legacy `new UTEXOWallet(params, signer)` still selects RLN at runtime. TypeScript infers `RGB_LN` from the new `IRLNSigner.protocol` marker, which `PasswordRLNSigner` and `NativeExternalRLNSigner` set. A custom signer without `protocol: 'RGB_LN'` no longer compiles with this form; add the marker or use the options form.
 
-- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.1` (`ad87acb`) to `v0.3.0-beta.7-upstream-dev-bfa.3` (`4b78c22`). It is no longer installed from a local bundle:
-  - **iOS:** `postinstall` downloads the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.3-bfa), verifies it and builds the frameworks.
-  - **Android:** Gradle resolves `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.3-bfa` from Maven Central.
+- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.1` (`ad87acb`) to `v0.3.0-beta.7-upstream-dev-bfa.5` (`0a9d352`). It is no longer installed from a local bundle:
+  - **iOS:** `postinstall` downloads the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.5-bfa), verifies it and builds the frameworks.
+  - **Android:** Gradle resolves `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.5-bfa` from Maven Central.
+  - bfa.5 is rebased on newer upstream rgb-lib (RGB 0.11.2-rc.2). Behaviour visible through the SDK: coin selection skips UTXOs that would exceed `maxAllocationsPerUtxo`; operations whose PSBT is too large fail before broadcast; incoming consignments that pay an invoice more than one allocation, or would freeze the receiving UTXO, are refused; the reject list is checked for every operation; operations must expire at least the clock-skew margin in the future.
+  - rgb-lib adds IFA/BFA links. RGB_L1 history maps the `Link` transfer kind and `LinkRight` assignments, and `getAssetMetadata()` returns `linkedFromContract` / `linkedToContract`. Issuing linked assets and the `link` operation are not exposed yet; `issueAssetIfa()` issues without a link right, as before.
   - `--from` and `RGB_LIB_BINDINGS_DIR` are removed. RGB_L1 now needs iOS 16.0; on Android it is available on `arm64-v8a` and `x86_64` only.
 - iOS: the podspec ships `PrivacyInfo.xcprivacy` (file timestamp `C617.1`, disk space `E174.1`) for the required-reason APIs the native libraries call. When the rgb-lib iOS bindings are installed, the pod requires iOS 16.0.
 - rgb-lib `getRuntimeInfo` reports the version and source revision from the artifact's own `version.json`, not from constants in the bridge, so a mismatched native library is detected.

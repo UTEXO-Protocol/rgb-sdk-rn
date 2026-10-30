@@ -3,8 +3,8 @@ import { getNetworkDefaults } from '../network-endpoints';
 import { WalletBackendError } from '../wallet-errors';
 
 /** Release of the Swift and Kotlin bindings, as written in their `version.json`. */
-export const RGB_LIB_VERSION = '0.3.0-beta.7-upstream-dev-bfa.3-bfa';
-export const RGB_LIB_REVISION = '4b78c2285b7e9d719dd5b465d186b2fe8ad6450b';
+export const RGB_LIB_VERSION = '0.3.0-beta.7-upstream-dev-bfa.5-bfa';
+export const RGB_LIB_REVISION = '0a9d352f2690902df2b6fae9bca1a6c13c3354d4';
 export const RGB_LIB_BRIDGE_VERSION = 4;
 
 export interface RgbLibWalletParams {

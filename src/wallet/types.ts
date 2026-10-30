@@ -135,6 +135,10 @@ export interface AssetMetadata {
   knownCirculatingSupply: string;
   /** RGB_L1 only. */
   rejectListUrl?: string;
+  /** RGB_L1 only: the contract an IFA/BFA asset was linked from. */
+  linkedFromContract?: string;
+  /** RGB_L1 only: the contract an IFA/BFA asset was linked to. */
+  linkedToContract?: string;
 }
 
 /** `restoreFromBackup()` input. Both paths are absolute. */

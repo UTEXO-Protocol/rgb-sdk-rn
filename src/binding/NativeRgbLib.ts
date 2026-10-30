@@ -135,6 +135,9 @@ export type NativeAssetMetadata = {
   ticker: string | null;
   details: string | null;
   rejectListUrl: string | null;
+  /** IFA/BFA link: the contract this asset was linked from, or to. */
+  linkedFromContract: string | null;
+  linkedToContract: string | null;
 };
 export type NativeIdentity = {
   id: string;

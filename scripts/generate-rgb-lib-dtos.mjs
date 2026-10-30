@@ -84,6 +84,8 @@ const records = {
     ticker: 'string?',
     details: 'string?',
     rejectListUrl: 'string?',
+    linkedFromContract: 'string?',
+    linkedToContract: 'string?',
   },
   InvoiceData: {
     recipientId: 'string',
@@ -171,6 +173,7 @@ func rgbDto(_ v: RGBLib.Assignment) -> [String: Any] {
   case .any: return ["type":"Any","amount":NSNull()]
   case .nonFungible: return ["type":"NonFungible","amount":NSNull()]
   case .mintRight: return ["type":"MintRight","amount":NSNull()]
+  case .linkRight: return ["type":"LinkRight","amount":NSNull()]
   // JS rejects an unknown assignment type instead of guessing one.
   @unknown default: return ["type":rgbEnum(v),"amount":NSNull()]
   }
@@ -194,6 +197,7 @@ internal fun rgbDto(v: Assignment): Map<String, Any?> = when(v) {
   Assignment.Any -> mapOf("type" to "Any", "amount" to null)
   Assignment.NonFungible -> mapOf("type" to "NonFungible", "amount" to null)
   Assignment.MintRight -> mapOf("type" to "MintRight", "amount" to null)
+  Assignment.LinkRight -> mapOf("type" to "LinkRight", "amount" to null)
 }
 `;
 for (const [name, fields] of Object.entries(records)) {

@@ -275,7 +275,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       "issueAssetNia" -> rgbDto(w.issueAssetNia(p.getString("ticker"),p.getString("name"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() }))
       "issueAssetCfa" -> rgbDto(w.issueAssetCfa(p.getString("name"),optional(p,"details"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() },optional(p,"filePath")))
       "issueAssetUda" -> rgbDto(w.issueAssetUda(p.getString("ticker"),p.getString("name"),optional(p,"details"),number(p,"precision",18).toUByte(),optional(p,"mediaFilePath"),strings(p,"attachmentsFilePaths")))
-      "issueAssetIfa" -> rgbDto(w.issueAssetIfa(p.getString("ticker"),p.getString("name"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() },strings(p,"inflationAmounts").map { it.toULong() },optional(p,"rejectListUrl")))
+      "issueAssetIfa" -> rgbDto(w.issueAssetIfa(p.getString("ticker"),p.getString("name"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() },strings(p,"inflationAmounts").map { it.toULong() },optional(p,"rejectListUrl"),false,null))
       "inflate" -> rgbDto(w.inflate(online(s),p.getString("assetId"),strings(p,"amounts").map { it.toULong() },amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte()))
       "burn" -> rgbDto(w.burn(online(s),p.getString("assetId"),amount(p,"amount"),optional(p,"burnReason"),amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte()))
       "failTransfers" -> w.failTransfers(online(s),if(p.isNull("batchTransferIdx")) null else number(p,"batchTransferIdx",Int.MAX_VALUE.toLong()).toInt(),p.getBoolean("noAssetOnly"),p.getBoolean("skipSync"))

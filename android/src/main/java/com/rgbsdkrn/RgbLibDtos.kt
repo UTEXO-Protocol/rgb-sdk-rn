@@ -16,6 +16,7 @@ internal fun rgbDto(v: Assignment): Map<String, Any?> = when(v) {
   Assignment.Any -> mapOf("type" to "Any", "amount" to null)
   Assignment.NonFungible -> mapOf("type" to "NonFungible", "amount" to null)
   Assignment.MintRight -> mapOf("type" to "MintRight", "amount" to null)
+  Assignment.LinkRight -> mapOf("type" to "LinkRight", "amount" to null)
 }
 internal fun rgbDto(v: Balance): Map<String, Any?> {
   val result = mutableMapOf<String, Any?>(
@@ -162,6 +163,8 @@ internal fun rgbDto(v: Metadata): Map<String, Any?> {
     "ticker" to v.ticker?.let { it },
     "details" to v.details?.let { it },
     "rejectListUrl" to v.rejectListUrl?.let { it },
+    "linkedFromContract" to v.linkedFromContract?.let { it },
+    "linkedToContract" to v.linkedToContract?.let { it },
   )
   return result
 }

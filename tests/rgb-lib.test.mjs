@@ -1104,6 +1104,29 @@ test('history preserves new statuses, mint rights, exact amounts and real batch 
     code('INVALID_NATIVE_RESPONSE')
   );
 });
+test('history maps link transfers and link rights from rgb-lib bfa.5', () => {
+  const transfer = map.transfer({
+    idx: 5,
+    batchTransferIdx: 20,
+    createdAt: '100',
+    updatedAt: '101',
+    status: 'Settled',
+    requestedAssignment: null,
+    assignments: [{ type: 'LinkRight', amount: null }],
+    kind: 'Link',
+    txid: 'txid',
+    recipientId: null,
+    receiveUtxo: null,
+    changeUtxo: null,
+    expiration: null,
+    transportEndpoints: [],
+    invoiceString: null,
+    consignmentPath: null,
+  });
+  assert.equal(transfer.kind, 'Link');
+  assert.deepEqual(transfer.assignments, [{ type: 'LinkRight' }]);
+  assert.equal(transfer.amountBaseUnits, undefined);
+});
 test('configuration normalizes transport URLs and compares auth independently of property order', () => {
   const a = resolveRgbLibConfig({
     ...config,
@@ -1621,6 +1644,8 @@ test('rgb-lib exposes native read options, issuance, metadata and maintenance th
       ticker: 'IFA',
       details: null,
       rejectListUrl: 'https://reject.example',
+      linkedFromContract: 'rgb:linked-from',
+      linkedToContract: null,
     }),
     issueAssetCfa: record(
       'issueAssetCfa',
@@ -1654,6 +1679,8 @@ test('rgb-lib exposes native read options, issuance, metadata and maintenance th
     maxSupply: '18446744073709551615',
     knownCirculatingSupply: '5',
     rejectListUrl: 'https://reject.example',
+    linkedFromContract: 'rgb:linked-from',
+    linkedToContract: undefined,
   });
   const cfa = await wallet.issueAssetCfa({
     name: 'Cfa',

@@ -30,18 +30,9 @@ React Native SDK for on-device RGB assets, with on-chain operations via **rgb-li
 npm install @utexo/rgb-sdk-rn
 ```
 
-### RLN (`RGB_LN`)
-
-RLN is switched by `rgbSdk.rln` in the SDK's `package.json`; it is `false` in
-this release. When it is `true`, `postinstall` downloads
-`RGBLightningNode.xcframework` on iOS, and Gradle resolves
-`com.utexo:rgb-lightning-node-android` from Maven Central on Android. When it is
-`false`, neither is installed and the RLN native sources are left out of the
-build.
-
 ### rgb-lib (`RGB_L1`)
 
-rgb-lib bindings are also installed by default, at the version pinned in
+rgb-lib bindings are installed by default, at the version pinned in
 [`src/bindings/rgb-lib/manifest.json`](src/bindings/rgb-lib/manifest.json):
 
 | Platform | Source | Integration |
@@ -89,6 +80,15 @@ After native setup, run CocoaPods on iOS and rebuild the application:
 A JavaScript reload cannot load new native bindings. Missing rgb-lib bindings
 cause `RGB_L1` initialization to fail with `NATIVE_BACKEND_UNAVAILABLE`.
 
+### RLN (`RGB_LN`)
+
+RLN is switched by `rgbSdk.rln` in the SDK's `package.json`; it is `false` in
+this release. When it is `true`, `postinstall` downloads
+`RGBLightningNode.xcframework` on iOS, and Gradle resolves
+`com.utexo:rgb-lightning-node-android` from Maven Central on Android. When it is
+`false`, neither is installed and the RLN native sources are left out of the
+build.
+
 ## Quick start
 
 ### Wallet isolation
@@ -98,37 +98,9 @@ cause `RGB_L1` initialization to fail with `NATIVE_BACKEND_UNAVAILABLE`.
 > storage directories. Separate directories alone are not sufficient. The app
 > must enforce this separation; selecting another protocol does not migrate wallet state.
 
-### RLN (`RGB_LN`)
+### rgb-lib (`RGB_L1`, default)
 
-The existing two-argument constructor and signer API stay the same:
-
-```typescript
-import { UTEXOWallet, PasswordRLNSigner, generateKeys } from '@utexo/rgb-sdk-rn';
-
-const network = 'utexo';
-// First use only: save these credentials in secure storage before init().
-// On later launches, read the saved credentials instead of generating new keys.
-const keys = await generateKeys(network);
-const wallet = new UTEXOWallet(
-  {
-    storageDirPath: '/path/to/rln-storage',
-    daemonListeningPort: 9735,
-    ldkPeerListeningPort: 9736,
-    network,
-  },
-  new PasswordRLNSigner('my-secure-password', keys.mnemonic),
-);
-
-await wallet.init();
-await wallet.unlock({}); // use network defaults, or pass IRLNUnlockParams
-```
-
-This is the first-run path. For reopening saved profiles and handling an already
-initialized RLN node, see the [session example](examples/dual-backend.ts).
-
-### rgb-lib (`RGB_L1`)
-
-`keys` reads the wallet mnemonic; see [RGB_L1 keys](#rgb_l1-keys) for every
+`keys` is the wallet mnemonic; see [RGB_L1 keys](#rgb_l1-keys) for every
 form, including watch-only. Configure an indexer and proxy compatible with the
 pinned rgb-lib release; do not assume RLN's proxy supports the same version.
 
@@ -138,12 +110,16 @@ on custom signet (`sbc`) cannot reopen as standard signet; preserve their data
 and use a separate new profile for testing. Generate new invoices after switching.
 
 ```typescript
-import * as SecureStore from 'expo-secure-store';
-import { UTEXOWallet } from '@utexo/rgb-sdk-rn';
+import { UTEXOWallet, generateKeys } from '@utexo/rgb-sdk-rn';
+
+const network = 'utexo';
+// First use only: save the mnemonic in secure storage before init().
+// On later launches, read the saved mnemonic instead of generating new keys.
+const { mnemonic } = await generateKeys(network);
 
 const onchain = new UTEXOWallet({
-  params: { network: 'utexo', storageDirPath: '/path/to/rgb-lib-storage' },
-  keys: () => SecureStore.getItemAsync('rgb-lib-mnemonic'),
+  params: { network, storageDirPath: '/path/to/rgb-lib-storage' },
+  keys: mnemonic,
 });
 
 await onchain.init();
@@ -168,6 +144,38 @@ the network defaults in `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS`
 
 Other networks use the `@utexo/rgb-sdk-core` defaults. rgb-lib needs a proxy
 that implements protocol 1.0.
+
+### RLN (`RGB_LN`)
+
+> RLN is temporarily disabled in this release; this example needs
+> `rgbSdk.rln: true` (see [Install](#rln-rgb_ln)).
+
+RLN must be selected with `protocol: 'RGB_LN'`:
+
+```typescript
+import { UTEXOWallet, PasswordRLNSigner, generateKeys } from '@utexo/rgb-sdk-rn';
+
+const network = 'utexo';
+// First use only: save these credentials in secure storage before init().
+// On later launches, read the saved credentials instead of generating new keys.
+const keys = await generateKeys(network);
+const wallet = new UTEXOWallet({
+  protocol: 'RGB_LN',
+  params: {
+    storageDirPath: '/path/to/rln-storage',
+    daemonListeningPort: 9735,
+    ldkPeerListeningPort: 9736,
+    network,
+  },
+  signer: new PasswordRLNSigner('my-secure-password', keys.mnemonic),
+});
+
+await wallet.init();
+await wallet.unlock({}); // use network defaults, or pass IRLNUnlockParams
+```
+
+This is the first-run path. For reopening saved profiles and handling an already
+initialized RLN node, see the [session example](examples/dual-backend.ts).
 
 ### On-chain operations (both modes)
 
@@ -257,8 +265,8 @@ rgb-lib takes `keys` instead.
 
 | `keys` | Mode |
 |--------|------|
-| `'word1 word2 …'` | Full. The SDK keeps the string in memory for the wallet's lifetime |
-| `() => SecureStore.getItemAsync('mnemonic')` | Full. Recommended: read on each `init()` / `reinit()` |
+| `mnemonic` (string) | Full. The SDK keeps the string in memory for the wallet's lifetime |
+| `() => SecureStore.getItemAsync('mnemonic')` | Full. Read on each `init()` / `reinit()` and not kept by the SDK |
 | `{ mnemonic }` or `{ getMnemonic() { … } }` | Full; `getMnemonic` is called on the object, so service classes keep `this` |
 | either of the above plus `accountXpubVanilla`, `accountXpubColored`, `masterFingerprint` | Full. Native checks that the keys match the mnemonic |
 | `{ accountXpubVanilla, accountXpubColored, masterFingerprint }` | Watch-only |
@@ -521,7 +529,7 @@ await restoreFromBackup({
 });
 const restored = new UTEXOWallet({
   params: { network: 'utexo', storageDirPath: '/path/to/restored-storage' },
-  keys: () => SecureStore.getItemAsync('rgb-lib-mnemonic'),
+  keys: mnemonic, // the mnemonic of the backed-up wallet
 });
 await restored.init();
 ```
@@ -540,8 +548,9 @@ RLN recovery flow; it does not migrate the wallet to rgb-lib.
 Set `vssUrl` (and optionally the two flags) in the `UTEXOWalletNodeParams` constructor. VSS state is synced automatically as the node runs — no extra calls needed during normal operation.
 
 ```typescript
-const wallet = new UTEXOWallet(
-  {
+const wallet = new UTEXOWallet({
+  protocol: 'RGB_LN',
+  params: {
     storageDirPath: storageDir,
     daemonListeningPort: 9735,
     ldkPeerListeningPort: 9736,
@@ -550,8 +559,8 @@ const wallet = new UTEXOWallet(
     vssAllowHttp: false,           // set true if vssUrl starts with http://
     vssAllowEmptyRestore: false,   // keep false: true starts empty if the restore fails
   },
-  new PasswordRLNSigner('my-password', keys.mnemonic),
-);
+  signer: new PasswordRLNSigner('my-password', keys.mnemonic),
+});
 
 await wallet.init();
 await wallet.unlock(unlockParams);
@@ -563,8 +572,9 @@ await wallet.unlock(unlockParams);
 To restore on a new device (or after wiping local storage), create a fresh wallet pointing at the **same** VSS URL with the **same** credentials, then call `vssClearFence()` between `init()` and `unlock()`. The fence is a single-writer lock the old node left on the VSS — clearing it allows the new node to take ownership and pull the latest state.
 
 ```typescript
-const walletRestored = new UTEXOWallet(
-  {
+const walletRestored = new UTEXOWallet({
+  protocol: 'RGB_LN',
+  params: {
     storageDirPath: newEmptyStorageDir,   // fresh directory — no existing node state
     daemonListeningPort: 9735,
     ldkPeerListeningPort: 9736,
@@ -573,8 +583,8 @@ const walletRestored = new UTEXOWallet(
     vssAllowHttp: false,
     vssAllowEmptyRestore: false,
   },
-  new PasswordRLNSigner('my-password', keys.mnemonic),
-);
+  signer: new PasswordRLNSigner('my-password', keys.mnemonic),
+});
 
 await walletRestored.init();
 await walletRestored.vssClearFence('my-password');  // release stale lock before unlock
@@ -641,7 +651,7 @@ transfers and Lightning Address payments. Create it **before `init()` or `reinit
 so peer discovery and virtual-channel configuration reach the node:
 
 ```typescript
-const wallet = new UTEXOWallet(nodeParams, signer);
+const wallet = new UTEXOWallet({ protocol: 'RGB_LN', params: nodeParams, signer });
 const lsp = await wallet.createLsp();
 await wallet.init();
 await wallet.unlock(unlockParams);

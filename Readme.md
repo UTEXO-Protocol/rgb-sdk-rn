@@ -236,30 +236,14 @@ rgb-lib takes `keys` instead.
 
 ### RGB_L1 keys
 
-| `keys`                                                                                                                                                    | Mode                                                                         |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `mnemonic` (string)                                                                                                                                       | Full. The SDK keeps the string in memory for the wallet's lifetime           |
-| `() => SecureStore.getItemAsync('mnemonic')`                                                                                                              | Full. Read when opening each new native session; not cached between sessions |
-| `{ mnemonic }` or `{ getMnemonic() { … } }`                                                                                                               | Full; `getMnemonic` is called on the object, so service classes keep `this`  |
-| `{ mnemonic, accountXpubVanilla, accountXpubColored, masterFingerprint }` or `{ getMnemonic, accountXpubVanilla, accountXpubColored, masterFingerprint }` | Full. Native checks that all three public-key fields match the mnemonic      |
-| `{ accountXpubVanilla, accountXpubColored, masterFingerprint }`                                                                                           | Watch-only                                                                   |
+`keys` accepts a mnemonic string, a sync/async reader such as
+`() => SecureStore.getItemAsync('mnemonic')`, or an object with `getMnemonic()`.
 
-The mode follows the configuration, never the reader's result. A reader that
-returns `null`, `undefined` or a blank string, or that throws, rejects `init()`
-with `WalletBackendError` `KEYS_UNAVAILABLE`; a thrown error is kept as `cause`.
-`SDKError.toJSON()` includes `cause.message`, so do not put secrets in reader
-errors. The SDK does not cache what the reader returns between sessions. Invalid
-`keys` (wrong type, incomplete public keys, both `mnemonic` and `getMnemonic`)
-throw `INVALID_CONFIG` from the constructor.
+Readers run on each new session. An empty or failed read rejects `init()` with
+`KEYS_UNAVAILABLE`.
 
-A watch-only wallet reads balances, addresses, assets and transfers, syncs and
-receives. Operations that sign (`send`, `sendBtc`, `createUtxos`, `drainTo` and
-others rgb-lib refuses without a mnemonic) reject with `UNSUPPORTED_CAPABILITY`.
-Take the public keys from `generateKeys()` or `deriveKeysFromMnemonic()` for the
-same network: account xpubs must be `xpub` on `mainnet` and `tpub` elsewhere,
-and the SDK cannot check that they were derived for the wallet's
-`witnessVersion`. The same keys give the same wallet `id` in both modes, so a
-watch-only profile can later be opened with its mnemonic.
+Public keys alone open a watch-only wallet. See
+[`RgbLibKeys`](src/wallet/rgb-lib/key-provider.ts) for all options.
 
 ### Lifecycle
 

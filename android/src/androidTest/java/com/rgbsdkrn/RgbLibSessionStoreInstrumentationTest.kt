@@ -172,4 +172,29 @@ class RgbLibSessionStoreInstrumentationTest {
       root.deleteRecursively()
     }
   }
+
+  @Test
+  fun rejected_keys_leave_the_directory_reusable() {
+    val root = File(context.cacheDir, "rgb-lib-rejected-keys-${System.nanoTime()}")
+    val params = mapOf<String, Any?>(
+      "dataDir" to root.path, "network" to "regtest",
+      "witnessVersion" to "taproot", "maxAllocationsPerUtxo" to 5.0, "reuseAddresses" to false
+    )
+    try {
+      // rgb-lib rejects these keys after the bridge has written the profile.
+      val error = runCatching {
+        store.execute("openWallet", params + mapOf(
+          "accountXpubVanilla" to "tpubNotAValidKey", "accountXpubColored" to "tpubNotAValidKey",
+          "masterFingerprint" to "abcdef12"
+        ))
+      }.exceptionOrNull()
+      assertTrue("invalid public keys opened a wallet", error != null)
+      assertTrue("rejected keys left a wallet profile", !root.resolve("rgb-sdk-profile.json").exists())
+      val handle = store.execute("openWallet", params + ("mnemonic" to
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about")) as String
+      store.execute("closeWallet", mapOf("handle" to handle))
+    } finally {
+      root.deleteRecursively()
+    }
+  }
 }

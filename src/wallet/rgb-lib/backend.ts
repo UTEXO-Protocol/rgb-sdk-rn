@@ -72,6 +72,11 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     this.params = Object.freeze({ ...params });
   }
 
+  /** Opened from public keys alone: it cannot sign. */
+  private get watchOnly(): boolean {
+    return !this.keys.readMnemonic;
+  }
+
   private assertAccepting() {
     if (this.disposeRequested || this.disposed) {
       throw new WalletBackendError(
@@ -713,8 +718,12 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
 
   readonly bfa: OnchainWalletBackend<RgbLibUnlockParams>['bfa'] = {
     getBfaCapabilities: async () => ({
+      // Burning signs a transaction: a watch-only wallet cannot do it.
       burn:
-        !this.disposed && !this.stopRequested && (this.runtime?.burn ?? false),
+        !this.disposed &&
+        !this.stopRequested &&
+        !this.watchOnly &&
+        (this.runtime?.burn ?? false),
       consignment:
         !this.disposed &&
         !this.stopRequested &&
@@ -725,6 +734,13 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     burn: (params) =>
       this.input('burn', true, params, async (native, handle, params) => {
         validateBurnParams(params);
+        if (this.watchOnly)
+          throw new WalletBackendError(
+            'UNSUPPORTED_CAPABILITY',
+            'burn needs the mnemonic; this RGB_L1 wallet was opened watch-only from public keys',
+            'burn',
+            'RGB_L1'
+          );
         if (!this.runtime?.burn)
           throw new WalletBackendError(
             'UNSUPPORTED_CAPABILITY',

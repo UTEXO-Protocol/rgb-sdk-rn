@@ -1,3 +1,4 @@
+import { HDKey } from '@scure/bip32';
 import { WalletBackendError } from '../wallet-errors';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -69,6 +70,23 @@ function isBlank(value: string) {
   return value.trim().length === 0;
 }
 
+// BIP32 version bytes: xpub/xprv on mainnet, tpub/tprv elsewhere.
+const MAINNET_VERSIONS = { private: 0x0488ade4, public: 0x0488b21e };
+const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587cf };
+
+/** Base58check, version, length and curve point; rejects private keys. */
+function isPublicExtendedKey(value: string, mainnet: boolean): boolean {
+  try {
+    const key = HDKey.fromExtendedKey(
+      value,
+      mainnet ? MAINNET_VERSIONS : TESTNET_VERSIONS
+    );
+    return !key.privateKey && !!key.publicKey;
+  } catch {
+    return false;
+  }
+}
+
 function resolvePublicKeys(
   keys: Record<string, unknown>,
   network: string
@@ -97,12 +115,19 @@ function resolvePublicKeys(
   }
   // Account xpubs carry the network in their prefix; rgb-lib cannot check
   // that they were derived for the selected witness version.
-  const prefix = network === 'mainnet' ? 'xpub' : 'tpub';
+  const mainnet = network === 'mainnet';
+  const prefix = mainnet ? 'xpub' : 'tpub';
   for (const field of ['accountXpubVanilla', 'accountXpubColored'] as const) {
-    if (!(keys[field] as string).startsWith(prefix)) {
+    const value = keys[field] as string;
+    if (!value.startsWith(prefix)) {
       invalidKeys(
         `RGB_L1 keys.${field} must be a ${prefix} for network ${network}`
       );
+    }
+    // Decode fully here: native writes the wallet profile before rgb-lib
+    // checks the keys, so a bad key must never reach it.
+    if (!isPublicExtendedKey(value, mainnet)) {
+      invalidKeys(`RGB_L1 keys.${field} is not a valid ${prefix}`);
     }
   }
   return {

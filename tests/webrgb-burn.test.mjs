@@ -420,6 +420,50 @@ test('pre-broadcast funding errors cancel the burn instead of leaving it pending
   await assert.rejects(f.controller().burnAsset(args()));
   assert.equal((await f.operations.records())[0].state, 'pending');
 });
+test('a capability refusal from burn cancels the record and does not block the next burn', async () => {
+  const f = fixture();
+  const burn = f.wallet.burn;
+  // e.g. an RGB_L1 wallet opened watch-only: rgb-lib refuses before signing.
+  f.wallet.burn = async () => {
+    throw Object.assign(new Error('burn needs the mnemonic'), {
+      code: 'UNSUPPORTED_CAPABILITY',
+    });
+  };
+  await assert.rejects(f.controller().burnAsset(args()), /needs the mnemonic/);
+  const [record] = await f.operations.records();
+  assert.equal(record.state, 'cancelled');
+  f.wallet.burn = burn;
+  await f.controller().burnAsset(args());
+  assert.equal(f.calls.length, 1);
+});
+test('BurnOperations refuses a wallet without burn before writing a record', async () => {
+  const f = fixture();
+  f.wallet.getBfaCapabilities = async () => ({
+    burn: false,
+    consignment: true,
+    bfa: true,
+  });
+  await assert.rejects(
+    f.operations.execute(
+      {
+        assetId: args().assetId,
+        amount: '1',
+        burnRecipient: encodeEvmBurnRecipient(args().burnRecipient.address),
+        feeRate: 2,
+        minConfirmations: 3,
+      },
+      {
+        origin: 'https://mint.example',
+        network: 'utexo',
+        payout: args().burnRecipient,
+      },
+      () => {}
+    ),
+    { code: 'UNSUPPORTED_CAPABILITY' }
+  );
+  assert.deepEqual(await f.operations.records(), []);
+  assert.equal(f.calls.length, 0);
+});
 test('reconciliation requires a matching burn and independently verified proof', async () => {
   const f = fixture();
   await f.store.write({

@@ -197,6 +197,7 @@ public final class RgbLibSwiftHelper: NSObject {
     let lease = try RgbLibLease(p.string("dataDir"))
     let marker = lease.root.appendingPathComponent(rgbProfileName)
     var profile = expected
+    var created = false
     if FileManager.default.fileExists(atPath: marker.path) {
       guard let stored = try JSONSerialization.jsonObject(with: Data(contentsOf: marker)) as? [String: Any],
         expected.allSatisfy({ key, value in (stored[key] as? NSObject)?.isEqual(value) == true }) else {
@@ -208,13 +209,27 @@ public final class RgbLibSwiftHelper: NSObject {
         throw RgbBridgeFailure(code: "WALLET_STORAGE_NOT_EMPTY", message: "Use a separate empty wallet directory")
       }
       try JSONSerialization.data(withJSONObject: expected).write(to: marker, options: .atomic)
+      created = true
     }
-    let wallet = try RGBLib.Wallet(
-      walletData: RGBLib.WalletData(dataDir: lease.root.path, bitcoinNetwork: rgbNetworkFromName(net), databaseType: .sqlite, maxAllocationsPerUtxo: max, supportedSchemas: [.nia, .uda, .cfa, .ifa, .bfa]),
-      keys: RGBLib.SinglesigKeys(accountXpubVanilla: keys.vanilla, accountXpubColored: keys.colored, vanillaKeychain: nil, masterFingerprint: keys.fingerprint, mnemonic: mnemonic, witnessVersion: witness)
-    )
-    let session = RgbLibSession(wallet: wallet, lease: lease, profile: profile, reuse: try p.bool("reuseAddresses"))
-    try session.save()
+    let session: RgbLibSession
+    do {
+      let wallet = try RGBLib.Wallet(
+        walletData: RGBLib.WalletData(dataDir: lease.root.path, bitcoinNetwork: rgbNetworkFromName(net), databaseType: .sqlite, maxAllocationsPerUtxo: max, supportedSchemas: [.nia, .uda, .cfa, .ifa, .bfa]),
+        keys: RGBLib.SinglesigKeys(accountXpubVanilla: keys.vanilla, accountXpubColored: keys.colored, vanillaKeychain: nil, masterFingerprint: keys.fingerprint, mnemonic: mnemonic, witnessVersion: witness)
+      )
+      session = RgbLibSession(wallet: wallet, lease: lease, profile: profile, reuse: try p.bool("reuseAddresses"))
+      try session.save()
+    } catch {
+      // The directory was empty before this call: return it to that state, or
+      // the profile written above would bind it to keys rgb-lib rejected.
+      if created {
+        let fm = FileManager.default
+        for name in (try? fm.contentsOfDirectory(atPath: lease.root.path)) ?? [] where name != rgbLockName {
+          try? fm.removeItem(at: lease.root.appendingPathComponent(name))
+        }
+      }
+      throw error
+    }
     let handle = UUID().uuidString
     registry.lock(); sessions[handle] = session; registry.unlock()
     return handle

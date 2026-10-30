@@ -1,6 +1,7 @@
 /* eslint no-unused-vars: "off", "@typescript-eslint/no-unused-vars": "error" -- TypeScript signatures. */
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import type { BurnParams, BurnResult } from '../types';
+import { WalletBackendError } from '../wallet-errors';
 import { validateBurnParams } from './validation';
 import { encodeBurnRecipient } from './recipient';
 import {
@@ -108,6 +109,8 @@ function validateResult(
 
 interface BurnWallet {
   burn(params: BurnParams): Promise<BurnResult>;
+  /** When present, a wallet that reports `burn: false` is refused before any record. */
+  getBfaCapabilities?(): Promise<{ burn: boolean }>;
   listTransfers(
     assetId: string
   ): Promise<{ txid?: string | null; kind: string }[]>;
@@ -174,6 +177,16 @@ export class BurnOperations {
     };
     return this.exclusive(async () => {
       validateBurnParams(request);
+      // e.g. a watch-only RGB_L1 wallet: refuse before journaling anything.
+      if (
+        this.wallet.getBfaCapabilities &&
+        !(await this.wallet.getBfaCapabilities()).burn
+      )
+        throw new WalletBackendError(
+          'UNSUPPORTED_CAPABILITY',
+          'This wallet cannot burn',
+          'burn'
+        );
       await this.flush();
       if ((await this.records()).some((record) => record.state === 'pending'))
         throw new Error(
@@ -210,11 +223,14 @@ export class BurnOperations {
           // These native errors occur while funding the PSBT, before broadcast.
           // RLN reports its own codes; RGB Lib maps every Insufficient* variant
           // (funds, assets, allocation slots) to INSUFFICIENT_FUNDS.
+          // UNSUPPORTED_CAPABILITY (including rgb-lib WatchOnly) is refused
+          // before anything is signed, so nothing can have been broadcast.
           const unfunded =
             !nativeReturned &&
             (failure?.code === 'InsufficientFunds' ||
               failure?.code === 'NoAvailableUtxos' ||
-              failure?.code === 'INSUFFICIENT_FUNDS');
+              failure?.code === 'INSUFFICIENT_FUNDS' ||
+              failure?.code === 'UNSUPPORTED_CAPABILITY');
           await this.save({
             ...record,
             state: !invoked || unfunded ? 'cancelled' : 'pending',

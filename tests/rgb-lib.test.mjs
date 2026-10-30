@@ -25,6 +25,7 @@ import {
   DEFAULT_TRANSPORT_ENDPOINTS,
 } from '../lib/module/wallet/network-endpoints.js';
 import * as rlnDefaults from '../lib/module/wallet/rln/network-defaults.js';
+import { HDKey } from '@scure/bip32';
 
 const params = { network: 'regtest', storageDirPath: '/wallets/rgb-lib/test' };
 const config = {
@@ -1844,9 +1845,16 @@ test('RGB_L1 explicit endpoints override the defaults; without a network they st
 
 // ── keys forms ───────────────────────────────────────────────────────────────
 
+// Real account keys: the SDK decodes them fully before native sees them.
+const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587cf };
+const MAINNET_VERSIONS = { private: 0x0488ade4, public: 0x0488b21e };
+const testKey = (byte, versions = TESTNET_VERSIONS) =>
+  HDKey.fromMasterSeed(new Uint8Array(32).fill(byte), versions);
+const TPUB_VANILLA = testKey(1).publicExtendedKey;
+const TPUB_COLORED = testKey(2).publicExtendedKey;
 const PUBLIC_KEYS = {
-  accountXpubVanilla: 'tpubVanilla',
-  accountXpubColored: 'tpubColored',
+  accountXpubVanilla: TPUB_VANILLA,
+  accountXpubColored: TPUB_COLORED,
   masterFingerprint: 'ABCDEF12',
 };
 
@@ -1878,7 +1886,7 @@ test('keys accepts a mnemonic string, a sync or async function, and a provider o
 });
 
 test('keys with a mnemonic and public keys send both; public keys alone open watch-only', async () => {
-  const sent = ['tpubVanilla', 'tpubColored', 'abcdef12'];
+  const sent = [TPUB_VANILLA, TPUB_COLORED, 'abcdef12'];
   assert.deepEqual(await openWith({ mnemonic: 'words', ...PUBLIC_KEYS }), [
     'words',
     ...sent,
@@ -1972,7 +1980,7 @@ test('invalid keys are rejected at construction with INVALID_CONFIG', () => {
   reject({ getMnemonic: 'words' }, /getMnemonic must be a function/);
   reject({ mnemonic: 'a', getMnemonic: () => 'b' }, /not both/);
   reject(
-    { accountXpubVanilla: 'tpubVanilla' },
+    { accountXpubVanilla: TPUB_VANILLA },
     /missing accountXpubColored, masterFingerprint/
   );
   reject({ mnemonic: 'words', masterFingerprint: 'abcdef12' }, /incomplete/);
@@ -1981,6 +1989,57 @@ test('invalid keys are rejected at construction with INVALID_CONFIG', () => {
     { ...PUBLIC_KEYS, accountXpubColored: 'xpubColored' },
     /must be a tpub for network regtest/
   );
+  // Native writes the wallet profile before rgb-lib checks the keys, so any
+  // key that does not decode must stop here.
+  const tpub = TPUB_COLORED;
+  const broken = tpub.slice(0, -1) + (tpub.endsWith('a') ? 'b' : 'a');
+  for (const bad of ['tpubNotAValidKey', broken]) {
+    reject(
+      { ...PUBLIC_KEYS, accountXpubColored: bad },
+      /accountXpubColored is not a valid tpub/
+    );
+  }
+  assert.throws(
+    () =>
+      new RgbLibWallet(
+        { ...params, network: 'mainnet' },
+        { ...PUBLIC_KEYS, accountXpubVanilla: 'xpubNotAValidKey' },
+        () => native
+      ),
+    /accountXpubVanilla is not a valid xpub/
+  );
+  // A real mainnet xpub is accepted on mainnet.
+  new RgbLibWallet(
+    { ...params, network: 'mainnet' },
+    {
+      accountXpubVanilla: testKey(1, MAINNET_VERSIONS).publicExtendedKey,
+      accountXpubColored: testKey(2, MAINNET_VERSIONS).publicExtendedKey,
+      masterFingerprint: 'abcdef12',
+    },
+    () => native
+  );
+});
+
+test('a watch-only wallet reports burn unavailable and refuses it before native', async () => {
+  const { native, calls } = fixture();
+  const wallet = new RgbLibWallet(params, PUBLIC_KEYS, () => native);
+  await wallet.init();
+  await wallet.unlock(config);
+  const caps = await wallet.getBfaCapabilities();
+  assert.equal(caps.burn, false);
+  assert.equal(caps.consignment, true);
+  await assert.rejects(wallet.burn(burnParams), code('UNSUPPORTED_CAPABILITY'));
+  assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'burn'));
+  // The same wallet with a mnemonic can burn.
+  const signing = new RgbLibWallet(
+    params,
+    { mnemonic: 'words', ...PUBLIC_KEYS },
+    () => fixture().native
+  );
+  await signing.init();
+  assert.equal((await signing.getBfaCapabilities()).burn, true);
+  await signing.dispose();
+  await wallet.dispose();
 });
 
 test('watch-only signing failures map to UNSUPPORTED_CAPABILITY', () => {

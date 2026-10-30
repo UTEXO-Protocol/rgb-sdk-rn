@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Stage 1 checks the TurboModule dispatcher on the host with a fake store.
-// Stage 2 requires built RGB Lib/RLN frameworks and an installed iOS Simulator runtime.
+// Stage 2 requires the RGB Lib frameworks (plus RLN when package.json enables it)
+// and an installed iOS Simulator runtime.
 // Creates and removes its own simulator; never uses an existing user's device.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -78,9 +79,25 @@ try {
   const triple = `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-ios${runtime.version}-simulator`;
   const object = path.join(tmp, 'smoke.o');
   const binary = path.join(tmp, 'rgb-uniffi-smoke');
+  // RLN is linked in only when package.json enables it, as in the podspec.
+  // Then the smoke also proves both native libraries coexist in one binary.
+  const rlnEnabled =
+    JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).rgbSdk
+      ?.rln === true;
   const rln = path.join(
     root,
     'ios/RGBLightningNode.xcframework/ios-arm64_x86_64-simulator'
+  );
+  if (rlnEnabled && !fs.existsSync(path.join(rln, 'librgb_lightning_node.a')))
+    throw new Error(
+      'RLN is enabled but RGBLightningNode.xcframework is missing. Run `node scripts/download-rln-bindings.mjs` first.'
+    );
+  const rlnCompile = rlnEnabled
+    ? ['-DRGB_SMOKE_WITH_RLN', '-I', path.join(rln, 'Headers')]
+    : [];
+  const rlnLink = rlnEnabled ? [path.join(rln, 'librgb_lightning_node.a')] : [];
+  console.log(
+    `[smoke] RLN ${rlnEnabled ? 'linked in' : 'disabled; RGB Lib only'}`
   );
   run('xcrun', [
     'clang',
@@ -89,8 +106,7 @@ try {
     triple,
     '-isysroot',
     sdk,
-    '-I',
-    path.join(rln, 'Headers'),
+    ...rlnCompile,
     '-c',
     path.join(root, 'tests/native/rgb-lib-smoke.m'),
     '-o',
@@ -116,7 +132,7 @@ try {
     path.join(root, 'ios/RgbLibSwiftHelper.swift'),
     path.join(root, 'ios/RlnStorageClaim.swift'),
     object,
-    path.join(rln, 'librgb_lightning_node.a'),
+    ...rlnLink,
     '-framework',
     'Foundation',
     '-framework',

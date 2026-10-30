@@ -24,6 +24,9 @@ __fixed__
 - Issuance file fields (`filePath`, `mediaFilePath`, `attachmentsFilePaths`) accept an absolute path or a `file://` URI on both protocols. URIs are decoded (for example `%20`) in JS; other schemes and relative paths are rejected with `ValidationError`. RGB_L1 used to pass URIs to rgb-lib, which rejected them.
 - RLN numeric inputs (`createUtxos`, `inflate`, `sendBtc`, issuance, receive, `failTransfers`, `estimateFeeRate`, `keysend`, `payLightningInvoice`) are rejected with `ValidationError` when the bridge would truncate them. Default `feeRate` for `createUtxos()` and `inflate()` is `1` (the old `1.5` was already truncated to 1).
 - RLN `estimateFeeRate()` rounds up to an integer, like RGB_L1.
+- RGB_L1 public keys are decoded in full (base58 checksum, version and key), not checked by prefix only, and an invalid key throws `INVALID_CONFIG` from the constructor. If rgb-lib still rejects the keys when a wallet is created, both bridges remove the profile they wrote, so the directory can be opened again with the right keys. Before, it failed with `WALLET_PROFILE_MISMATCH`.
+- A watch-only RGB_L1 wallet reports `burn: false` from `getBfaCapabilities()`, so WebRGB does not offer `burnAsset`, and `burn()` rejects with `UNSUPPORTED_CAPABILITY` before calling native. `BurnOperations` refuses a wallet that reports `burn: false` before writing a record. An `UNSUPPORTED_CAPABILITY` failure from `burn()` cancels the record instead of leaving it pending, which blocked the next burn.
+- The iOS native smoke test (`npm run test:rgb-lib:ios`) links RLN only when `rgbSdk.rln` is enabled. Before, it failed after a clean install without RLN.
 - `NativeExternalRLNSigner` unlock passes `ethRpcUrl` to RLN and rejects `gossipRgsServerUrl` instead of dropping it.
 
 __changed__

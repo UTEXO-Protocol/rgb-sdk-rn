@@ -131,6 +131,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     ))
     val lease = Lease(File(p.getString("dataDir")))
     var wallet: Wallet? = null
+    var created = false
     try {
       val marker = File(lease.root, PROFILE)
       val profile = if (marker.exists()) JSONObject(marker.readText()) else expected
@@ -140,6 +141,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
         if (lease.root.listFiles().orEmpty().any { it.name != LOCK })
           throw RgbLibBridgeError("WALLET_STORAGE_NOT_EMPTY", "Use a separate empty wallet directory")
         write(marker, expected)
+        created = true
       }
       wallet = Wallet(
         WalletData(lease.root.path, network(net), DatabaseType.SQLITE, max, AssetSchema.entries.toList()),
@@ -152,6 +154,9 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       return handle
     } catch (error: Exception) {
       wallet?.close()
+      // The directory was empty before this call: return it to that state, or
+      // the profile written above would bind it to keys rgb-lib rejected.
+      if (created) lease.root.listFiles().orEmpty().filter { it.name != LOCK }.forEach { it.deleteRecursively() }
       lease.close()
       throw error
     }

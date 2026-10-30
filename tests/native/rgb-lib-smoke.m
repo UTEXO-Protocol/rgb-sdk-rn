@@ -1,5 +1,9 @@
 #import <Foundation/Foundation.h>
+// Built with RGB_SMOKE_WITH_RLN when package.json enables RLN: then both
+// native libraries are linked into one binary, as in an app.
+#ifdef RGB_SMOKE_WITH_RLN
 #import "RGBLightningNodeFFI.h"
+#endif
 
 @interface RgbLibSwiftHelper : NSObject
 + (NSDictionary *)execute:(NSString *)operation params:(NSDictionary *)params;
@@ -22,11 +26,13 @@ static void check(BOOL value, const char *message) {
 }
 int main(void) {
   @autoreleasepool {
+#ifdef RGB_SMOKE_WITH_RLN
     RustCallStatus status = {0};
     RustBuffer health = uniffi_rgb_lightning_node_fn_func_uniffi_healthcheck(&status);
     check(status.code == 0, "RLN healthcheck failed");
     ffi_rgb_lightning_node_rustbuffer_free(health, &status);
     check(status.code == 0, "RLN buffer cleanup failed");
+#endif
     NSDictionary *runtime = call(@"getRuntimeInfo", @{});
     check([runtime[@"bridgeVersion"] isEqual:@4], "Wrong bridge version");
     // Read from the framework's copy of the release version.json.
@@ -34,6 +40,24 @@ int main(void) {
 
     NSString *base = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
     NSString *root = [base stringByAppendingPathComponent:@"source"];
+
+    // Keys rgb-lib rejects must not leave a profile behind: the same directory
+    // then opens with the right mnemonic.
+    NSString *badKeysDir = [base stringByAppendingPathComponent:@"rejected-keys"];
+    NSDictionary *badKeys = [RgbLibSwiftHelper execute:@"openWallet" params:@{
+      @"dataDir":badKeysDir, @"network":@"regtest", @"witnessVersion":@"taproot",
+      @"accountXpubVanilla":@"tpubNotAValidKey", @"accountXpubColored":@"tpubNotAValidKey",
+      @"masterFingerprint":@"abcdef12", @"maxAllocationsPerUtxo":@5, @"reuseAddresses":@NO
+    }];
+    check(badKeys[@"error"] != nil, "Invalid public keys opened a wallet");
+    NSArray *left = [NSFileManager.defaultManager contentsOfDirectoryAtPath:badKeysDir error:nil];
+    check(![left containsObject:@"rgb-sdk-profile.json"], "Rejected keys left a wallet profile");
+    NSString *recovered = call(@"openWallet", @{
+      @"dataDir":badKeysDir, @"network":@"regtest", @"witnessVersion":@"taproot",
+      @"mnemonic":@"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      @"maxAllocationsPerUtxo":@5, @"reuseAddresses":@NO
+    });
+    call(@"closeWallet", @{@"handle":recovered});
     NSMutableDictionary *params = [@{
       @"dataDir":root, @"network":@"regtest", @"witnessVersion":@"taproot",
       @"mnemonic":@"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
@@ -197,7 +221,11 @@ int main(void) {
     none[@"accountXpubVanilla"] = NSNull.null;
     check([[RgbLibSwiftHelper execute:@"openWallet" params:none][@"error"][@"code"] isEqual:@"INVALID_CONFIG"], "A wallet opened without a mnemonic or public keys");
     [[NSFileManager defaultManager] removeItemAtPath:base error:nil];
-    puts("Direct UniFFI: RLN coexistence and storage exclusion, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore and watch-only open passed");
+#ifdef RGB_SMOKE_WITH_RLN
+    puts("Direct UniFFI: RLN coexistence and storage exclusion, rejected-keys cleanup, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore and watch-only open passed");
+#else
+    puts("Direct UniFFI (RLN disabled): RLN storage exclusion, rejected-keys cleanup, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore and watch-only open passed");
+#endif
   }
   return 0;
 }

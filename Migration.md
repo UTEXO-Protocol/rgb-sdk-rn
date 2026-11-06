@@ -1,14 +1,116 @@
-# Migration Guide: rgb-sdk-rn to @utexo/rgb-sdk-rn
+# Migration guide
+
+## From `@utexo/rgb-sdk-rn` 1.0.0-beta.40 to `@utexo/rgb-lib-rn` + `@utexo/rgb-sdk` (RGB_L1)
+
+`@utexo/rgb-sdk-rn` was one package with the wallet facade, the rgb-lib engine, RLN and WebRGB. It is split into:
+
+| Package | Role |
+| --- | --- |
+| `@utexo/rgb-lib-rn` | The RGB_L1 engine: native rgb-lib, `RgbLibWallet`, `generateKeys()`, `restoreFromBackup()` |
+| `@utexo/rgb-sdk` | The facade `UTEXOWallet({ engine })`, plus `@utexo/rgb-sdk/webrgb` (`WebRgbProvider`, `BurnOperations`). No native code. Optional: an app can use `RgbLibWallet` directly |
+| `@utexo/rgb-sdk-core` | Shared types, the engine contract and errors; a peer dependency of both |
+
+RLN (`RGB_LN`) is not part of this split yet. An app that needs Lightning stays on `@utexo/rgb-sdk-rn` for now.
+
+> Status: local development builds; nothing is published. Versions are in [the compatibility table](../docs/05-compatibility.md).
+
+### Wallet data carries over
+
+No data migration is needed. The new engine opens a wallet directory written by `@utexo/rgb-sdk-rn@1.0.0-beta.40` as is, with the same identity, addresses, balances and transfers, and it restores beta.40 backup files. Both versions use the same native rgb-lib release and the same storage files (`rgb-sdk-profile.json`, `.rgb-sdk.lock`, the rgb-lib data directory). This was verified on iOS and Android by creating a wallet and a backup with beta.40, then opening both with the new packages (see `docs/04-rn-migration.md` in the workspace). It was not verified for a funded wallet.
+
+Keep the same `storageDirPath`, mnemonic (or key reader) and `network`. Keep `reuseAddresses` as it was, or `getAddress()` behaves differently.
+
+`listTransfers()` reports four additional fields: `txid`, `receiveUtxo`, `changeUtxo` and `consignmentPath`. The existing fields keep their values.
+
+### 1. Dependencies
+
+```bash
+npm uninstall @utexo/rgb-sdk-rn @utexo/webrgb-walletconnect
+npm install @utexo/rgb-sdk-core @utexo/rgb-lib-rn @utexo/rgb-sdk   # local tarballs for now
+npm install @utexo/webrgb                                          # only if you use WebRGB
+```
+
+- **iOS:** the pod is now `RgbLib` (was `Rgb`), with Swift module `UtexoRgbLib`. Set `platform :ios, '16.0'` in the Podfile, then run `pod install`. A missing or mismatched rgb-lib binding stops `pod install` with the command to fix it.
+- **Android:** the package is `com.utexo.rgblibrn.RgbLibPackage` (was `com.rgbsdkrn.RgbPackage`); autolinking handles it. rgb-lib ships `arm64-v8a` and `x86_64` only, so set `reactNativeArchitectures=arm64-v8a,x86_64`.
+- **Rebuild the native app** after the swap. A JS reload is not enough: the old and new native modules share the TurboModule name `RgbLib`, so JS from one package can run against the other's native code without an error.
+- **App setup is unchanged.** Install a secure `crypto.getRandomValues` (for example `react-native-get-random-values`) and `globalThis.Buffer` before any wallet code.
+
+### 2. Construction
+
+```typescript
+// Before (@utexo/rgb-sdk-rn)
+import { UTEXOWallet } from '@utexo/rgb-sdk-rn';
+const wallet = new UTEXOWallet({ params, keys });            // RGB_L1 was the default
+// or: new UTEXOWallet({ protocol: 'RGB_L1', params, keys })
+
+// After, with the facade
+import { UTEXOWallet } from '@utexo/rgb-sdk';
+import { RgbLibWallet } from '@utexo/rgb-lib-rn';
+const wallet = new UTEXOWallet({ engine: new RgbLibWallet(params, keys) });
+
+// After, engine only (no facade)
+const wallet = new RgbLibWallet(params, keys);
+```
+
+`params` (`RgbLibWalletParams`) and `keys` (`RgbLibKeys`: a mnemonic, a reader, `getMnemonic()`, or public keys for watch-only) have the same shape as before. `createWallet()`, the `protocol` option, `RgbLibWalletInit` and `WalletInit` are gone.
+
+### 3. Methods
+
+| Before | After |
+| --- | --- |
+| `init()`, `initialize()`, `destroy()`, `dispose()`, `shutdown()`, `reinit()` | unchanged |
+| `goOnline(params)` | `unlock(params)` (same `RgbLibUnlockParams`; `{}` uses the network defaults) |
+| shared wallet methods (`getAddress`, `getBtcBalance`, `listAssets`, `sendBtc`, `onchainReceive`, `onchainSend`, `listTransfers`, `refreshWallet`, `syncWallet`, …) | unchanged |
+| `createBackup`, `drainTo`, `deleteTransfers`, `getBfaCapabilities`, `burn`, `getConsignment`, `getConsignmentPath` | unchanged (rgb-lib extensions, present on the facade) |
+| `rotateVanillaAddress`, `checkIndexerUrl`, `getAssetMetadata`, `issueAssetCfa`, `issueAssetUda`, `listOnchainTransfers`, `listTransactionsByTxid`, `listTransfersByTxid`, `refreshTransfers` | `wallet.engine.<method>()` on a facade, or directly on `RgbLibWallet` |
+| `signMessage`, `verifyMessage`, `backupNow`, `vssClearFence` and every Lightning method | not available on RGB_L1 (they were RLN-only) |
+| `wallet.protocol`, `wallet.capabilities` | unchanged; read from the engine |
+
+The facade owns the engine's session. Do not call `init`, `unlock`, `shutdown` or `destroy` on `wallet.engine` yourself.
+
+### 4. WebRGB and the burn journal
+
+```typescript
+// Before
+import { BurnOperations } from '@utexo/rgb-sdk-rn';
+import { WebRgbProvider } from '@utexo/rgb-sdk-rn/webrgb';
+// After
+import { BurnOperations, WebRgbProvider } from '@utexo/rgb-sdk/webrgb';
+```
+
+Both accept the facade or `RgbLibWallet`. Stored burn journal records (version 1 and 2) are read as before. Passing `burn` options with a wallet that has no `burn()` or `getConsignment()` now throws `INVALID_PARAMS` from the constructor.
+
+### 5. Errors
+
+Codes are the same as in beta.40, plus `WALLET_INVALID_STATE` (for example `reinit()` while a session is open) and core's `VALIDATION_ERROR`. What changed is how errors are shaped:
+
+- Every rejection from a wallet method carries `code`, the public `operation` (`'sendBtc'`, …) and `protocol: 'RGB_L1'`. Synchronous argument errors are now rejections.
+- Recognize them with `isEngineError(error, code?)` from `@utexo/rgb-sdk` or `@utexo/rgb-sdk-core`, not with `instanceof`.
+- The facade adds `ENGINE_CONTRACT_MISMATCH` (an engine with another contract version) and `UTEXOWalletError` `INVALID_CONFIG` (no engine).
+
+### 6. Checklist
+
+- [ ] Dependencies swapped, `pod install` run, iOS target 16.0, Android ABIs `arm64-v8a,x86_64`
+- [ ] Native app rebuilt and reinstalled
+- [ ] Same `storageDirPath`, keys, `network` and `reuseAddresses`
+- [ ] `goOnline` → `unlock`; engine-only methods via `wallet.engine`
+- [ ] WebRGB imports moved to `@utexo/rgb-sdk/webrgb`
+- [ ] Error handling uses `code` and `isEngineError()`
+- [ ] On first launch, the identity (`getWalletIdentity().id`) matches the one stored before the update
+
+## Appendix: `rgb-sdk-rn` (RGB Node) to `@utexo/rgb-sdk-rn`
+
+> Historical. This is the earlier migration, from the RGB Node package to `@utexo/rgb-sdk-rn`; its code targets `@utexo/rgb-sdk-rn`, not this package. Wallets that went through it migrate further with the guide above.
 
 This guide explains how to migrate from the `rgb-sdk-rn` package to `@utexo/rgb-sdk-rn`. The new package uses local `rgb-lib` instead of requiring an RGB Node server.
 
-## 🔐 Privacy Recommendation (Important)
+### 🔐 Privacy Recommendation (Important)
 
 If you are migrating from `rgb-sdk-rn` to `@utexo/rgb-sdk-rn` it is important to understand the privacy implications of the legacy architecture.
 
 Version 1 relied on an RGB Node server, which means that wallet metadata (such as extended public keys and transaction graph information) may have been exposed to the node operator. This exposure is permanent and cannot be reversed by upgrading software alone.
 
-## Recommended approach (if privacy matters)
+### Recommended approach (if privacy matters)
 
 If wallet privacy is important to you, we strongly recommend:
 - Creating a brand new wallet with a new seed phrase in  `@utexo/rgb-sdk-rn`
@@ -17,13 +119,13 @@ If wallet privacy is important to you, we strongly recommend:
 
 This is the only way to fully eliminate historical metadata exposure.
 
-## Alternative (state migration)
+### Alternative (state migration)
 
 The migration steps below restore wallet state using the same seed phrase and preserve balances and history. This approach is safe from a funds perspective, but it does not remove prior privacy exposure.
 
 Choose the approach that best matches your threat model.
 
-## Overview
+### Overview
 
 `@utexo/rgb-sdk-rn` uses `rgb-lib` directly via native bindings, eliminating the need for an RGB Node server. All wallet data is now stored locally. To migrate, you need to:
 
@@ -31,7 +133,7 @@ Choose the approach that best matches your threat model.
 2. Restore the backup using `@utexo/rgb-sdk-rn` to a local directory
 3. Initialize your wallet in `@utexo/rgb-sdk-rn` pointing to the restored directory
 
-## Step 1: Backup Wallet State
+### Step 1: Backup Wallet State
 
 First, create a backup of your wallet state using `rgb-sdk-rn`:
 
@@ -77,7 +179,7 @@ console.log('Backup saved to:', backupFilePath);
 
 **Important**: Save the backup file securely.
 
-## Step 2: Restore Wallet
+### Step 2: Restore Wallet
 
 Restore the backup using `@utexo/rgb-sdk-rn`:
 
@@ -103,7 +205,7 @@ const responseMsg = await restoreFromBackup({
 console.log(responseMsg.message);
 ```
 
-## Step 3: Initialize Wallet
+### Step 3: Initialize Wallet
 
 After restoring, create your wallet instance pointing to the restored directory:
 
@@ -130,7 +232,7 @@ console.log('Wallet address:', address);
 // Your RGB state is now stored locally!
 ```
 
-## Complete Migration Example
+### Complete Migration Example
 
 Here's a complete example showing the full migration process:
 
@@ -226,9 +328,9 @@ async function migrateFromRgbSdkRnToUtexo() {
 migrateFromRgbSdkRnToUtexo().catch(console.error);
 ```
 
-## Key Changes Summary
+### Key Changes Summary
 
-### Breaking Changes
+#### Breaking Changes
 
 1. **Package Name**: Changed from `rgb-sdk-rn` to `@utexo/rgb-sdk-rn`
 
@@ -265,36 +367,36 @@ migrateFromRgbSdkRnToUtexo().catch(console.error);
    - `getXpub()` returns `{ xpubVan, xpubCol }` instead of `{ xpub_van, xpub_col }`
    - `estimateFeeRate()` returns `feeRate` instead of `fee_rate`
 
-### What Stays the Same
+#### What Stays the Same
 
 - Wallet keys (mnemonic, xpubs, master fingerprint) remain the same
 - Asset balances and transfer history are preserved
 - All RGB assets and allocations are maintained
 - All methods remain async (React Native requirement)
 
-## Troubleshooting
+### Troubleshooting
 
-### Backup file not found
+#### Backup file not found
 - Ensure you've downloaded the backup file from the `download_url` when using `rgb-sdk-rn`
 - Verify the file path is correct
 - In React Native, use `react-native-fs` or similar library for file operations
 
-### Restore directory doesn't exist
+#### Restore directory doesn't exist
 - Create the directory before calling `restoreFromBackup()`
 - Ensure you have write permissions to the directory
 - Use `RNFS.mkdir()` or similar to create directories in React Native
 
-### Wallet not found after restore
+#### Wallet not found after restore
 - Verify the `dataDir` in `WalletManager` matches the `dataDir` used in `restoreFromBackup()`
 - Check that the restore completed successfully
 - Ensure `initialize()` is called after creating the wallet instance
 
-### Indexer connection issues
+#### Indexer connection issues
 - Verify the `indexerUrl` is correct for your network
 - Check network connectivity
 - Default indexer URLs are provided, but you can override them
 
-## Next Steps
+### Next Steps
 
 After migration:
 

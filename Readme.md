@@ -5,6 +5,8 @@ The RGB_L1 wallet engine for React Native: native [rgb-lib](https://github.com/U
 This is an engine package. It has no Lightning (RLN) code, no `UTEXOWallet` facade and no `createWallet()`. Apps that want the shared facade wrap the engine in `UTEXOWallet` from `@utexo/rgb-sdk`: `new UTEXOWallet({ engine: new RgbLibWallet(...) })`.
 
 > Status: local development build. Neither this package nor `@utexo/rgb-sdk-core` is published; install them from local tarballs (below).
+>
+> Coming from `@utexo/rgb-sdk-rn`? Wallet data carries over as is; see [Migration.md](Migration.md).
 
 ## Requirements
 

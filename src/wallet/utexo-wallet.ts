@@ -1,3 +1,4 @@
+import { isEngineError } from '@utexo/rgb-sdk-core';
 import { RlnWallet } from './rln/rln-wallet';
 import type { UTEXOWalletNodeParams } from './rln/rln-wallet';
 import { RgbLibWallet } from './rgb-lib/rgb-lib-wallet';
@@ -9,7 +10,8 @@ import type {
   WalletInit,
   UTEXOWalletOptions,
 } from './wallet-options';
-import { WalletBackendError } from './wallet-errors';
+import { asCause, WalletBackendError, withOperation } from './wallet-errors';
+import type { WalletBackendErrorCode } from './wallet-errors';
 import type { BfaCapabilities, BurnParams, BurnResult } from './types';
 import { snapshot } from './runtime/snapshot';
 
@@ -300,19 +302,60 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_L1'> {
     return this.engine.getBfaCapabilities();
   }
 
+  /**
+   * A failure in this facade's own steps (reading arguments, an application
+   * override): a wallet backend error is put in this operation's context;
+   * anything else becomes `code` with the original as cause.
+   */
+  private facadeError(
+    error: unknown,
+    operation: string,
+    code: WalletBackendErrorCode,
+    message: string
+  ) {
+    const protocol = this.engine.protocol;
+    if (isEngineError(error)) return withOperation(error, operation, protocol);
+    return new WalletBackendError(
+      code,
+      message,
+      operation,
+      protocol,
+      asCause(error)
+    );
+  }
+
   async burn(params: BurnParams): Promise<BurnResult> {
     // Preserve the request while an application's capability override awaits.
-    const owned = snapshot(params);
-    if (
-      this.getBfaCapabilities !== UTEXOWallet.prototype.getBfaCapabilities &&
-      !(await this.getBfaCapabilities()).burn
-    ) {
-      throw new WalletBackendError(
-        'UNSUPPORTED_CAPABILITY',
-        'Burn is disabled by this wallet',
+    let owned: BurnParams;
+    try {
+      owned = snapshot(params);
+    } catch (error) {
+      throw this.facadeError(
+        error,
         'burn',
-        this.engine.protocol
+        'INVALID_PARAMS',
+        'Invalid arguments for burn'
       );
+    }
+    if (this.getBfaCapabilities !== UTEXOWallet.prototype.getBfaCapabilities) {
+      let burn: boolean;
+      try {
+        burn = (await this.getBfaCapabilities()).burn;
+      } catch (error) {
+        throw this.facadeError(
+          error,
+          'burn',
+          'UNSUPPORTED_CAPABILITY',
+          'Could not check whether burn is available'
+        );
+      }
+      if (!burn)
+        throw new WalletBackendError(
+          'UNSUPPORTED_CAPABILITY',
+          'Burn is disabled by this wallet',
+          'burn',
+          this.engine.protocol
+        );
     }
     return this.engine.burn(owned);
   }
@@ -455,7 +498,14 @@ export class UTEXOWallet<TProtocol extends WalletProtocol = 'RGB_L1'> {
 
   /** Refreshes transfers through `this` so a subclass refreshTransfers() override runs. */
   async refreshWallet(): Promise<void> {
-    await (this as unknown as VirtualAliases).refreshTransfers();
+    try {
+      await (this as unknown as VirtualAliases).refreshTransfers();
+    } catch (error) {
+      // Report the alias the caller used. Other errors (from an override or
+      // the RLN engine) are left unchanged.
+      if (!isEngineError(error)) throw error;
+      throw withOperation(error, 'refreshWallet', this.engine.protocol);
+    }
   }
 
   refreshTransfers(

@@ -1,3 +1,4 @@
+import { isEngineError } from '@utexo/rgb-sdk-core';
 import type { Network } from '@utexo/rgb-sdk-core';
 import type { ReceiveParams } from '../types';
 import { getRgbLibBinding, assertRuntime } from './native';
@@ -6,7 +7,8 @@ import { toNativeNetwork } from '../../binding/Interfaces';
 import { readRgbLibMnemonic, resolveRgbLibKeys } from './key-provider';
 import type { ResolvedRgbLibKeys, RgbLibKeys } from './key-provider';
 import type { OnchainWalletBackend, WalletIdentity } from '../wallet-api';
-import { WalletBackendError } from '../wallet-errors';
+import { CleanupFailure, WalletBackendError } from '../wallet-errors';
+import { ValidationError } from '@utexo/rgb-sdk-core';
 import { SerialExecutor } from '../runtime/serial-executor';
 import { snapshot } from '../runtime/snapshot';
 import {
@@ -29,19 +31,15 @@ import type {
 } from './config';
 import { feeRate, issuanceAmounts, u64 } from './amounts';
 import * as map from './mappers';
-import { guardNative } from './errors';
+import { guardNative, toArgumentError, toPublicError } from './errors';
 
 /** A handle already removed by native needs no further close call. */
 async function closeHandle(native: Spec, handle: string): Promise<void> {
   try {
     await native.closeWallet(handle);
   } catch (error) {
-    if (
-      !(error instanceof WalletBackendError) ||
-      error.code !== 'WALLET_NOT_INITIALIZED'
-    ) {
-      throw error;
-    }
+    // Checked by shape: the error may come from another copy of the SDK.
+    if (!isEngineError(error, 'WALLET_NOT_INITIALIZED')) throw error;
   }
 }
 
@@ -57,7 +55,17 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   private opening?: Promise<void>;
   private connecting?: { config: ResolvedRgbLibConfig; promise: Promise<void> };
   private stopping?: Promise<void>;
+  /**
+   * Operations accepted but not yet settled. A close waits for all of them,
+   * including an accepted operation's own lazy connect step.
+   */
+  private readonly accepted = new Set<Promise<unknown>>();
   private stopRequested = false;
+  /**
+   * init() failed and so did closing its handle. The handle is kept only so
+   * that shutdown()/destroy() can retry the close; no operation may use it.
+   */
+  private sessionFailed = false;
   private disposeRequested = false;
   private disposed = false;
   private readonly keys: ResolvedRgbLibKeys;
@@ -75,6 +83,14 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   /** Opened from public keys alone: it cannot sign. */
   private get watchOnly(): boolean {
     return !this.keys.readMnemonic;
+  }
+
+  /**
+   * The wallet configuration can sign transactions (it has a mnemonic
+   * source). It does not promise that a signing call succeeds.
+   */
+  get canSignTransactions(): boolean {
+    return !this.watchOnly;
   }
 
   private assertAccepting() {
@@ -96,6 +112,57 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     }
   }
 
+  /** Accepted work that reaches a session whose init() failed. */
+  private failedSessionError(operation: string): WalletBackendError {
+    return new WalletBackendError(
+      'WALLET_STOPPING',
+      'Wallet initialization failed; call shutdown() or destroy() to release it',
+      operation,
+      'RGB_L1'
+    );
+  }
+
+  /** Registers an accepted operation until it settles; see `close()`. */
+  private track<T>(promise: Promise<T>): Promise<T> {
+    this.accepted.add(promise);
+    const settle = () => {
+      this.accepted.delete(promise);
+    };
+    void promise.then(settle, settle);
+    return promise;
+  }
+
+  /**
+   * A public operation group whose methods never throw synchronously: a throw
+   * while reading arguments (destructuring, snapshot, a throwing getter)
+   * becomes a rejection, normalized under the method name. The methods in
+   * `sync` return plain values and are left as they are.
+   */
+  private guarded<G extends object>(group: G, sync: readonly string[] = []): G {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(group)) {
+      out[key] =
+        typeof value !== 'function' || sync.includes(key)
+          ? value
+          : (...args: unknown[]) => {
+              try {
+                return value(...args);
+              } catch (error) {
+                return Promise.reject(toArgumentError(error, key));
+              }
+            };
+    }
+    return out as G;
+  }
+
+  /** Every rejection of a public operation goes through toPublicError once. */
+  private publicly<T>(operation: string, promise: Promise<T>): Promise<T> {
+    return promise.catch((error: unknown) => {
+      throw toPublicError(error, operation);
+    });
+  }
+
+  /** Public entry: admission check, then the tracked operation. */
   private run<T>(
     operation: string,
     requiresOnline: boolean,
@@ -104,14 +171,27 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     try {
       this.assertAccepting();
     } catch (error) {
-      return Promise.reject(error);
+      return Promise.reject(toPublicError(error, operation));
     }
-    // Connect before entering the queue: unlock() queues its own native call.
+    return this.publicly(
+      operation,
+      this.track(this.execute(operation, requiresOnline, action))
+    );
+  }
+
+  /** The operation itself, without an admission check. Callers are already accepted. */
+  private execute<T>(
+    operation: string,
+    requiresOnline: boolean,
+    action: (native: Spec, handle: string) => Promise<T>
+  ): Promise<T> {
+    // Connect before entering the queue: the connect step queues its own native call.
     const ready = requiresOnline
       ? this.connectLazily(operation)
       : Promise.resolve();
     return ready.then(() =>
       this.queue.run(async () => {
+        if (this.sessionFailed) throw this.failedSessionError(operation);
         if (!this.handle || !this.native) {
           throw new WalletBackendError(
             'WALLET_NOT_INITIALIZED',
@@ -123,7 +203,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         if (requiresOnline && !this.online) {
           throw new WalletBackendError(
             'WALLET_OFFLINE',
-            'Call goOnline() or unlock() before this operation',
+            'Call unlock() before this operation',
             operation,
             'RGB_L1'
           );
@@ -134,8 +214,8 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   }
 
   /**
-   * goOnline() is optional: the first operation that needs a connection makes
-   * one with the network defaults. An explicit goOnline(params) that is
+   * unlock() is optional: the first operation that needs a connection makes
+   * one with the network defaults. An explicit unlock(params) that is
    * already connecting is awaited instead.
    */
   private async connectLazily(operation: string): Promise<void> {
@@ -146,35 +226,93 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     // An init() in progress is awaited; without one, the queue reports
     // WALLET_NOT_INITIALIZED for the operation itself.
     if (this.opening) await this.opening.catch(() => undefined);
+    if (this.sessionFailed) throw this.failedSessionError(operation);
     if (this.online || !this.handle) return;
     if (pending()) return pending();
     // Regtest stacks are local and differ per setup, so they are never guessed.
-    let hasDefaults = this.params.network !== 'regtest';
-    try {
-      resolveRgbLibConfig({}, this.params.network);
-    } catch {
-      hasDefaults = false;
+    let defaults: ResolvedRgbLibConfig | undefined;
+    if (this.params.network !== 'regtest') {
+      try {
+        defaults = resolveRgbLibConfig({}, this.params.network);
+      } catch {
+        defaults = undefined;
+      }
     }
-    if (!hasDefaults) {
+    if (!defaults) {
       throw new WalletBackendError(
         'WALLET_OFFLINE',
-        `${operation} needs a connection; on ${this.params.network} call goOnline(params) with the indexer and proxy first`,
+        `${operation} needs a connection; on ${this.params.network} call unlock(params) with the indexer and proxy first`,
         operation,
         'RGB_L1'
       );
     }
-    return this.unlock({});
+    // Part of the accepted operation: a close requested meanwhile must not
+    // reject this step as new work.
+    return this.connect(defaults);
   }
 
+  /** Like input(), for an optional options object (may be undefined). */
+  private withOptions<O, T>(
+    operation: string,
+    requiresOnline: boolean,
+    options: O | undefined,
+    action: (native: Spec, handle: string, owned: O | undefined) => Promise<T>
+  ): Promise<T> {
+    if (
+      // null was always read like "no options"; keep accepting it.
+      options != null &&
+      typeof options !== 'object'
+    )
+      throw new ValidationError(
+        `${operation} options must be an object`,
+        'options'
+      );
+    const owned = snapshot(options);
+    return this.run(operation, requiresOnline, (native, handle) =>
+      action(native, handle, owned)
+    );
+  }
+
+  /**
+   * A public operation with a params object. Before admission, and so before
+   * any lazy connect or native call (decision 7): the params are owned
+   * (snapshot), a signing operation on a watch-only wallet is refused, and
+   * `prepare` validates them once and converts what it can. The action gets
+   * both the owned params and the prepared values.
+   */
   private input<P, T>(
     operation: string,
     requiresOnline: boolean,
     params: P,
     action: (native: Spec, handle: string, owned: P) => Promise<T>
   ): Promise<T> {
+    return this.checked(operation, requiresOnline, params, {}, action);
+  }
+
+  /** input() with rules; they come before the action so `R` is inferred. */
+  private checked<P, T, R = undefined>(
+    operation: string,
+    requiresOnline: boolean,
+    params: P,
+    rules: { signs?: boolean; prepare?: (owned: P) => R },
+    action: (native: Spec, handle: string, owned: P, prepared: R) => Promise<T>
+  ): Promise<T> {
+    if (typeof params !== 'object' || params === null)
+      throw new ValidationError(`${operation} needs a params object`, 'params');
     const owned = snapshot(params);
+    if (rules.signs && this.watchOnly) throw this.watchOnlyError(operation);
+    const prepared = rules.prepare?.(owned) as R;
     return this.run(operation, requiresOnline, (native, handle) =>
-      action(native, handle, owned)
+      action(native, handle, owned, prepared)
+    );
+  }
+
+  private watchOnlyError(operation: string): WalletBackendError {
+    return new WalletBackendError(
+      'UNSUPPORTED_CAPABILITY',
+      `${operation} needs the mnemonic; this RGB_L1 wallet was opened watch-only from public keys`,
+      operation,
+      'RGB_L1'
     );
   }
 
@@ -184,6 +322,46 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     } catch (error) {
       return Promise.reject(error);
     }
+    return this.open();
+  }
+
+  /**
+   * Stop, then start again, as one accepted operation: admission is checked
+   * and the config resolved once, here. The open is queued at once and the
+   * connect after it runs without a second admission check, so a shutdown
+   * requested meanwhile waits for the whole restart instead of cutting it off.
+   */
+  private reinit(params?: RgbLibUnlockParams): Promise<void> {
+    let config: ResolvedRgbLibConfig | undefined;
+    try {
+      config = params ? this.readConfig(params, 'reinit') : undefined;
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    // From the admission check to track() no caller code runs, so a shutdown
+    // can never fall between them.
+    try {
+      this.assertAccepting();
+      if (this.handle || this.opening) {
+        throw new WalletBackendError(
+          'WALLET_INVALID_STATE',
+          'Call shutdown() before reinit()',
+          undefined,
+          'RGB_L1'
+        );
+      }
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const opening = this.open();
+    const resolved = config;
+    return this.track(
+      resolved ? opening.then(() => this.connect(resolved)) : opening
+    );
+  }
+
+  /** Opens the native wallet. No admission check: callers are accepted. */
+  private open(): Promise<void> {
     if (this.opening) return this.opening;
     if (this.handle) return Promise.resolve();
     const opening = this.queue.run(async () => {
@@ -242,7 +420,16 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
           this.native = undefined;
         } catch (cleanupError) {
           this.stopRequested = true;
-          throw cleanupError;
+          this.sessionFailed = true;
+          // Keep both errors (§5 #7): the code says what to do next.
+          const failure = new CleanupFailure(error, cleanupError);
+          throw new WalletBackendError(
+            'WALLET_STOPPING',
+            `init failed (${failure.message}); call shutdown() or destroy() to retry the cleanup`,
+            'init',
+            'RGB_L1',
+            failure
+          );
         }
         throw error;
       }
@@ -262,11 +449,32 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   private unlock(params: RgbLibUnlockParams): Promise<void> {
     let config: ResolvedRgbLibConfig;
     try {
+      // Caller code (getters) runs here, before admission; see reinit().
+      config = this.readConfig(params, 'unlock');
       this.assertAccepting();
-      config = resolveRgbLibConfig(params, this.params.network);
     } catch (error) {
       return Promise.reject(error);
     }
+    return this.track(this.connect(config));
+  }
+
+  /**
+   * Reads a caller's online config once, before admission. A failure without
+   * a code (a throwing getter) is an argument error, not a native one.
+   */
+  private readConfig(
+    params: RgbLibUnlockParams,
+    operation: string
+  ): ResolvedRgbLibConfig {
+    try {
+      return resolveRgbLibConfig(snapshot(params), this.params.network);
+    } catch (error) {
+      throw toArgumentError(error, operation);
+    }
+  }
+
+  /** Connects with a resolved config. No admission check: callers are accepted. */
+  private connect(config: ResolvedRgbLibConfig): Promise<void> {
     if (this.connecting) {
       return configEquals(this.connecting.config, config)
         ? this.connecting.promise
@@ -291,7 +499,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
             )
           );
     }
-    const connecting = this.run('unlock', false, async (native, handle) => {
+    const connecting = this.execute('unlock', false, async (native, handle) => {
       const auth =
         config.indexer.type === 'bitcoind' ? config.indexer.auth : undefined;
       await native.goOnline(
@@ -327,17 +535,24 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (this.disposed) return Promise.resolve();
     this.stopRequested = true;
     if (this.stopping) return this.stopping;
-    const stopping = this.queue.run(async () => {
-      if (this.handle && this.native)
-        await closeHandle(this.native, this.handle);
-      this.handle = undefined;
-      this.native = undefined;
-      this.runtime = undefined;
-      this.identity = undefined;
-      this.online = undefined;
-      this.disposed = this.disposeRequested;
-      this.stopRequested = false;
-    });
+    // New work is rejected from here on. Work accepted before this call may
+    // not have reached the queue yet (it can be waiting for its connect step),
+    // so wait for it to settle before queueing the close.
+    const accepted = [...this.accepted];
+    const stopping = Promise.allSettled(accepted).then(() =>
+      this.queue.run(async () => {
+        if (this.handle && this.native)
+          await closeHandle(this.native, this.handle);
+        this.handle = undefined;
+        this.native = undefined;
+        this.runtime = undefined;
+        this.identity = undefined;
+        this.online = undefined;
+        this.disposed = this.disposeRequested;
+        this.stopRequested = false;
+        this.sessionFailed = false;
+      })
+    );
     this.stopping = stopping;
     void stopping.then(
       () => {
@@ -350,158 +565,221 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     return stopping;
   }
 
-  readonly lifecycle: OnchainWalletBackend<RgbLibUnlockParams>['lifecycle'] = {
-    init: () => this.init(),
-    unlock: (params) => this.unlock(params),
-    reinit: async (params) => {
-      if (this.handle || this.opening) {
-        throw new WalletBackendError(
-          'WALLET_CONFIG_MISMATCH',
-          'Call shutdown() before reinit()',
-          undefined,
-          'RGB_L1'
-        );
-      }
-      if (params) resolveRgbLibConfig(params, this.params.network);
-      await this.init();
-      if (params) await this.unlock(params);
-    },
-    shutdown: () => this.close(false),
-    destroy: () => this.close(true),
-    isDisposed: () => this.disposed,
-  };
+  readonly lifecycle: OnchainWalletBackend<RgbLibUnlockParams>['lifecycle'] =
+    this.guarded(
+      {
+        init: () => this.publicly('init', this.init()),
+        unlock: (params) => this.publicly('unlock', this.unlock(params)),
+        reinit: (params) => this.publicly('reinit', this.reinit(params)),
+        shutdown: () => this.publicly('shutdown', this.close(false)),
+        destroy: () => this.publicly('destroy', this.close(true)),
+        isDisposed: () => this.disposed,
+      },
+      ['isDisposed']
+    );
 
-  readonly network: OnchainWalletBackend<RgbLibUnlockParams>['network'] = {
-    getNetwork: () => this.params.network as Network,
-    getWalletIdentity: () =>
-      this.run('getWalletIdentity', false, async () => ({ ...this.identity! })),
-    getNetworkInfo: () =>
-      this.run('getNetworkInfo', true, async (native, handle) => {
-        const info = await native.getNetworkInfo(handle);
-        if (info.blockHeight === null) return { network: this.params.network };
-        integer(info.blockHeight, 'blockHeight', 0, 0xffffffff);
-        return { network: this.params.network, blockHeight: info.blockHeight };
-      }),
-  };
+  readonly network: OnchainWalletBackend<RgbLibUnlockParams>['network'] =
+    this.guarded(
+      {
+        getNetwork: () => this.params.network as Network,
+        getWalletIdentity: () =>
+          this.run('getWalletIdentity', false, async () => ({
+            ...this.identity!,
+          })),
+        getNetworkInfo: () =>
+          this.run('getNetworkInfo', true, async (native, handle) => {
+            const info = await native.getNetworkInfo(handle);
+            if (info.blockHeight === null)
+              return { network: this.params.network };
+            integer(info.blockHeight, 'blockHeight', 0, 0xffffffff);
+            return {
+              network: this.params.network,
+              blockHeight: info.blockHeight,
+            };
+          }),
+      },
+      ['getNetwork']
+    );
 
-  readonly bitcoin: OnchainWalletBackend<RgbLibUnlockParams>['bitcoin'] = {
-    getAddress: () =>
-      this.run('getAddress', false, (native, handle) =>
-        native.getAddress(handle, false)
-      ),
-    rotateVanillaAddress: () =>
-      this.run('rotateVanillaAddress', false, (native, handle) =>
-        native.getAddress(handle, true)
-      ),
-    getBtcBalance: (options) =>
-      this.run('getBtcBalance', true, async (native, handle) => {
-        const value = await native.getBtcBalance(
-          handle,
-          options?.skipSync ?? false
-        );
-        return {
-          vanilla: map.balance(value.vanilla),
-          colored: map.balance(value.colored),
-        };
-      }),
-    listUnspents: (options) =>
-      this.run('listUnspents', true, async (native, handle) =>
-        (await native.listUnspents(handle, options?.skipSync ?? false)).map(
-          map.unspent
-        )
-      ),
-    checkIndexerUrl: (url) =>
-      this.run('checkIndexerUrl', false, async (native, handle) => ({
-        indexerProtocol: await native.checkIndexerUrl(handle, url),
-      })),
-    createUtxos: (params) =>
-      this.input('createUtxos', true, params, (native, handle, params) =>
-        native.createUtxos(
-          handle,
-          params.upTo ?? true,
-          params.num === undefined ? null : integer(params.num, 'num', 1, 255),
-          params.size === undefined
-            ? null
-            : integer(params.size, 'size', 1, 0xffffffff),
-          feeRate(params.feeRate),
-          params.skipSync ?? false
-        )
-      ),
-    sendBtc: (params) =>
-      this.input('sendBtc', true, params, (native, handle, params) =>
-        native.sendBtc(
-          handle,
-          params.address,
-          u64(params.amount, 'amount', true),
-          feeRate(params.feeRate),
-          params.skipSync ?? false
-        )
-      ),
-    estimateFeeRate: (blocks) =>
-      this.run('estimateFeeRate', true, async (native, handle) => {
-        const estimate = await native.estimateFeeRate(
-          handle,
-          integer(blocks, 'blocks', 1, 0xffff)
-        );
-        if (
-          !Number.isFinite(estimate) ||
-          estimate <= 0 ||
-          estimate > Number.MAX_SAFE_INTEGER
-        ) {
-          throw new WalletBackendError(
-            'INVALID_NATIVE_RESPONSE',
-            'Invalid fee estimation',
-            undefined,
-            'RGB_L1'
+  readonly bitcoin: OnchainWalletBackend<RgbLibUnlockParams>['bitcoin'] =
+    this.guarded({
+      getAddress: () =>
+        this.run('getAddress', false, (native, handle) =>
+          native.getAddress(handle, false)
+        ),
+      rotateVanillaAddress: () =>
+        this.run('rotateVanillaAddress', false, (native, handle) =>
+          native.getAddress(handle, true)
+        ),
+      getBtcBalance: (options) =>
+        this.withOptions(
+          'getBtcBalance',
+          true,
+          options,
+          async (native, handle, options) => {
+            const value = await native.getBtcBalance(
+              handle,
+              options?.skipSync ?? false
+            );
+            return {
+              vanilla: map.balance(value.vanilla),
+              colored: map.balance(value.colored),
+            };
+          }
+        ),
+      listUnspents: (options) =>
+        this.withOptions(
+          'listUnspents',
+          true,
+          options,
+          async (native, handle, options) =>
+            (await native.listUnspents(handle, options?.skipSync ?? false)).map(
+              map.unspent
+            )
+        ),
+      checkIndexerUrl: (url) =>
+        this.run('checkIndexerUrl', false, async (native, handle) => ({
+          indexerProtocol: await native.checkIndexerUrl(handle, url),
+        })),
+      createUtxos: (params) =>
+        this.checked(
+          'createUtxos',
+          true,
+          params,
+          {
+            signs: true,
+            prepare: (params) => ({
+              num:
+                params.num === undefined
+                  ? null
+                  : integer(params.num, 'num', 1, 255),
+              size:
+                params.size === undefined
+                  ? null
+                  : integer(params.size, 'size', 1, 0xffffffff),
+              feeRate: feeRate(params.feeRate),
+            }),
+          },
+          (native, handle, params, v) =>
+            native.createUtxos(
+              handle,
+              params.upTo ?? true,
+              v.num,
+              v.size,
+              v.feeRate,
+              params.skipSync ?? false
+            )
+        ),
+      sendBtc: (params) =>
+        this.checked(
+          'sendBtc',
+          true,
+          params,
+          {
+            signs: true,
+            prepare: (params) => ({
+              amount: u64(params.amount, 'amount', true),
+              feeRate: feeRate(params.feeRate),
+            }),
+          },
+          (native, handle, params, v) =>
+            native.sendBtc(
+              handle,
+              params.address,
+              v.amount,
+              v.feeRate,
+              params.skipSync ?? false
+            )
+        ),
+      estimateFeeRate: (blocks) =>
+        this.run('estimateFeeRate', true, async (native, handle) => {
+          const estimate = await native.estimateFeeRate(
+            handle,
+            integer(blocks, 'blocks', 1, 0xffff)
           );
-        }
-        // Estimation is a recommendation. Explicit send inputs are never rounded.
-        return { feeRate: Math.ceil(estimate) };
-      }),
-  };
+          if (
+            !Number.isFinite(estimate) ||
+            estimate <= 0 ||
+            estimate > Number.MAX_SAFE_INTEGER
+          ) {
+            throw new WalletBackendError(
+              'INVALID_NATIVE_RESPONSE',
+              'Invalid fee estimation',
+              undefined,
+              'RGB_L1'
+            );
+          }
+          // Estimation is a recommendation. Explicit send inputs are never rounded.
+          return { feeRate: Math.ceil(estimate) };
+        }),
+    });
 
-  private receive(witness: boolean, params: ReceiveParams) {
-    return this.input(
-      'receive',
+  private receive(
+    operation: 'blindReceive' | 'witnessReceive' | 'onchainReceive',
+    witness: boolean,
+    params: ReceiveParams
+  ) {
+    return this.checked(
+      operation,
       true,
       params,
-      async (native, handle, params) => {
-        const duration = integer(
-          params.durationSeconds ?? 86400,
-          'durationSeconds',
-          1,
-          0xffffffff
-        );
-        const assignmentKind = resolveReceiveAssignment(
-          params.assignmentKind,
-          params.amount
-        );
+      {
+        prepare: (params) => ({
+          duration: integer(
+            params.durationSeconds ?? 86400,
+            'durationSeconds',
+            1,
+            0xffffffff
+          ),
+          assignmentKind: resolveReceiveAssignment(
+            params.assignmentKind,
+            params.amount
+          ),
+          amount:
+            params.amount === undefined
+              ? null
+              : u64(params.amount, 'amount', true),
+          minConfirmations: integer(
+            params.minConfirmations ?? 0,
+            'minConfirmations',
+            0,
+            255
+          ),
+        }),
+      },
+      async (native, handle, params, v) => {
         const result = await native.receive(
           handle,
           witness,
           params.assetId ?? null,
-          params.amount === undefined
-            ? null
-            : u64(params.amount, 'amount', true),
-          u64(Math.floor(Date.now() / 1000) + duration, 'expirationTimestamp'),
+          v.amount,
+          // The expiry starts when the invoice is made, not when it was asked for.
+          u64(
+            Math.floor(Date.now() / 1000) + v.duration,
+            'expirationTimestamp'
+          ),
           [this.online!.proxyEndpoint],
-          integer(params.minConfirmations ?? 0, 'minConfirmations', 0, 255),
-          assignmentKind
+          v.minConfirmations,
+          v.assignmentKind
         );
         return map.receive(result);
       }
     );
   }
 
-  readonly rgb: OnchainWalletBackend<RgbLibUnlockParams>['rgb'] = {
+  readonly rgb: OnchainWalletBackend<RgbLibUnlockParams>['rgb'] = this.guarded({
     listAssets: (options) =>
-      this.run('listAssets', false, async (native, handle) =>
-        map.assets(
-          await native.listAssets(
-            handle,
-            validateAssetSchemas(options?.filterAssetSchemas)
+      this.withOptions(
+        'listAssets',
+        false,
+        options,
+        async (native, handle, options) =>
+          map.assets(
+            await native.listAssets(
+              handle,
+              validateAssetSchemas(options?.filterAssetSchemas)
+            )
           )
-        )
       ),
     getAssetMetadata: (assetId) =>
       this.run('getAssetMetadata', false, async (native, handle) =>
@@ -596,147 +874,226 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         }
       ),
     inflate: (params) =>
-      this.input('inflate', true, params, async (native, handle, params) =>
-        map.operation(
-          await native.inflate(
-            handle,
-            params.assetId,
-            params.inflationAmounts.map((n) => u64(n, 'inflationAmount', true)),
-            feeRate(params.feeRate),
-            integer(params.minConfirmations ?? 1, 'minConfirmations', 1, 255)
+      this.checked(
+        'inflate',
+        true,
+        params,
+        {
+          signs: true,
+          prepare: (params) => ({
+            amounts: params.inflationAmounts.map((n) =>
+              u64(n, 'inflationAmount', true)
+            ),
+            feeRate: feeRate(params.feeRate),
+            minConfirmations: integer(
+              params.minConfirmations ?? 1,
+              'minConfirmations',
+              1,
+              255
+            ),
+          }),
+        },
+        async (native, handle, params, v) =>
+          map.operation(
+            await native.inflate(
+              handle,
+              params.assetId,
+              v.amounts,
+              v.feeRate,
+              v.minConfirmations
+            )
           )
-        )
       ),
-    blindReceive: (params) => this.receive(false, params),
-    witnessReceive: (params) => this.receive(true, params),
-    onchainReceive: (params) => this.receive(params.witness ?? true, params),
+    blindReceive: (params) => this.receive('blindReceive', false, params),
+    witnessReceive: (params) => this.receive('witnessReceive', true, params),
+    onchainReceive: (params) =>
+      this.receive('onchainReceive', params.witness ?? true, params),
     decodeRGBInvoice: ({ invoice }) =>
       this.run('decodeRGBInvoice', false, async (native, handle) =>
         map.invoice(await native.decodeInvoice(handle, invoice), invoice)
       ),
     onchainSend: (params) =>
-      this.input('onchainSend', true, params, (native, handle, params) =>
-        native.send(
-          handle,
-          params.invoice,
-          params.assetId ?? null,
-          params.amount === undefined
-            ? null
-            : u64(params.amount, 'amount', true),
-          params.witnessData
-            ? u64(params.witnessData.amountSat, 'witness amount', true)
-            : null,
-          params.witnessData?.blinding === undefined
-            ? null
-            : u64(params.witnessData.blinding, 'blinding'),
-          params.donation ?? false,
-          feeRate(params.feeRate),
-          integer(params.minConfirmations ?? 1, 'minConfirmations', 1, 255),
-          // Kept for bridge compatibility; rgb-lib-bfa send has no skip-sync option.
-          params.skipSync ?? false,
-          this.online!.proxyEndpoint
-        )
+      this.checked(
+        'onchainSend',
+        true,
+        params,
+        {
+          signs: true,
+          prepare: (params) => {
+            // rgb-lib-bfa send always syncs, so skipSync: true cannot be
+            // honored; it is refused instead of ignored (decision 5).
+            if (params.skipSync === true)
+              throw new WalletBackendError(
+                'UNSUPPORTED_CAPABILITY',
+                'onchainSend always syncs on RGB_L1; skipSync: true is not supported',
+                'onchainSend',
+                'RGB_L1'
+              );
+            return {
+              amount:
+                params.amount === undefined
+                  ? null
+                  : u64(params.amount, 'amount', true),
+              witnessAmount: params.witnessData
+                ? u64(params.witnessData.amountSat, 'witness amount', true)
+                : null,
+              blinding:
+                params.witnessData?.blinding === undefined
+                  ? null
+                  : u64(params.witnessData.blinding, 'blinding'),
+              feeRate: feeRate(params.feeRate),
+              minConfirmations: integer(
+                params.minConfirmations ?? 1,
+                'minConfirmations',
+                1,
+                255
+              ),
+            };
+          },
+        },
+        (native, handle, params, v) =>
+          native.send(
+            handle,
+            params.invoice,
+            params.assetId ?? null,
+            v.amount,
+            v.witnessAmount,
+            v.blinding,
+            params.donation ?? false,
+            v.feeRate,
+            v.minConfirmations,
+            // The bridge still takes the flag; only false reaches it (see prepare).
+            false,
+            this.online!.proxyEndpoint
+          )
       ),
     failTransfers: (params) =>
-      this.input('failTransfers', true, params, (native, handle, params) =>
-        native.failTransfers(
-          handle,
-          params.batchTransferIdx === undefined
-            ? null
-            : integer(
-                params.batchTransferIdx,
-                'batchTransferIdx',
-                1,
-                0x7fffffff
-              ),
-          params.noAssetOnly ?? false,
-          params.skipSync ?? false
-        )
-      ),
-  };
-
-  readonly history: OnchainWalletBackend<RgbLibUnlockParams>['history'] = {
-    listTransactions: (options) =>
-      this.run('listTransactions', true, async (native, handle) =>
-        (await native.listTransactions(handle, options?.skipSync ?? false)).map(
-          map.transaction
-        )
-      ),
-    listTransactionsByTxid: (txid, skipSync = false) =>
-      this.run('listTransactionsByTxid', true, async (native, handle) =>
-        (await native.listTransactions(handle, skipSync))
-          .filter((t) => t.txid === txid)
-          .map(map.transaction)
-      ),
-    listTransfers: (assetId) =>
-      this.run('listTransfers', false, async (native, handle) =>
-        (await native.listTransfers(handle, assetId ?? null, null)).map(
-          map.transfer
-        )
-      ),
-    listTransfersByTxid: (txid) =>
-      this.run('listTransfersByTxid', false, async (native, handle) =>
-        (await native.listTransfers(handle, null, txid)).map(map.transfer)
-      ),
-    listOnchainTransfers: (assetId) => this.history.listTransfers(assetId),
-    syncWallet: () =>
-      this.run('syncWallet', true, (native, handle) => native.sync(handle)),
-    refreshWallet: async () => {
-      await this.history.refreshTransfers();
-    },
-    refreshTransfers: (skipSync = false) =>
-      this.run('refreshTransfers', true, async (native, handle) => ({
-        transfers: Object.fromEntries(
-          (await native.refresh(handle, skipSync)).map((item) => [
-            item.batchTransferIdx,
-            {
-              updatedStatus:
-                item.updatedStatus === null
-                  ? undefined
-                  : map.transferStatus(item.updatedStatus),
-              failure:
-                item.failure === null
-                  ? undefined
-                  : map.refreshFailure(item.failure),
-            },
-          ])
-        ),
-      })),
-  };
-
-  readonly backup: OnchainWalletBackend<RgbLibUnlockParams>['backup'] = {
-    createBackup: (params) =>
-      this.input(
-        'createBackup',
-        false,
+      this.checked(
+        'failTransfers',
+        true,
         params,
-        async (native, handle, params) => {
-          if (
-            !params.backupPath?.startsWith('/') ||
-            typeof params.password !== 'string' ||
-            !params.password
-          ) {
-            throw new WalletBackendError(
-              'INVALID_CONFIG',
-              'Backup requires an absolute path and a nonempty password',
-              undefined,
-              'RGB_L1'
-            );
-          }
-          await native.backup(handle, params.backupPath, params.password);
-          return {
-            message: 'Backup created successfully',
-            backupPath: params.backupPath,
-          };
-        }
+        {
+          prepare: (params) =>
+            params.batchTransferIdx === undefined
+              ? null
+              : integer(
+                  params.batchTransferIdx,
+                  'batchTransferIdx',
+                  1,
+                  0x7fffffff
+                ),
+        },
+        (native, handle, params, batchTransferIdx) =>
+          native.failTransfers(
+            handle,
+            batchTransferIdx,
+            params.noAssetOnly ?? false,
+            params.skipSync ?? false
+          )
       ),
-  };
+  });
+
+  readonly history: OnchainWalletBackend<RgbLibUnlockParams>['history'] =
+    this.guarded({
+      listTransactions: (options) =>
+        this.withOptions(
+          'listTransactions',
+          true,
+          options,
+          async (native, handle, options) =>
+            (
+              await native.listTransactions(handle, options?.skipSync ?? false)
+            ).map(map.transaction)
+        ),
+      listTransactionsByTxid: (txid, skipSync = false) =>
+        this.run('listTransactionsByTxid', true, async (native, handle) =>
+          (await native.listTransactions(handle, skipSync))
+            .filter((t) => t.txid === txid)
+            .map(map.transaction)
+        ),
+      listTransfers: (assetId) => this.listTransfers('listTransfers', assetId),
+      listTransfersByTxid: (txid) =>
+        this.run('listTransfersByTxid', false, async (native, handle) =>
+          (await native.listTransfers(handle, null, txid)).map(map.transfer)
+        ),
+      listOnchainTransfers: (assetId) =>
+        this.listTransfers('listOnchainTransfers', assetId),
+      syncWallet: () =>
+        this.run('syncWallet', true, (native, handle) => native.sync(handle)),
+      refreshWallet: () =>
+        this.refreshTransfers('refreshWallet', false).then(() => undefined),
+      refreshTransfers: (skipSync = false) =>
+        this.refreshTransfers('refreshTransfers', skipSync),
+    });
+
+  // Shared by a method and its alias; each normalizes under its own name, once.
+  private listTransfers(operation: string, assetId?: string) {
+    return this.run(operation, false, async (native, handle) =>
+      (await native.listTransfers(handle, assetId ?? null, null)).map(
+        map.transfer
+      )
+    );
+  }
+
+  private refreshTransfers(operation: string, skipSync: boolean) {
+    return this.run(operation, true, async (native, handle) => ({
+      transfers: Object.fromEntries(
+        (await native.refresh(handle, skipSync)).map((item) => [
+          item.batchTransferIdx,
+          {
+            updatedStatus:
+              item.updatedStatus === null
+                ? undefined
+                : map.transferStatus(item.updatedStatus),
+            failure:
+              item.failure === null
+                ? undefined
+                : map.refreshFailure(item.failure),
+          },
+        ])
+      ),
+    }));
+  }
+
+  readonly backup: OnchainWalletBackend<RgbLibUnlockParams>['backup'] =
+    this.guarded({
+      createBackup: (params) =>
+        this.input(
+          'createBackup',
+          false,
+          params,
+          async (native, handle, params) => {
+            if (
+              !params.backupPath?.startsWith('/') ||
+              typeof params.password !== 'string' ||
+              !params.password
+            ) {
+              throw new WalletBackendError(
+                'INVALID_CONFIG',
+                'Backup requires an absolute path and a nonempty password',
+                undefined,
+                'RGB_L1'
+              );
+            }
+            await native.backup(handle, params.backupPath, params.password);
+            return {
+              message: 'Backup created successfully',
+              backupPath: params.backupPath,
+            };
+          }
+        ),
+    });
 
   readonly maintenance: OnchainWalletBackend<RgbLibUnlockParams>['maintenance'] =
-    {
+    this.guarded({
       drainTo: (params) =>
-        this.input('drainTo', true, params, (native, handle, params) =>
-          native.drainTo(handle, params.address, feeRate(params.feeRate))
+        this.checked(
+          'drainTo',
+          true,
+          params,
+          { signs: true, prepare: (params) => feeRate(params.feeRate) },
+          (native, handle, params, rate) =>
+            native.drainTo(handle, params.address, rate)
         ),
       deleteTransfers: (params = {}) =>
         this.input('deleteTransfers', false, params, (native, handle, params) =>
@@ -753,9 +1110,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
             params.noAssetOnly ?? false
           )
         ),
-    };
+    });
 
-  readonly bfa: OnchainWalletBackend<RgbLibUnlockParams>['bfa'] = {
+  readonly bfa: OnchainWalletBackend<RgbLibUnlockParams>['bfa'] = this.guarded({
     getBfaCapabilities: async () => ({
       // Burning signs a transaction: a watch-only wallet cannot do it.
       burn:
@@ -771,31 +1128,42 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         !this.disposed && !this.stopRequested && (this.runtime?.bfa ?? false),
     }),
     burn: (params) =>
-      this.input('burn', true, params, async (native, handle, params) => {
-        validateBurnParams(params);
-        if (this.watchOnly)
-          throw new WalletBackendError(
-            'UNSUPPORTED_CAPABILITY',
-            'burn needs the mnemonic; this RGB_L1 wallet was opened watch-only from public keys',
-            'burn',
-            'RGB_L1'
+      this.checked(
+        'burn',
+        true,
+        params,
+        {
+          signs: true,
+          prepare: (params) => {
+            validateBurnParams(params);
+            if (this.runtime && !this.runtime.burn)
+              throw new WalletBackendError(
+                'UNSUPPORTED_CAPABILITY',
+                'This native build does not support burn',
+                'burn',
+                'RGB_L1'
+              );
+          },
+        },
+        async (native, handle, params) => {
+          // The runtime is known only after init(); checked again here.
+          if (!this.runtime?.burn)
+            throw new WalletBackendError(
+              'UNSUPPORTED_CAPABILITY',
+              'This native build does not support burn',
+              undefined,
+              'RGB_L1'
+            );
+          return native.burn(
+            handle,
+            params.assetId,
+            params.amount,
+            params.burnRecipient ?? null,
+            feeRate(params.feeRate),
+            params.minConfirmations
           );
-        if (!this.runtime?.burn)
-          throw new WalletBackendError(
-            'UNSUPPORTED_CAPABILITY',
-            'This native build does not support burn',
-            undefined,
-            'RGB_L1'
-          );
-        return native.burn(
-          handle,
-          params.assetId,
-          params.amount,
-          params.burnRecipient ?? null,
-          feeRate(params.feeRate),
-          params.minConfirmations
-        );
-      }),
+        }
+      ),
     getConsignment: (assetId, txid) =>
       this.run('getConsignment', false, (native, handle) => {
         validateConsignmentLookup(assetId, txid);
@@ -806,5 +1174,5 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         validateConsignmentLookup(assetId, txid);
         return native.getConsignmentPath(handle, assetId, txid);
       }),
-  };
+  });
 }

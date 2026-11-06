@@ -9,6 +9,16 @@ import type {
   WalletMaintenance,
 } from '../wallet-api';
 
+import type {
+  BurnApi,
+  ConsignmentApi,
+  ConsignmentFileApi,
+  EngineCapabilities,
+  FileBackupApi,
+  RestartableWalletApi,
+  SharedWalletApi,
+  WalletMaintenanceApi as EngineMaintenanceApi,
+} from '@utexo/rgb-sdk-core';
 import { RgbLibWalletBackend } from './backend';
 import type { RgbLibUnlockParams, RgbLibWalletParams } from './config';
 import type { RgbLibKeys } from './key-provider';
@@ -16,13 +26,28 @@ import { getRgbLibBinding } from './native';
 
 /** Internal on-chain adapter; the backend owns native sessions and serialization. */
 export class RgbLibWallet
-  implements OnchainWalletApi<RgbLibUnlockParams>, WalletMaintenance
+  implements
+    OnchainWalletApi<RgbLibUnlockParams>,
+    WalletMaintenance,
+    // The engine contract (core) and the extensions rgb-lib implements.
+    SharedWalletApi<RgbLibUnlockParams>,
+    RestartableWalletApi<RgbLibUnlockParams>,
+    FileBackupApi,
+    EngineMaintenanceApi,
+    BurnApi,
+    ConsignmentApi,
+    ConsignmentFileApi
 {
+  /**
+   * The engine contract this class implements. Embedded here, never read
+   * from core: a newer core copy must not make this engine claim more.
+   */
+  readonly contractVersion = '1' as const;
   readonly psbt = undefined;
   readonly beginEnd = undefined;
-  readonly messageSigning = undefined;
 
   readonly protocol = 'RGB_L1' as const;
+  private readonly backend: RgbLibWalletBackend;
   private readonly ports: OnchainWalletBackend<RgbLibUnlockParams>;
 
   constructor(
@@ -30,13 +55,16 @@ export class RgbLibWallet
     keys: RgbLibKeys,
     loadBinding: typeof getRgbLibBinding = getRgbLibBinding
   ) {
-    this.ports = new RgbLibWalletBackend(params, keys, loadBinding);
+    this.backend = new RgbLibWalletBackend(params, keys, loadBinding);
+    this.ports = this.backend;
   }
 
-  get capabilities() {
+  get capabilities(): EngineCapabilities {
     return {
       psbtSigning: this.psbt !== undefined,
       beginEndFlows: this.beginEnd !== undefined,
+      // Describes the configuration: false for a watch-only wallet.
+      canSignTransactions: this.backend.canSignTransactions,
     };
   }
 

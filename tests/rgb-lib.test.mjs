@@ -768,7 +768,7 @@ test('regtest never connects lazily and online operations before init report WAL
     wallet.sendBtc({ address: 'btc', amount: 1 }),
     (error) => {
       assert.equal(error.code, 'WALLET_OFFLINE');
-      assert.match(error.message, /goOnline\(params\)/);
+      assert.match(error.message, /unlock\(params\)/);
       return true;
     }
   );
@@ -806,6 +806,71 @@ test('shutdown waits for accepted operations, rejects later work, and supports r
     calls.filter((c) => Array.isArray(c) && c[0] === 'open').length,
     2
   );
+});
+
+// Same-turn calls: an operation accepted before shutdown()/destroy() must run
+// before the close, including its own connect step.
+const callIndex = (calls, name) =>
+  calls.findIndex((c) => (Array.isArray(c) ? c[0] : c) === name);
+test('shutdown in the same turn as an offline read runs the read first', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  const read = wallet.getAddress();
+  const close = wallet.shutdown();
+  assert.equal(await read, 'address');
+  await close;
+  assert.ok(callIndex(calls, 'address') !== -1);
+  assert.ok(callIndex(calls, 'address') < callIndex(calls, 'close'));
+});
+test('shutdown in the same turn as unlock connects before closing', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  const unlock = wallet.unlock(config);
+  const close = wallet.shutdown();
+  await unlock;
+  await close;
+  assert.ok(callIndex(calls, 'online') !== -1);
+  assert.ok(callIndex(calls, 'online') < callIndex(calls, 'close'));
+});
+test('an accepted send runs before a failing destroy, never after it', async () => {
+  const { wallet, calls } = fixture({
+    async closeWallet(h) {
+      calls.push(['close', h]);
+      throw new Error('close failed');
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  const send = wallet.sendBtc({ address: 'btc', amount: 1, feeRate: 1 });
+  const disposing = wallet.destroy();
+  assert.equal(await send, 'txid');
+  await assert.rejects(disposing, /close failed/);
+  assert.ok(callIndex(calls, 'btc') !== -1);
+  assert.ok(callIndex(calls, 'btc') < callIndex(calls, 'close'));
+  await assert.rejects(
+    wallet.sendBtc({ address: 'btc', amount: 1, feeRate: 1 }),
+    code('WALLET_DISPOSED')
+  );
+});
+test('shutdown does not cut off an accepted operation that is still connecting lazily', async () => {
+  const gate = deferred();
+  const { wallet, calls } = utexoFixture({
+    async goOnline(...args) {
+      calls.push(['online', ...args]);
+      await gate.promise;
+    },
+  });
+  await wallet.init();
+  const send = wallet.sendBtc({ address: 'btc', amount: 1 });
+  const close = wallet.shutdown();
+  await assert.rejects(wallet.getAddress(), code('WALLET_STOPPING'));
+  gate.resolve();
+  assert.equal(await send, 'txid');
+  await close;
+  const online = callIndex(calls, 'online');
+  const btc = callIndex(calls, 'btc');
+  assert.ok(online !== -1 && online < btc);
+  assert.ok(btc < callIndex(calls, 'close'));
 });
 test('dispose during init drains the created handle exactly once and permanently closes the facade', async () => {
   const gate = deferred(),
@@ -998,7 +1063,7 @@ test('native rejections reach callers only as SDK errors and map to WebRGB codes
   );
   await assert.rejects(
     wallet.decodeRGBInvoice({ invoice: 'rgb:malformed' }),
-    sdk('INVALID_PARAMS', 'decodeInvoice')
+    sdk('INVALID_PARAMS', 'decodeRGBInvoice')
   );
   await assert.rejects(
     wallet.listTransfers(),
@@ -1023,6 +1088,149 @@ test('native rejections reach callers only as SDK errors and map to WebRGB codes
     provider.decodeRgbInvoice('rgb:malformed'),
     code('INVALID_PARAMS')
   );
+  await wallet.dispose();
+});
+// Every public rejection is a WalletBackendError with the public operation name.
+const publicError = (expected, operation) => (error) => {
+  assert.ok(error instanceof WalletBackendError, String(error));
+  assert.equal(error.code, expected);
+  assert.equal(error.operation, operation);
+  assert.equal(error.protocol, 'RGB_L1');
+  return true;
+};
+test('JS validation failures are normalized before any native call', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  await wallet.unlock(config);
+  await assert.rejects(
+    wallet.getConsignment('rgb:asset', 'not-a-txid'),
+    publicError('INVALID_PARAMS', 'getConsignment')
+  );
+  await assert.rejects(
+    wallet.getConsignmentPath('not-an-asset', 'a'.repeat(64)),
+    publicError('INVALID_PARAMS', 'getConsignmentPath')
+  );
+  await assert.rejects(
+    wallet.burn({
+      assetId: 'rgb:asset',
+      amount: '-1',
+      feeRate: 1,
+      minConfirmations: 1,
+    }),
+    (error) => {
+      publicError('INVALID_PARAMS', 'burn')(error);
+      assert.ok(error.cause instanceof Error);
+      assert.match(error.message, /Burn amount/);
+      return true;
+    }
+  );
+  await assert.rejects(
+    wallet.blindReceive({ assignmentKind: 'NonFungible', amount: 5 }),
+    publicError('INVALID_PARAMS', 'blindReceive')
+  );
+  await assert.rejects(
+    wallet.listAssets({ filterAssetSchemas: ['Nope'] }),
+    publicError('INVALID_PARAMS', 'listAssets')
+  );
+  for (const name of ['consignment', 'consignmentPath', 'burn']) {
+    assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === name), name);
+  }
+  await wallet.dispose();
+});
+test('native failures report the public operation, not the bridge method', async () => {
+  const reject = (nativeCode) => async () => {
+    throw Object.assign(new Error('native failed'), { code: nativeCode });
+  };
+  const { wallet } = fixture({
+    decodeInvoice: reject('RGB_LIB_InvalidInvoice'),
+    send: reject('RGB_LIB_InsufficientBitcoins'),
+    receive: reject('RGB_LIB_InvalidAmount'),
+    sync: reject('NATIVE_BRIDGE_ERROR'),
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  await assert.rejects(
+    wallet.decodeRGBInvoice({ invoice: 'rgb:x' }),
+    publicError('INVALID_PARAMS', 'decodeRGBInvoice')
+  );
+  await assert.rejects(
+    wallet.onchainSend({ invoice: 'rgb:x' }),
+    publicError('INSUFFICIENT_FUNDS', 'onchainSend')
+  );
+  await assert.rejects(
+    wallet.witnessReceive({}),
+    publicError('INVALID_PARAMS', 'witnessReceive')
+  );
+  await assert.rejects(
+    wallet.onchainReceive({}),
+    publicError('INVALID_PARAMS', 'onchainReceive')
+  );
+  await assert.rejects(
+    wallet.syncWallet(),
+    publicError('NATIVE_ERROR', 'syncWallet')
+  );
+  await wallet.dispose();
+});
+test('lifecycle rejections carry the public operation', async () => {
+  const { wallet } = fixture({
+    async closeWallet() {
+      throw new Error('close failed');
+    },
+  });
+  await wallet.init();
+  await assert.rejects(
+    wallet.shutdown(),
+    publicError('NATIVE_ERROR', 'shutdown')
+  );
+  await assert.rejects(
+    wallet.getAddress(),
+    publicError('WALLET_STOPPING', 'getAddress')
+  );
+  await assert.rejects(
+    wallet.destroy(),
+    publicError('NATIVE_ERROR', 'destroy')
+  );
+  await assert.rejects(
+    wallet.unlock(config),
+    publicError('WALLET_DISPOSED', 'unlock')
+  );
+});
+test('a structurally valid error from another SDK copy keeps its code', async () => {
+  // Same shape as WalletBackendError, but not this copy's class.
+  const foreign = Object.assign(new Error('watch-only'), {
+    code: 'UNSUPPORTED_CAPABILITY',
+    operation: 'getAddress',
+    protocol: 'RGB_L1',
+  });
+  const { wallet } = fixture({
+    async getAddress() {
+      throw foreign;
+    },
+  });
+  await wallet.init();
+  // Passed through as is: right code, operation and protocol, same object.
+  await assert.rejects(wallet.getAddress(), (error) => {
+    assert.equal(error, foreign);
+    assert.equal(error.code, 'UNSUPPORTED_CAPABILITY');
+    return true;
+  });
+  await wallet.dispose();
+});
+test('a non-Error native rejection is kept as the cause', async () => {
+  const rejection = { code: 'RGB_LIB_InvalidAddress', message: 'bad address' };
+  const { wallet } = fixture({
+    async getAddress() {
+      throw rejection;
+    },
+  });
+  await wallet.init();
+  await assert.rejects(wallet.getAddress(), (error) => {
+    publicError('INVALID_PARAMS', 'getAddress')(error);
+    assert.equal(error.message, 'bad address');
+    assert.ok(error.cause instanceof Error);
+    assert.equal(error.cause.rejection, rejection);
+    return true;
+  });
   await wallet.dispose();
 });
 test('init and restore translate native rejections; key reader failures become KEYS_UNAVAILABLE', async () => {
@@ -2154,4 +2362,545 @@ test('watch-only signing failures map to UNSUPPORTED_CAPABILITY', () => {
   assert.equal(error.code, 'UNSUPPORTED_CAPABILITY');
   assert.equal(error.operation, 'sendBtc');
   assert.match(error.message, /watch-only/);
+});
+
+// Review follow-ups (docs/01-contract-rgb-lib.md §11).
+const calledNames = (calls) => calls.map((c) => (Array.isArray(c) ? c[0] : c));
+
+test('work accepted during an init whose cleanup fails never uses the retained handle', async () => {
+  let closes = 0;
+  const { wallet, calls } = utexoFixture({
+    async getWalletIdentity() {
+      // Wrong network: identity validation fails after the open.
+      return { id: 'identity', network: 'regtest', masterFingerprint: 'f' };
+    },
+    async closeWallet(h) {
+      calls.push(['close', h]);
+      if (++closes === 1) throw new Error('close failed');
+    },
+  });
+  const init = wallet.init();
+  const send = wallet.sendBtc({ address: 'btc', amount: 1 });
+  // The cleanup failure is what init reports; the handle stays owned.
+  await assert.rejects(init, /close failed/);
+  await assert.rejects(send, (error) => {
+    assert.equal(error.code, 'WALLET_STOPPING');
+    assert.equal(error.operation, 'sendBtc');
+    return true;
+  });
+  assert.ok(!calledNames(calls).includes('online'));
+  assert.ok(!calledNames(calls).includes('btc'));
+  // Cleanup can still be retried, and it clears the failed state.
+  await wallet.shutdown();
+  assert.equal(closes, 2);
+  await assert.rejects(wallet.init(), code('WALLET_CONFIG_MISMATCH'));
+});
+
+test('shutdown in the same turn as reinit(config) waits for the whole restart', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  await wallet.shutdown();
+  calls.length = 0;
+  const restart = wallet.reinit(config);
+  const close = wallet.shutdown();
+  await restart;
+  await close;
+  const names = calledNames(calls);
+  for (const name of ['open', 'online', 'close'])
+    assert.equal(names.filter((n) => n === name).length, 1, name);
+  assert.ok(names.indexOf('open') < names.indexOf('online'));
+  assert.ok(names.indexOf('online') < names.indexOf('close'));
+  assert.equal(wallet.isDisposed(), false);
+});
+
+test('malformed arguments reject as INVALID_PARAMS and never throw synchronously', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  await wallet.unlock(config);
+  const before = calls.length;
+  const getterError = new Error('getter failed');
+  const throwing = {
+    get address() {
+      throw getterError;
+    },
+    amount: 1,
+  };
+  for (const [operation, call] of [
+    ['decodeRGBInvoice', () => wallet.decodeRGBInvoice(null)],
+    ['onchainReceive', () => wallet.onchainReceive(null)],
+    ['sendBtc', () => wallet.sendBtc(null)],
+    ['sendBtc', () => wallet.sendBtc(throwing)],
+  ]) {
+    let pending;
+    assert.doesNotThrow(() => {
+      pending = call();
+    }, operation);
+    assert.ok(pending instanceof Promise, operation);
+    await assert.rejects(pending, publicError('INVALID_PARAMS', operation));
+  }
+  await assert.rejects(wallet.sendBtc(throwing), (error) => {
+    assert.equal(error.cause, getterError);
+    return true;
+  });
+  assert.equal(calls.length, before);
+  await wallet.dispose();
+});
+
+test('aliases normalize once under their own name and keep the native cause', async () => {
+  const cause = Object.assign(new Error('Invalid asset'), {
+    code: 'RGB_LIB_InvalidAssetId',
+  });
+  const { wallet } = fixture({
+    async listTransfers() {
+      throw cause;
+    },
+    async refresh() {
+      throw cause;
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  for (const [operation, call] of [
+    ['listOnchainTransfers', () => wallet.listOnchainTransfers()],
+    ['listTransfers', () => wallet.listTransfers()],
+    ['refreshWallet', () => wallet.refreshWallet()],
+  ]) {
+    await assert.rejects(call(), (error) => {
+      publicError('INVALID_PARAMS', operation)(error);
+      assert.equal(error.cause, cause);
+      return true;
+    });
+  }
+  await wallet.dispose();
+});
+
+test('a foreign error renamed to the public operation is kept whole as the cause', async () => {
+  const inner = new Error('inner');
+  const foreign = Object.assign(new Error('from another copy'), {
+    code: 'UNSUPPORTED_CAPABILITY',
+    operation: 'bridgeGetAddress',
+    protocol: 'RGB_L1',
+    cause: inner,
+    detail: 'extra',
+  });
+  const { wallet } = fixture({
+    async getAddress() {
+      throw foreign;
+    },
+  });
+  await wallet.init();
+  await assert.rejects(wallet.getAddress(), (error) => {
+    publicError('UNSUPPORTED_CAPABILITY', 'getAddress')(error);
+    assert.equal(error.cause, foreign);
+    assert.equal(error.cause.detail, 'extra');
+    assert.equal(foreign.operation, 'bridgeGetAddress');
+    return true;
+  });
+  await wallet.dispose();
+});
+
+test('a key source rejecting with a non-Error value keeps it as the cause', async () => {
+  const rejection = { reason: 'locked' };
+  const wallet = new RgbLibWallet(
+    params,
+    {
+      async getMnemonic() {
+        throw rejection;
+      },
+    },
+    () => fixture().native
+  );
+  await assert.rejects(wallet.init(), (error) => {
+    publicError('KEYS_UNAVAILABLE', 'init')(error);
+    assert.equal(error.cause.rejection, rejection);
+    return true;
+  });
+});
+
+test('consignment lookup reports the argument that is invalid', async () => {
+  const { validateConsignmentLookup } =
+    await import('../lib/module/wallet/operations/validation.js');
+  const assetId = 'rgb:asset';
+  const txid = 'a'.repeat(64);
+  for (const [args, field] of [
+    [['bad', txid], 'assetId'],
+    [[assetId, 'bad'], 'txid'],
+  ]) {
+    assert.throws(
+      () => validateConsignmentLookup(...args),
+      (error) => {
+        assert.equal(error.code, 'VALIDATION_ERROR');
+        assert.equal(error.field, field);
+        return true;
+      }
+    );
+  }
+});
+
+// Second review round (docs §12).
+test('a config getter that calls shutdown() cannot slip between admission and tracking', async () => {
+  const reentrant = (wallet) => {
+    let fired = false;
+    return {
+      ...config,
+      get indexerUrl() {
+        if (!fired) {
+          fired = true;
+          void wallet.shutdown();
+        }
+        return config.indexerUrl;
+      },
+    };
+  };
+  {
+    const { wallet, calls } = fixture();
+    await wallet.init();
+    await assert.rejects(
+      wallet.unlock(reentrant(wallet)),
+      publicError('WALLET_STOPPING', 'unlock')
+    );
+    assert.ok(!calledNames(calls).includes('online'));
+  }
+  {
+    const { wallet, calls } = fixture();
+    await wallet.init();
+    await wallet.shutdown();
+    calls.length = 0;
+    await assert.rejects(
+      wallet.reinit(reentrant(wallet)),
+      publicError('WALLET_STOPPING', 'reinit')
+    );
+    assert.ok(!calledNames(calls).includes('open'));
+  }
+});
+
+test('throwing config and option getters are INVALID_PARAMS and run before any connect', async () => {
+  const getterError = new Error('getter failed');
+  const throwingConfig = {
+    ...config,
+    get indexerUrl() {
+      throw getterError;
+    },
+  };
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  for (const [operation, call] of [
+    ['unlock', () => wallet.unlock(throwingConfig)],
+    ['reinit', () => wallet.reinit(throwingConfig)],
+  ]) {
+    await assert.rejects(call(), (error) => {
+      publicError('INVALID_PARAMS', operation)(error);
+      assert.equal(error.cause, getterError);
+      return true;
+    });
+  }
+  await wallet.dispose();
+  // An offline wallet that would connect lazily rejects before connecting.
+  const offline = utexoFixture();
+  await offline.wallet.init();
+  await assert.rejects(
+    offline.wallet.getBtcBalance({
+      get skipSync() {
+        throw getterError;
+      },
+    }),
+    (error) => {
+      publicError('INVALID_PARAMS', 'getBtcBalance')(error);
+      assert.equal(error.cause, getterError);
+      return true;
+    }
+  );
+  assert.equal(onlineCalls(offline.calls).length, 0);
+  // null still means "no options".
+  await offline.wallet.listAssets(null);
+  await offline.wallet.dispose();
+  assert.ok(!calledNames(calls).includes('online'));
+});
+
+test('UTEXOWallet.refreshWallet reports refreshWallet, not refreshTransfers', async () => {
+  const cause = Object.assign(new Error('refresh failed'), {
+    code: 'RGB_LIB_InvalidTransport',
+  });
+  const { wallet } = publicWalletFixture({
+    async refresh() {
+      throw cause;
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+  await assert.rejects(wallet.refreshWallet(), (error) => {
+    publicError('INVALID_PARAMS', 'refreshWallet')(error);
+    assert.equal(error.cause, cause);
+    return true;
+  });
+  await wallet.dispose();
+});
+
+test('UTEXOWallet.burn normalizes its own argument and capability-check failures', async () => {
+  const burnParams = {
+    assetId: 'rgb:asset',
+    amount: '1',
+    feeRate: 1,
+    minConfirmations: 1,
+  };
+  const getterError = new Error('getter failed');
+  {
+    const { wallet, calls } = publicWalletFixture();
+    await wallet.init();
+    const throwing = {
+      ...burnParams,
+      get assetId() {
+        throw getterError;
+      },
+    };
+    await assert.rejects(wallet.burn(throwing), (error) => {
+      publicError('INVALID_PARAMS', 'burn')(error);
+      assert.equal(error.cause, getterError);
+      return true;
+    });
+    assert.ok(!calledNames(calls).includes('burn'));
+    await wallet.dispose();
+  }
+  {
+    const { wallet, calls } = publicWalletFixture();
+    await wallet.init();
+    const overrideError = new Error('override failed');
+    wallet.getBfaCapabilities = async () => {
+      throw overrideError;
+    };
+    await assert.rejects(wallet.burn(burnParams), (error) => {
+      publicError('UNSUPPORTED_CAPABILITY', 'burn')(error);
+      assert.equal(error.cause, overrideError);
+      return true;
+    });
+    assert.ok(!calledNames(calls).includes('burn'));
+    await wallet.dispose();
+  }
+});
+
+test('a foreign error with another protocol is rewrapped as RGB_L1', async () => {
+  const foreign = Object.freeze(
+    Object.assign(new Error('lightning'), {
+      code: 'NATIVE_ERROR',
+      operation: 'getAddress',
+      protocol: 'RGB_LN',
+    })
+  );
+  const { wallet } = fixture({
+    async getAddress() {
+      throw foreign;
+    },
+  });
+  await wallet.init();
+  await assert.rejects(wallet.getAddress(), (error) => {
+    assert.notEqual(error, foreign);
+    publicError('NATIVE_ERROR', 'getAddress')(error);
+    assert.equal(error.cause, foreign);
+    return true;
+  });
+  await wallet.dispose();
+});
+
+// Small fixes (docs §13).
+const utexoParams = { ...params, network: 'utexo' };
+const signetIdentity = {
+  async getWalletIdentity() {
+    return { id: 'identity', network: 'signet', masterFingerprint: 'f' };
+  },
+};
+
+test('the facade has no messageSigning carrier and reports canSignTransactions', () => {
+  const signing = fixture().wallet;
+  assert.equal('messageSigning' in signing, false);
+  assert.equal(signing.capabilities.canSignTransactions, true);
+  const watchOnly = new RgbLibWallet(
+    params,
+    PUBLIC_KEYS,
+    () => fixture().native
+  );
+  assert.equal(watchOnly.capabilities.canSignTransactions, false);
+});
+
+test('reinit on an active session rejects with WALLET_INVALID_STATE', async () => {
+  const { wallet } = fixture();
+  await wallet.init();
+  await assert.rejects(
+    wallet.reinit(config),
+    publicError('WALLET_INVALID_STATE', 'reinit')
+  );
+  await wallet.dispose();
+});
+
+test('onchainSend refuses skipSync: true before connecting and passes false otherwise', async () => {
+  const { native, calls } = fixture(signetIdentity);
+  const wallet = new RgbLibWallet(utexoParams, fixture().keys, () => native);
+  await wallet.init();
+  const send = { invoice: 'rgb:invoice', amount: 1, feeRate: 1 };
+  await assert.rejects(
+    wallet.onchainSend({ ...send, skipSync: true }),
+    publicError('UNSUPPORTED_CAPABILITY', 'onchainSend')
+  );
+  assert.equal(onlineCalls(calls).length, 0);
+  await wallet.onchainSend({ ...send, skipSync: false });
+  const sent = calls.find((c) => Array.isArray(c) && c[0] === 'send');
+  assert.equal(sent[10], false);
+  await wallet.dispose();
+});
+
+test('a watch-only wallet refuses signing operations before connecting or calling native', async () => {
+  const { native, calls } = fixture({
+    ...signetIdentity,
+    async getBtcBalance() {
+      const zero = { settled: '0', future: '0', spendable: '0' };
+      return { vanilla: zero, colored: zero };
+    },
+  });
+  const wallet = new RgbLibWallet(utexoParams, PUBLIC_KEYS, () => native);
+  await wallet.init();
+  const before = calls.length;
+  for (const [operation, call] of [
+    ['sendBtc', () => wallet.sendBtc({ address: 'btc', amount: 1 })],
+    ['createUtxos', () => wallet.createUtxos({})],
+    ['onchainSend', () => wallet.onchainSend({ invoice: 'rgb:invoice' })],
+    ['drainTo', () => wallet.drainTo({ address: 'btc', feeRate: 1 })],
+    [
+      'inflate',
+      () => wallet.inflate({ assetId, inflationAmounts: [1], feeRate: 1 }),
+    ],
+    ['burn', () => wallet.burn(burnParams)],
+  ]) {
+    await assert.rejects(
+      call(),
+      publicError('UNSUPPORTED_CAPABILITY', operation)
+    );
+  }
+  assert.equal(calls.length, before);
+  // Reads still work and connect lazily as before.
+  await wallet.getBtcBalance();
+  assert.equal(onlineCalls(calls).length, 1);
+  await wallet.dispose();
+});
+
+test('receive and send arguments are validated before the lazy connect', async () => {
+  const { native, calls } = fixture(signetIdentity);
+  const wallet = new RgbLibWallet(utexoParams, fixture().keys, () => native);
+  await wallet.init();
+  for (const [operation, call] of [
+    ['blindReceive', () => wallet.blindReceive({ assignmentKind: 'Nope' })],
+    ['witnessReceive', () => wallet.witnessReceive({ durationSeconds: 0 })],
+    ['sendBtc', () => wallet.sendBtc({ address: 'btc', amount: -1 })],
+    [
+      'onchainSend',
+      () => wallet.onchainSend({ invoice: 'rgb:invoice', minConfirmations: 0 }),
+    ],
+    ['failTransfers', () => wallet.failTransfers({ batchTransferIdx: 0 })],
+  ]) {
+    await assert.rejects(call(), (error) => {
+      assert.equal(error.operation, operation);
+      assert.ok(
+        [
+          'INVALID_PARAMS',
+          // integer() reports out-of-range numbers as INVALID_CONFIG.
+          'INVALID_CONFIG',
+          'INVALID_AMOUNT',
+        ].includes(error.code),
+        `${operation}: ${error.code}`
+      );
+      return true;
+    });
+  }
+  assert.equal(onlineCalls(calls).length, 0);
+  await wallet.dispose();
+});
+
+// Cleanup states (docs §5 #7, §14).
+const failingClose = (failures, calls) => {
+  let attempts = 0;
+  return {
+    get attempts() {
+      return attempts;
+    },
+    async closeWallet(h) {
+      calls?.push(['close', h]);
+      if (++attempts <= failures) throw new Error(`close failed ${attempts}`);
+    },
+  };
+};
+const wrongNetwork = {
+  async getWalletIdentity() {
+    return { id: 'identity', network: 'signet', masterFingerprint: 'f' };
+  },
+};
+
+test('failed init with failed cleanup keeps both errors; destroy() retries and finishes', async () => {
+  const close = failingClose(1);
+  const { wallet } = fixture({
+    ...wrongNetwork,
+    closeWallet: (h) => close.closeWallet(h),
+  });
+  await assert.rejects(wallet.init(), (error) => {
+    publicError('WALLET_STOPPING', 'init')(error);
+    assert.match(error.message, /does not match the profile/);
+    assert.match(error.message, /close failed 1/);
+    assert.equal(error.cause.error.code, 'WALLET_CONFIG_MISMATCH');
+    assert.equal(error.cause.cleanupError.message, 'close failed 1');
+    return true;
+  });
+  assert.equal(wallet.isDisposed(), false);
+  await assert.rejects(wallet.getAddress(), code('WALLET_STOPPING'));
+  await assert.rejects(wallet.init(), code('WALLET_STOPPING'));
+  await wallet.destroy();
+  assert.equal(close.attempts, 2);
+  assert.equal(wallet.isDisposed(), true);
+  await assert.rejects(wallet.init(), code('WALLET_DISPOSED'));
+});
+
+test('failed init with successful cleanup can be retried at once', async () => {
+  let mismatch = true;
+  const { wallet, calls } = fixture({
+    async getWalletIdentity() {
+      return {
+        id: 'identity',
+        network: mismatch ? 'signet' : 'regtest',
+        masterFingerprint: 'f',
+      };
+    },
+  });
+  await assert.rejects(wallet.init(), code('WALLET_CONFIG_MISMATCH'));
+  assert.equal(wallet.isDisposed(), false);
+  mismatch = false;
+  await wallet.init();
+  assert.equal(await wallet.getAddress(), 'address');
+  assert.equal(calledNames(calls).filter((n) => n === 'open').length, 2);
+  assert.equal(calledNames(calls).filter((n) => n === 'close').length, 1);
+  await wallet.dispose();
+});
+
+test('a failed destroy reports WALLET_DISPOSED for new work and can be retried', async () => {
+  const close = failingClose(1);
+  const { wallet } = fixture({ closeWallet: (h) => close.closeWallet(h) });
+  await wallet.init();
+  await assert.rejects(wallet.destroy(), /close failed 1/);
+  assert.equal(wallet.isDisposed(), false);
+  await assert.rejects(wallet.getAddress(), code('WALLET_DISPOSED'));
+  // A shutdown after a failed destroy keeps the terminal intent.
+  await wallet.shutdown();
+  assert.equal(close.attempts, 2);
+  assert.equal(wallet.isDisposed(), true);
+  await assert.rejects(wallet.reinit(), code('WALLET_DISPOSED'));
+});
+
+test('a failed shutdown keeps WALLET_STOPPING until a retry succeeds, then reopens', async () => {
+  const close = failingClose(2);
+  const { wallet } = fixture({ closeWallet: (h) => close.closeWallet(h) });
+  await wallet.init();
+  await assert.rejects(wallet.shutdown(), /close failed 1/);
+  await assert.rejects(wallet.shutdown(), /close failed 2/);
+  await assert.rejects(wallet.getAddress(), code('WALLET_STOPPING'));
+  await wallet.shutdown();
+  assert.equal(close.attempts, 3);
+  assert.equal(wallet.isDisposed(), false);
+  await wallet.reinit();
+  assert.equal(await wallet.getAddress(), 'address');
+  await wallet.dispose();
 });

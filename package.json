@@ -120,7 +120,7 @@
     "@scure/bip32": "^2.0.1",
     "@scure/bip39": "^2.0.1",
     "@scure/btc-signer": "^2.0.1",
-    "@utexo/rgb-sdk-core": "1.0.0-beta.9",
+    "@utexo/rgb-sdk-core": "file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz",
     "@utexo/webrgb-walletconnect": "0.1.3"
   },
   "react-native-builder-bob": {

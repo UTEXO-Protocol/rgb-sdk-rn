@@ -1,5 +1,6 @@
 import { HDKey } from '@scure/bip32';
 import { WalletBackendError } from '../wallet-errors';
+import { NativeRejection } from './errors';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -185,6 +186,12 @@ export function resolveRgbLibKeys(
   };
 }
 
+/** The key source's failure as a cause; a non-Error value is kept whole. */
+function keyCause(error: unknown): Error | undefined {
+  if (error === undefined || error instanceof Error) return error;
+  return new NativeRejection(error);
+}
+
 /**
  * Calls the mnemonic source for one native session. Only this call is
  * wrapped: errors from opening the wallet keep their own codes.
@@ -202,7 +209,7 @@ export async function readRgbLibMnemonic(
       'Could not read the RGB_L1 mnemonic',
       operation,
       'RGB_L1',
-      error instanceof Error ? error : undefined
+      keyCause(error)
     );
   }
   if (value == null || (typeof value === 'string' && isBlank(value))) {

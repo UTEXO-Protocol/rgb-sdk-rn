@@ -20,9 +20,17 @@
  */
 
 import assert from 'node:assert/strict';
-import { ValidationError } from '@utexo/rgb-sdk-core';
-import { runConformanceChecks } from '@utexo/rgb-sdk-core/conformance';
+import {
+  assertEngineContract,
+  isEngineError,
+  ValidationError,
+} from '@utexo/rgb-sdk-core';
+import {
+  runConformanceChecks,
+  runEngineConformanceChecks,
+} from '@utexo/rgb-sdk-core/conformance';
 import { UTEXOWallet } from '../lib/module/wallet/utexo-wallet.js';
+import { RgbLibWallet } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
 import { toSafeBridgeNumber } from '../lib/module/wallet/operations/validation.js';
 
 // ── Minimal describe/it/expect ───────────────────────────────────────────────
@@ -96,6 +104,50 @@ runConformanceChecks({
   describe,
   it,
   expect,
+});
+
+// ── Engine contract (SharedWalletApi), rgb-lib ───────────────────────────────
+
+/** Any native call fails the check: construction and the contract check need none. */
+let nativeLoads = 0;
+const noNative = () => {
+  nativeLoads += 1;
+  throw new Error('Unexpected native binding load');
+};
+const createRgbLibSync = (keys = { mnemonic: 'test mnemonic' }) =>
+  new RgbLibWallet(
+    { network: 'regtest', storageDirPath: '/tmp/rgb-lib-conformance' },
+    keys,
+    noNative
+  );
+
+runEngineConformanceChecks({
+  name: 'rgb-lib-rn RgbLibWallet',
+  engineClass: RgbLibWallet,
+  createEngineSync: createRgbLibSync,
+  extensions: [
+    'restartable',
+    'fileBackup',
+    'maintenance',
+    'burn',
+    'consignment',
+    'consignmentFile',
+  ],
+  describe,
+  it,
+  expect,
+});
+
+describe('rgb-lib-rn RgbLibWallet — contract version', () => {
+  it('rejects an unaccepted contract version before init, with no native call', () => {
+    const wallet = createRgbLibSync();
+    assert.throws(
+      () => assertEngineContract(wallet, ['2']),
+      (error) => isEngineError(error, 'ENGINE_CONTRACT_MISMATCH')
+    );
+    assert.equal(wallet.isDisposed(), false);
+    assert.equal(nativeLoads, 0);
+  });
 });
 
 describe('UniFFI 0.13 response mapping', () => {

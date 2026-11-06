@@ -10,12 +10,7 @@
       "types": "./lib/typescript/src/index.d.ts",
       "default": "./lib/module/index.js"
     },
-    "./package.json": "./package.json",
-    "./webrgb": {
-      "source": "./src/integrations/webrgb/index.ts",
-      "types": "./lib/typescript/src/integrations/webrgb/index.d.ts",
-      "default": "./lib/module/integrations/webrgb/index.js"
-    }
+    "./package.json": "./package.json"
   },
   "files": [
     "src",
@@ -62,8 +57,7 @@
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public",
     "check:contract": "bob build && node --experimental-loader ./tests/support/rn-stub-loader.mjs scripts/check-contract.mjs",
-    "test": "npm run typecheck && npm run check:contract && npm run test:rgb-lib && npm run test:webrgb",
-    "test:webrgb": "bob build && node --test tests/webrgb.test.mjs tests/webrgb-burn.test.mjs",
+    "test": "npm run typecheck && npm run check:contract && npm run test:rgb-lib",
     "bindings:rgb-lib": "node scripts/setup-rgb-lib-bindings.mjs"
   },
   "repository": {
@@ -84,7 +78,6 @@
   "license": "MIT",
   "peerDependencies": {
     "@utexo/rgb-sdk-core": "^0.1.0",
-    "@utexo/webrgb": "^0.1.3",
     "react": "*",
     "react-native": "*"
   },
@@ -95,8 +88,6 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@utexo/rgb-sdk-core": "file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz",
-    "@utexo/webrgb": "0.1.3",
-    "@utexo/webrgb-walletconnect": "0.1.3",
     "del-cli": "^6.0.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
@@ -107,8 +98,6 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.1",
-    "@scure/base": "^2.0.0",
     "@scure/bip32": "^2.0.1"
   },
   "react-native-builder-bob": {
@@ -143,10 +132,5 @@
     "tabWidth": 2,
     "trailingComma": "es5",
     "useTabs": false
-  },
-  "peerDependenciesMeta": {
-    "@utexo/webrgb": {
-      "optional": true
-    }
   }
 }

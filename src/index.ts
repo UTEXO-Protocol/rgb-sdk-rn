@@ -241,10 +241,3 @@ export type {
   RestoreFromBackupParams,
   WalletRestoreResponse,
 } from './wallet/types';
-
-export { BurnOperations, normalizeBurnRecord } from './wallet/operations/burn';
-export type {
-  BurnOperationRecord,
-  BurnOperationStore,
-  BurnOperationMetadata,
-} from './wallet/operations/burn';

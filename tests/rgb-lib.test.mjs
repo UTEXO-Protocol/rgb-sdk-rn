@@ -18,7 +18,6 @@ import {
 import * as amounts from '../lib/module/wallet/rgb-lib/amounts.js';
 import * as map from '../lib/module/wallet/rgb-lib/mappers.js';
 import { toBackendError } from '../lib/module/wallet/rgb-lib/errors.js';
-import { WebRgbProvider } from '../lib/module/integrations/webrgb/provider.js';
 import {
   DEFAULT_INDEXER_URLS,
   DEFAULT_TRANSPORT_ENDPOINTS,
@@ -252,12 +251,6 @@ test('native chain selection preserves public network names across open and reop
       network,
       protocol: 'RGB_L1',
     });
-    const provider = new WebRgbProvider(wallet, {
-      origin: 'https://example.com',
-      sessionApproved: true,
-      confirm: async () => true,
-    });
-    assert.equal((await provider.getInfo()).network, network);
     await wallet.shutdown();
     await wallet.reinit(config);
     assert.deepEqual(
@@ -777,20 +770,6 @@ test('native rejections reach callers only as SDK errors and map to WebRGB codes
     wallet.sendBtc({ address: 'btc', amount: 1 }),
     sdk('INSUFFICIENT_FUNDS', 'sendBtc')
   );
-  const provider = new WebRgbProvider(wallet, {
-    origin: 'https://example.com',
-    sessionApproved: true,
-    confirm: async () => true,
-  });
-  await provider.enable();
-  await assert.rejects(
-    provider.getAssetBalance('rgb:unknown'),
-    code('ASSET_NOT_FOUND')
-  );
-  await assert.rejects(
-    provider.decodeRgbInvoice('rgb:malformed'),
-    code('INVALID_PARAMS')
-  );
   await wallet.dispose();
 });
 // Every public rejection is a WalletBackendError with the public operation name.
@@ -1193,31 +1172,19 @@ test('transport validation works without a browser URL implementation on React N
     globalThis.URL = original;
   }
 });
-test('WebRGB accepts the common wallet API and advertises only verified capabilities', async () => {
-  const { wallet } = fixture();
+// WebRGB (now in @utexo/rgb-sdk/webrgb) advertises burnAsset and
+// getConsignment from these flags.
+test('a signing wallet reports burn and consignment in its BFA capabilities', async () => {
+  const { wallet, calls } = fixture();
   await wallet.init();
-  let prompts = 0;
-  const provider = new WebRgbProvider(wallet, {
-    origin: 'https://example.com',
-    sessionApproved: true,
-    confirm: async () => {
-      prompts++;
-      return true;
-    },
-    burn: { operations: {} },
-  });
-  const info = await provider.getInfo();
-  assert.equal(info.protocol, 'RGB_L1');
-  assert.ok(!info.methods.includes('signMessage'));
-  assert.ok(info.methods.includes('burnAsset'));
-  assert.ok(info.methods.includes('getConsignment'));
-  assert.deepEqual(info.burnRecipientNamespaces, ['eip155', 'tron']);
-  assert.equal(info.burnDestinationVersion, undefined);
-  await assert.rejects(
-    provider.signMessage('test'),
-    code('METHOD_NOT_SUPPORTED')
+  const caps = await wallet.getBfaCapabilities();
+  assert.equal(caps.burn, true);
+  assert.equal(caps.consignment, true);
+  assert.equal(
+    calls.some((c) => Array.isArray(c) && c[0] === 'burn'),
+    false
   );
-  assert.equal(prompts, 0);
+  await wallet.dispose();
 });
 test('issuance rejects totals the numeric asset model cannot represent before any native call', async () => {
   const { wallet, calls } = fixture();

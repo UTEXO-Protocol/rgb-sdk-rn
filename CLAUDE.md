@@ -37,7 +37,7 @@ cd ios && pod install
 node scripts/download-rln-bindings.mjs
 ```
 
-Tests use Node's built-in test runner. Run `npm test` for typecheck, runtime contract checks, rgb-lib tests and WebRGB tests. `tests/types/` contains compile-only API regressions (including facade method coverage); `tests/*.test.mjs` contains JavaScript tests. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run the native smoke sources in `tests/native/`. The Android script uses the host JVM and needs no native artifacts. The rgb-lib session store runs against the Maven Central AAR as an instrumentation test (`android/src/androidTest/`, `RgbLibSessionStoreInstrumentationTest`), on an emulator or device.
+Tests use Node's built-in test runner. Run `npm test` for typecheck, runtime contract checks and rgb-lib tests. `tests/types/` contains compile-only API regressions (including facade method coverage); `tests/*.test.mjs` contains JavaScript tests. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run the native smoke sources in `tests/native/`. The Android script uses the host JVM and needs no native artifacts. The rgb-lib session store runs against the Maven Central AAR as an instrumentation test (`android/src/androidTest/`, `RgbLibSessionStoreInstrumentationTest`), on an emulator or device.
 
 Use `.mjs` (ES modules) for Node scripts, runtime tests and ESLint config. `babel.config.cjs` stays CommonJS for synchronous config loading. SDK source stays TypeScript; generated JavaScript in `lib/` is managed by Bob.
 
@@ -163,9 +163,8 @@ src/
     rln/                       RLN wallet, manager, signers, defaults, mappers
     rgb-lib/                   Wallet adapter, session backend, native loader,
                                restore, config, amounts, mapping, key provider
-    operations/                Shared burn workflow and validation
+    operations/                Input validation shared by the engine
     runtime/                   Queue and input snapshot helpers
-  integrations/webrgb/         Optional WebRGB entry point
 scripts/                       Install scripts, generators and test runners
 tests/
   *.test.mjs                   Runtime tests

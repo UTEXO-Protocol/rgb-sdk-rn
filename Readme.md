@@ -2,7 +2,7 @@
 
 The RGB_L1 wallet engine for React Native: native [rgb-lib](https://github.com/UTEXO-Protocol/rgb-lib) on iOS and Android, exposed as `RgbLibWallet`, which implements the `SharedWalletApi` contract from `@utexo/rgb-sdk-core`.
 
-This is an engine package. It has no Lightning (RLN) code, no `UTEXOWallet` facade and no `createWallet()`. A facade over several engines is planned as `@utexo/rgb-sdk`; it does not exist in this form yet.
+This is an engine package. It has no Lightning (RLN) code, no `UTEXOWallet` facade and no `createWallet()`. Apps that want the shared facade wrap the engine in `UTEXOWallet` from `@utexo/rgb-sdk`: `new UTEXOWallet({ engine: new RgbLibWallet(...) })`.
 
 > Status: local development build. Neither this package nor `@utexo/rgb-sdk-core` is published; install them from local tarballs (below).
 
@@ -45,7 +45,7 @@ Android resolves `com.utexo:rgb-lib-bfa-android` from Maven Central at the versi
 
 The app provides two JavaScript globals before any wallet code runs. This package does not install them:
 
-- a secure `crypto.getRandomValues` (used by `generateKeys()` and burn operation IDs), for example `react-native-get-random-values`;
+- a secure `crypto.getRandomValues` (used by `generateKeys()`), for example `react-native-get-random-values`;
 - `Buffer`, used by the core key helpers, for example from the `buffer` package.
 
 ```typescript
@@ -99,9 +99,9 @@ Outside wallet instances:
 - `restoreFromBackup()` rejects invalid parameters with `WalletBackendError` `INVALID_CONFIG` without an `operation`.
 - Helpers re-exported from core (`generateKeys()`, `deriveKeysFromMnemonic()` and others) throw core's own errors, such as `CryptoError`.
 
-## WebRGB
+## WebRGB and burn journal
 
-`@utexo/rgb-lib-rn/webrgb` exposes `WebRgbProvider` over this engine. It moves to `@utexo/rgb-sdk` with the facade.
+`WebRgbProvider` and `BurnOperations` are in `@utexo/rgb-sdk/webrgb`; they work over this engine or a `UTEXOWallet` that wraps it. This package no longer has a `./webrgb` entry.
 
 ## Native modules
 
@@ -118,4 +118,4 @@ Outside wallet instances:
 npm test
 ```
 
-Runs the type check, the engine conformance suite, the rgb-lib tests and the WebRGB tests in Node with a stubbed native module. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run native checks that need Xcode or `kotlinc`.
+Runs the type check, the engine conformance suite and the rgb-lib tests in Node with a stubbed native module. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run native checks that need Xcode or `kotlinc`.

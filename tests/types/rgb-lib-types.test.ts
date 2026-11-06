@@ -21,8 +21,6 @@ import type {
   SharedWalletApi,
   WalletMaintenanceApi,
 } from '@utexo/rgb-sdk-core';
-import type { RgbInfo } from '@utexo/webrgb';
-import { WebRgbProvider } from '../../src/integrations/webrgb/provider';
 
 // The engine implements the core contract and the extensions it declares.
 export async function engineContract(
@@ -44,7 +42,6 @@ export async function engineContract(
   const version: '1' = wallet.contractVersion;
   const protocol: 'RGB_L1' = wallet.protocol;
   const publicProtocol: WalletProtocol = protocol;
-  const webRgbProtocol: RgbInfo['protocol'] = publicProtocol;
   const canSign: boolean = wallet.capabilities.canSignTransactions;
   const transfers: WalletTransfer[] = await wallet.listTransfers();
   await wallet.unlock(unlock);
@@ -69,14 +66,10 @@ export async function engineContract(
     extensions,
     onchain,
     version,
-    webRgbProtocol,
+    publicProtocol,
     canSign,
     transfers,
     legacy,
-    new WebRgbProvider(wallet, {
-      origin: 'https://example.com',
-      confirm: async () => true,
-    }),
   ];
 }
 

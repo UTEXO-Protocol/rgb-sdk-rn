@@ -9,7 +9,12 @@ This is an engine package. It has no Lightning (RLN) code, no `UTEXOWallet` faca
 ## Requirements
 
 - React Native with the New Architecture (TurboModules).
-- iOS 16.0 or later (the minimum of the pinned rgb-lib release); Android `minSdk` 24.
+- iOS 16.0 or later (the minimum of the pinned rgb-lib release). React Native templates default to a lower target, so set it in the app's `ios/Podfile`, or `pod install` fails with "required a higher minimum deployment target":
+
+  ```ruby
+  platform :ios, '16.0'
+  ```
+- Android `minSdk` 24. The rgb-lib AAR ships `arm64-v8a` and `x86_64` only; set `reactNativeArchitectures=arm64-v8a,x86_64` in the app's `android/gradle.properties` (the template also builds `armeabi-v7a` and `x86`, where rgb-lib would not load).
 - Peer dependency: `@utexo/rgb-sdk-core`.
 
 ## Install (local tarballs)

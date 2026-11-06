@@ -480,6 +480,51 @@ test('BTC reads with skipSync: true work offline; without it they need a connect
   await wallet.dispose();
 });
 
+test('skipSync must be a boolean; it is checked before connecting and reaches native as a boolean', async () => {
+  const reads = [];
+  const native = [];
+  const { wallet, calls } = utexoFixture({
+    ...btcReads(reads),
+    async refresh(handle, skipSync) {
+      native.push(['refresh', skipSync]);
+      return [];
+    },
+  });
+  await wallet.init();
+  for (const bad of ['false', 'true', 0, 1, {}, []]) {
+    for (const call of [
+      () => wallet.getBtcBalance({ skipSync: bad }),
+      () => wallet.listUnspents({ skipSync: bad }),
+      () => wallet.listTransactions({ skipSync: bad }),
+      () => wallet.listTransactionsByTxid('a'.repeat(64), bad),
+      () => wallet.refreshTransfers(bad),
+      () => wallet.createUtxos({ num: 1, feeRate: 1, skipSync: bad }),
+      () => wallet.sendBtc({ address: 'btc', amount: 1, skipSync: bad }),
+    ]) {
+      await assert.rejects(call(), (error) => {
+        assert.equal(error.code, 'INVALID_PARAMS');
+        assert.equal(error.cause?.field, 'skipSync');
+        return true;
+      });
+    }
+  }
+  // Rejected before any connect or native call.
+  assert.equal(onlineCalls(calls).length, 0);
+  assert.deepEqual(reads, []);
+  assert.deepEqual(native, []);
+  // null and omitted mean false (sync), so these connect once and pass false.
+  await wallet.getBtcBalance({ skipSync: null });
+  await wallet.listTransactionsByTxid('a'.repeat(64), null);
+  await wallet.refreshTransfers();
+  assert.deepEqual(reads, [
+    ['btcBalance', false],
+    ['transactions', false],
+  ]);
+  assert.deepEqual(native, [['refresh', false]]);
+  assert.equal(onlineCalls(calls).length, 1);
+  await wallet.dispose();
+});
+
 test('BTC reads with skipSync: true do not connect lazily on networks with defaults', async () => {
   const reads = [];
   const { wallet, calls } = utexoFixture(btcReads(reads));
@@ -1548,6 +1593,47 @@ test('restoreFromBackup validates paths and runtime version before restoring', a
       e.code === 'NATIVE_BACKEND_UNAVAILABLE' &&
       e.operation === 'restoreFromBackup'
   );
+  // Each parameter is read once: a throwing getter is an INVALID_CONFIG with
+  // the original as cause, and a changing one cannot slip past validation.
+  {
+    const boom = new Error('getter failed');
+    const { native, calls } = fixture();
+    await assert.rejects(
+      restoreFromBackupWith(
+        {
+          backupFilePath: valid.backupFilePath,
+          dataDir: valid.dataDir,
+          get password() {
+            throw boom;
+          },
+        },
+        () => native
+      ),
+      (e) =>
+        e.code === 'INVALID_CONFIG' &&
+        e.operation === 'restoreFromBackup' &&
+        e.protocol === 'RGB_L1' &&
+        e.cause === boom
+    );
+    let dataDirReads = 0;
+    await restoreFromBackupWith(
+      {
+        backupFilePath: valid.backupFilePath,
+        password: valid.password,
+        get dataDir() {
+          return dataDirReads++ === 0 ? '/validated' : 'relative-unvalidated';
+        },
+      },
+      () => native
+    );
+    assert.equal(dataDirReads, 1);
+    assert.deepEqual(calls.at(-1), [
+      'restore',
+      valid.backupFilePath,
+      valid.password,
+      '/validated',
+    ]);
+  }
   const { native, calls } = fixture();
   assert.deepEqual(await restoreFromBackupWith(valid, () => native), {
     message: 'Wallet restored successfully',

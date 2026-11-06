@@ -52,7 +52,19 @@ async function closeHandle(native: Spec, handle: string): Promise<void> {
  * offline, also on networks without default endpoints (regtest).
  */
 const syncs = (options: { skipSync?: boolean } | null | undefined) =>
-  options?.skipSync !== true;
+  !skipSyncOf(options?.skipSync);
+
+/**
+ * The one reading of a `skipSync` flag: omitted or null is `false`; anything
+ * but a boolean is an INVALID_PARAMS before admission, so the same value
+ * decides the connection and reaches native.
+ */
+function skipSyncOf(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value !== 'boolean')
+    throw new ValidationError('skipSync must be a boolean', 'skipSync');
+  return value;
+}
 
 export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockParams> {
   private readonly queue = new SerialExecutor();
@@ -315,6 +327,8 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (typeof params !== 'object' || params === null)
       throw new ValidationError(`${operation} needs a params object`, 'params');
     const owned = snapshot(params);
+    // Before admission and any connect; actions read it with skipSyncOf again.
+    skipSyncOf((owned as { skipSync?: unknown }).skipSync);
     if (rules.signs && this.watchOnly) throw this.watchOnlyError(operation);
     const prepared = rules.prepare?.(owned) as R;
     return this.run(operation, requiresOnline, (native, handle) =>
@@ -634,7 +648,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
           async (native, handle, options) => {
             const value = await native.getBtcBalance(
               handle,
-              options?.skipSync ?? false
+              skipSyncOf(options?.skipSync)
             );
             return {
               vanilla: map.balance(value.vanilla),
@@ -648,9 +662,9 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
           syncs,
           options,
           async (native, handle, options) =>
-            (await native.listUnspents(handle, options?.skipSync ?? false)).map(
-              map.unspent
-            )
+            (
+              await native.listUnspents(handle, skipSyncOf(options?.skipSync))
+            ).map(map.unspent)
         ),
       checkIndexerUrl: (url) =>
         this.run('checkIndexerUrl', false, async (native, handle) => ({
@@ -682,7 +696,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
               v.num,
               v.size,
               v.feeRate,
-              params.skipSync ?? false
+              skipSyncOf(params.skipSync)
             )
         ),
       sendBtc: (params) =>
@@ -703,7 +717,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
               params.address,
               v.amount,
               v.feeRate,
-              params.skipSync ?? false
+              skipSyncOf(params.skipSync)
             )
         ),
       estimateFeeRate: (blocks) =>
@@ -1003,7 +1017,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
             handle,
             batchTransferIdx,
             params.noAssetOnly ?? false,
-            params.skipSync ?? false
+            skipSyncOf(params.skipSync)
           )
       ),
   });
@@ -1017,15 +1031,23 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
           options,
           async (native, handle, options) =>
             (
-              await native.listTransactions(handle, options?.skipSync ?? false)
+              await native.listTransactions(
+                handle,
+                skipSyncOf(options?.skipSync)
+              )
             ).map(map.transaction)
         ),
-      listTransactionsByTxid: (txid, skipSync = false) =>
-        this.run('listTransactionsByTxid', !skipSync, async (native, handle) =>
-          (await native.listTransactions(handle, skipSync))
-            .filter((t) => t.txid === txid)
-            .map(map.transaction)
-        ),
+      listTransactionsByTxid: (txid, skipSync) => {
+        const skip = skipSyncOf(skipSync);
+        return this.run(
+          'listTransactionsByTxid',
+          !skip,
+          async (native, handle) =>
+            (await native.listTransactions(handle, skip))
+              .filter((t) => t.txid === txid)
+              .map(map.transaction)
+        );
+      },
       listTransfers: (assetId) => this.listTransfers('listTransfers', assetId),
       listTransfersByTxid: (txid) =>
         this.run('listTransfersByTxid', false, async (native, handle) =>
@@ -1037,8 +1059,8 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         this.run('syncWallet', true, (native, handle) => native.sync(handle)),
       refreshWallet: () =>
         this.refreshTransfers('refreshWallet', false).then(() => undefined),
-      refreshTransfers: (skipSync = false) =>
-        this.refreshTransfers('refreshTransfers', skipSync),
+      refreshTransfers: (skipSync) =>
+        this.refreshTransfers('refreshTransfers', skipSyncOf(skipSync)),
     });
 
   // Shared by a method and its alias; each normalizes under its own name, once.

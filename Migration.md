@@ -60,13 +60,19 @@ const wallet = new RgbLibWallet(params, keys);
 | --- | --- |
 | `init()`, `initialize()`, `destroy()`, `dispose()`, `shutdown()`, `reinit()` | unchanged |
 | `goOnline(params)` | `unlock(params)` (same `RgbLibUnlockParams`; `{}` uses the network defaults) |
-| shared wallet methods (`getAddress`, `getBtcBalance`, `listAssets`, `sendBtc`, `onchainReceive`, `onchainSend`, `listTransfers`, `refreshWallet`, `syncWallet`, …) | unchanged |
+| shared wallet methods (`getAddress`, `getBtcBalance`, `listAssets`, `sendBtc`, `onchainReceive`, `onchainSend`, `listTransfers`, `refreshWallet`, `syncWallet`, …) | unchanged, except the behaviour changes below |
 | `createBackup`, `drainTo`, `deleteTransfers`, `getBfaCapabilities`, `burn`, `getConsignment`, `getConsignmentPath` | unchanged (rgb-lib extensions, present on the facade) |
 | `rotateVanillaAddress`, `checkIndexerUrl`, `getAssetMetadata`, `issueAssetCfa`, `issueAssetUda`, `listOnchainTransfers`, `listTransactionsByTxid`, `listTransfersByTxid`, `refreshTransfers` | `wallet.engine.<method>()` on a facade, or directly on `RgbLibWallet` |
 | `signMessage`, `verifyMessage`, `backupNow`, `vssClearFence` and every Lightning method | not available on RGB_L1 (they were RLN-only) |
 | `wallet.protocol`, `wallet.capabilities` | unchanged; read from the engine |
 
 The facade owns the engine's session. Do not call `init`, `unlock`, `shutdown` or `destroy` on `wallet.engine` yourself.
+
+Behaviour changes in the same methods:
+
+- **Offline reads.** `getBtcBalance`, `listUnspents`, `listTransactions` and `listTransactionsByTxid` with `skipSync: true` read the stored state without connecting. beta.40 connected first: lazily with the network defaults, or rejected with `WALLET_OFFLINE` before `unlock()` on regtest. An app that relied on such a read to connect must call `unlock()` (or a read without `skipSync`) itself.
+- **`skipSync` must be a boolean.** Any `skipSync` (options field or positional argument) that is not a boolean, `undefined` or `null` rejects with `INVALID_PARAMS` before anything runs. beta.40 passed such values on to native.
+- **`restoreFromBackup()` errors** carry `operation: 'restoreFromBackup'` and `protocol: 'RGB_L1'` (beta.40: the bridge name `restoreBackup`, or none).
 
 ### 4. WebRGB and the burn journal
 

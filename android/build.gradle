@@ -1,6 +1,6 @@
 buildscript {
   ext.getExtOrDefault = {name ->
-    return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties['Rgb_' + name]
+    return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties['RgbLib_' + name]
   }
 
   repositories {
@@ -21,18 +21,22 @@ apply plugin: "kotlin-android"
 
 apply plugin: "com.facebook.react"
 
-// rgb-lib (RGB_L1) comes from Maven Central at the version pinned in the SDK.
-def rgbLibPin = new groovy.json.JsonSlurper().parse(file("../src/bindings/rgb-lib/manifest.json"))
-// RLN (RGB_LN) is switched by `rgbSdk.rln` in the SDK's package.json. When off,
-// its sources and the RLN AAR are left out of the build.
-def rlnEnabled = new groovy.json.JsonSlurper().parse(file("../package.json")).rgbSdk?.rln == true
+// rgb-lib (RGB_L1) comes from Maven Central at the version pinned in this package.
+def rgbLibManifest = file("../src/bindings/rgb-lib/manifest.json")
+if (!rgbLibManifest.isFile()) {
+  throw new GradleException("RgbLib: ${rgbLibManifest} is missing; reinstall @utexo/rgb-lib-rn.")
+}
+def rgbLibPin = new groovy.json.JsonSlurper().parse(rgbLibManifest)
+if (!(rgbLibPin.version instanceof String) || rgbLibPin.version.isEmpty()) {
+  throw new GradleException("RgbLib: ${rgbLibManifest} has no rgb-lib version; reinstall @utexo/rgb-lib-rn.")
+}
 
 def getExtOrIntegerDefault(name) {
-  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["Rgb_" + name]).toInteger()
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["RgbLib_" + name]).toInteger()
 }
 
 android {
-  namespace "com.rgbsdkrn"
+  namespace "com.utexo.rgblibrn"
 
   compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
 
@@ -66,17 +70,8 @@ android {
     main {
       java.srcDirs += [
         "generated/java",
-        "generated/jni",
-        rlnEnabled ? "src/rln/java" : "src/noRln/java"
+        "generated/jni"
       ]
-    }
-    if (rlnEnabled) {
-      test {
-        java.srcDirs += ["src/rlnTest/java"]
-      }
-      androidTest {
-        java.srcDirs += ["src/rlnAndroidTest/java"]
-      }
     }
   }
 }
@@ -91,10 +86,7 @@ def kotlin_version = getExtOrDefault("kotlinVersion")
 dependencies {
   implementation "com.facebook.react:react-android"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-  if (rlnEnabled) {
-    implementation("com.utexo:rgb-lightning-node-android:0.17.0-beta.3")
-  }
-  // UniFFI-generated Kotlin bindings (rgb-lib and RLN) require JNA. Use Android AAR
+  // UniFFI-generated Kotlin bindings require JNA. Use Android AAR
   // artifact explicitly to avoid Gradle resolving both .aar and .jar variants.
   implementation "net.java.dev.jna:jna:5.17.0@aar"
   implementation "com.utexo:rgb-lib-bfa-android:${rgbLibPin.version}"

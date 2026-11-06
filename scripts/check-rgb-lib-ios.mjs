@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Stage 1 checks the TurboModule dispatcher on the host with a fake store.
-// Stage 2 requires the RGB Lib frameworks (plus RLN when package.json enables it)
+// Stage 2 requires the RGB Lib frameworks
 // and an installed iOS Simulator runtime.
 // Creates and removes its own simulator; never uses an existing user's device.
 import fs from 'node:fs';
@@ -56,6 +56,10 @@ try {
     types.find((t) => t.identifier.endsWith('.iPhone-17')) ??
     types.find((t) => t.name.startsWith('iPhone'));
   if (!model) throw new Error('No iPhone Simulator device type is available.');
+  if (!fs.existsSync(path.join(root, 'ios/RgbLibBindings/manifest.json')))
+    throw new Error(
+      'Stage 2 needs the rgb-lib iOS frameworks. Run `npm run bindings:rgb-lib` first.'
+    );
   for (const name of ['RGBLib', 'rgb_libFFI']) {
     const framework = path.join(tmp, `${name}.framework`);
     fs.cpSync(
@@ -79,26 +83,6 @@ try {
   const triple = `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-ios${runtime.version}-simulator`;
   const object = path.join(tmp, 'smoke.o');
   const binary = path.join(tmp, 'rgb-uniffi-smoke');
-  // RLN is linked in only when package.json enables it, as in the podspec.
-  // Then the smoke also proves both native libraries coexist in one binary.
-  const rlnEnabled =
-    JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).rgbSdk
-      ?.rln === true;
-  const rln = path.join(
-    root,
-    'ios/RGBLightningNode.xcframework/ios-arm64_x86_64-simulator'
-  );
-  if (rlnEnabled && !fs.existsSync(path.join(rln, 'librgb_lightning_node.a')))
-    throw new Error(
-      'RLN is enabled but RGBLightningNode.xcframework is missing. Run `node scripts/download-rln-bindings.mjs` first.'
-    );
-  const rlnCompile = rlnEnabled
-    ? ['-DRGB_SMOKE_WITH_RLN', '-I', path.join(rln, 'Headers')]
-    : [];
-  const rlnLink = rlnEnabled ? [path.join(rln, 'librgb_lightning_node.a')] : [];
-  console.log(
-    `[smoke] RLN ${rlnEnabled ? 'linked in' : 'disabled; RGB Lib only'}`
-  );
   run('xcrun', [
     'clang',
     '-fobjc-arc',
@@ -106,7 +90,6 @@ try {
     triple,
     '-isysroot',
     sdk,
-    ...rlnCompile,
     '-c',
     path.join(root, 'tests/native/rgb-lib-smoke.m'),
     '-o',
@@ -130,9 +113,7 @@ try {
     'rgb_libFFI',
     path.join(root, 'ios/RgbLibDtos.swift'),
     path.join(root, 'ios/RgbLibSwiftHelper.swift'),
-    path.join(root, 'ios/RlnStorageClaim.swift'),
     object,
-    ...rlnLink,
     '-framework',
     'Foundation',
     '-framework',

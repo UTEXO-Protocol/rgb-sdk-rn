@@ -4,8 +4,7 @@
  * Deliberately distinct from core's `BitcoinNetwork` (the SDK-level set): this
  * adds `signet_custom`, which exists only inside the native module and is not a
  * network the SDK serves. Naming it `NetworkName` rather than `BitcoinNetwork`
- * keeps one identifier from meaning two things in this package — the same rule
- * applied to the `Rln*StatusWire` types.
+ * keeps one identifier from meaning two things in this package.
  */
 export type NetworkName =
   | 'mainnet'

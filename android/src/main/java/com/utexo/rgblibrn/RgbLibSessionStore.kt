@@ -1,4 +1,4 @@
-package com.rgbsdkrn
+package com.utexo.rgblibrn
 
 import android.util.Base64
 import org.json.JSONObject

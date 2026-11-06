@@ -9,7 +9,7 @@ export const RGB_LIB_BRIDGE_VERSION = 4;
 
 export interface RgbLibWalletParams {
   network: BitcoinNetwork;
-  /** Dedicated to this profile; never point this at an existing RLN directory. */
+  /** Dedicated to this profile; never point this at another wallet's directory (RLN included). */
   storageDirPath: string;
   witnessVersion?: 'taproot' | 'segwit-v0';
   maxAllocationsPerUtxo?: number;

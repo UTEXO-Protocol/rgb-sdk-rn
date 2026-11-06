@@ -30,7 +30,8 @@ const force = args.includes('--force');
 const target = path.join(root, 'ios/RgbLibBindings');
 const log = (message) => console.log(`[rgb-lib] ${message}`);
 
-// Fields the podspec compares against the installed manifest.
+// Fields the podspec also compares against the installed manifest (plus
+// ios.sha256 and the version file below); keep RgbLib.podspec in sync.
 const PINNED_FIELDS = [
   'version',
   'sourceRevision',

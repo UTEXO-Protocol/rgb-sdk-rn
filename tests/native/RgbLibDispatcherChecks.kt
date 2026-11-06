@@ -1,4 +1,4 @@
-package com.rgbsdkrn
+package com.utexo.rgblibrn
 
 import java.util.Collections
 import java.util.concurrent.CompletableFuture

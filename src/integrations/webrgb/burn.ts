@@ -2,14 +2,14 @@
 /**
  * Optional WebRGB burn/proof extension. Receiving and read methods work without it.
  * Use a connected BFA wallet with native burn and consignment capabilities.
- * RLN requires ethRpcUrl and PasswordRLNSigner; RGB Lib uses its native keys.
+ * RGB Lib signs with its native keys.
  *
  * Setup: share one BurnOperations service and durable BurnOperationStore per
  * wallet across sessions. The store implements readAll() and write(record),
  * which resolves only after an upsert by record.id is durably saved.
  *
- * import { BurnOperations } from '@utexo/rgb-sdk-rn';
- * import { WebRgbProvider } from '@utexo/rgb-sdk-rn/webrgb';
+ * import { BurnOperations } from '@utexo/rgb-lib-rn';
+ * import { WebRgbProvider } from '@utexo/rgb-lib-rn/webrgb';
  *
  * const operations = new BurnOperations(wallet, store);
  * const provider = new WebRgbProvider(wallet, {

@@ -1,4 +1,4 @@
-package com.rgbsdkrn
+package com.utexo.rgblibrn
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -27,9 +27,6 @@ class RgbLibSessionStoreInstrumentationTest {
   private fun bridgeCode(block: () -> Any?): String? =
     (runCatching(block).exceptionOrNull() as? RgbLibBridgeError)?.code
 
-  private fun storageCode(block: () -> Any?): String? =
-    (runCatching(block).exceptionOrNull() as? RlnStorageClaimError)?.code
-
   @Test
   fun runtimeInfo_reportsTheAarProvenance() {
     val info = store.execute("getRuntimeInfo", emptyMap()) as Map<String, Any?>
@@ -55,7 +52,6 @@ class RgbLibSessionStoreInstrumentationTest {
       val address = call("getAddress", mapOf("rotate" to false))
       assertTrue((address as String).startsWith("bcrt1p"))
       assertEquals("WALLET_STORAGE_IN_USE", bridgeCode { store.execute("openWallet", params) })
-      assertEquals("WALLET_PROFILE_MISMATCH", storageCode { RlnStorageClaim.claim(params["dataDir"] as String) })
       assertTrue((call("listAssets", mapOf("filterAssetSchemas" to emptyList<String>())) as List<*>).isEmpty())
       assertEquals("RGB_LIB_AssetNotFound", rgbLibCode { call("getAssetBalance", mapOf("assetId" to "rgb:smoke-asset")) })
       val balance = call("getBtcBalance", mapOf("skipSync" to true)) as Map<String, Any?>
@@ -119,10 +115,11 @@ class RgbLibSessionStoreInstrumentationTest {
       call("closeWallet"); active = null
       assertEquals("WALLET_PROFILE_MISMATCH", bridgeCode { store.execute("openWallet", params + ("network" to "signet")) })
 
-      // RLN and RGB Lib never share storage, in either direction.
-      assertTrue(!root.resolve("source").resolve(RlnStorageClaim.MARKER).exists())
-      val rln = root.resolve("rln").path
-      RlnStorageClaim.claim(rln)
+      // RGB Lib never opens or restores into another engine's storage. The RLN
+      // side (RLN refusing RGB Lib storage) is checked in the combined app.
+      val rlnDir = root.resolve("rln").apply { mkdirs() }
+      rlnDir.resolve(".rln-sdk-profile").writeText("rln")
+      val rln = rlnDir.path
       assertEquals("WALLET_STORAGE_NOT_EMPTY", bridgeCode { store.execute("openWallet", params + ("dataDir" to rln)) })
       val restore = mapOf("dataDir" to root.resolve("restored").path, "backupPath" to backup, "password" to "smoke-test-password")
       assertEquals("WALLET_STORAGE_NOT_EMPTY", bridgeCode { store.execute("restoreBackup", restore + ("dataDir" to rln)) })

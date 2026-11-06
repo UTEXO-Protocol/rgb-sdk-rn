@@ -1,22 +1,10 @@
-// Wallet utilities
-export { createWallet } from './wallet/wallet-manager';
+// @utexo/rgb-lib-rn — the RGB_L1 engine for React Native (native rgb-lib, no
+// RLN / LDK). The engine is the primary API; the optional UTEXOWallet facade
+// lives in @utexo/rgb-sdk.
 
-// RLN node manager
-export { RLNManager, createRLNManager } from './wallet/rln/rln-manager';
-
-// UTEXO wallet — legacy RLN constructor plus an optional on-chain rgb-lib mode.
-export { UTEXOWallet } from './wallet/utexo-wallet';
-export type {
-  UTEXOWalletNodeParams,
-  UTEXOWalletOptions,
-  AnyUtexoWallet,
-} from './wallet/utexo-wallet';
+// Engine
+export { RgbLibWallet } from './wallet/rgb-lib/rgb-lib-wallet';
 export { restoreFromBackup } from './wallet/rgb-lib/restore';
-export type {
-  WalletInit,
-  RlnWalletInit,
-  RgbLibWalletInit,
-} from './wallet/wallet-options';
 export type {
   RgbLibWalletParams,
   RgbLibUnlockParams,
@@ -45,24 +33,8 @@ export {
   DEFAULT_INDEXER_URLS,
   DEFAULT_TRANSPORT_ENDPOINTS,
   getNetworkDefaults,
-  resolveUnlockParams,
-} from './wallet/rln/network-defaults';
-export type { NetworkEndpoints } from './wallet/rln/network-defaults';
-export {
-  PasswordRLNSigner,
-  NativeExternalRLNSigner,
-} from './wallet/rln/rln-signers';
-export type { IRLNSigner, RLNKeyMaterial } from './wallet/rln/rln-signers';
-
-// Binding and signer (for advanced / testing use)
-export { RLNBinding } from './binding/RLNBinding';
-export type * from './binding/rln-types';
-export type {
-  IRLN,
-  IRLNNodeCreateParams,
-  IRLNUnlockParams,
-  IRLNExternalSignerBootstrap,
-} from './binding/IRLN';
+} from './wallet/network-endpoints';
+export type { NetworkEndpoints } from './wallet/network-endpoints';
 
 // ── LSP (utexo-lsp) ──────────────────────────────────────────────────────────
 // Now lives in @utexo/rgb-sdk-core (was duplicated here and in rgb-sdk-web).
@@ -187,10 +159,8 @@ export type {
   Descriptors,
   GeneratedKeys,
   AccountXpubs,
-  // UTEXO protocol contract — shared surface, lifecycle, and the optional
-  // carrier types. The carriers are all absent on this platform (see
-  // UTEXOWallet), but the types are exported so app code can be written against
-  // the shared contract and stay portable to rgb-sdk-web.
+  // UTEXO protocol contract types from core, re-exported for convenience.
+  // RgbLibWallet does not implement the Lightning carriers; see SharedWalletApi.
   IUTEXOProtocol,
   IUTEXOProtocolCore,
   IWalletLifecycle,
@@ -260,8 +230,6 @@ export type {
   Transfer,
   TransferAssignment,
   TransferAmount,
-  LightningNodeDetails,
-  DecodedLnInvoiceDetails,
   AssetSchemaName,
   ReceiveAssignmentKind,
   ReceiveParams,

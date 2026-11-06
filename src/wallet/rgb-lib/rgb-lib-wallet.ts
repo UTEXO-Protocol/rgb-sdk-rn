@@ -24,7 +24,7 @@ import type { RgbLibUnlockParams, RgbLibWalletParams } from './config';
 import type { RgbLibKeys } from './key-provider';
 import { getRgbLibBinding } from './native';
 
-/** Internal on-chain adapter; the backend owns native sessions and serialization. */
+/** The RGB_L1 engine and this package's main entry point. The backend owns native sessions and serialization. */
 export class RgbLibWallet
   implements
     OnchainWalletApi<RgbLibUnlockParams>,

@@ -81,33 +81,6 @@ export function validateBurnParams(params: BurnParams): void {
     );
 }
 
-/**
- * Convert a `number | bigint` amount to the double the TurboModule bridge
- * carries. The shared contract invites bigint inputs (RGB amounts are u64
- * base units, realistically above 2^53 for high-precision tokens), but
- * `Number()` silently rounds those — the node would then fund, push or
- * invoice a different amount than requested. Fail closed instead, the same
- * way transfer amounts and BFA balances already do.
- */
-export function toSafeBridgeNumber(
-  value: number | bigint | null | undefined,
-  field: string
-): number | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'bigint') {
-    if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER))
-      throw new ValidationError(
-        `${field} must be a non-negative safe integer for the native bridge`
-      );
-    return Number(value);
-  }
-  if (!Number.isSafeInteger(value) || value < 0)
-    throw new ValidationError(
-      `${field} must be a non-negative safe integer for the native bridge`
-    );
-  return value;
-}
-
 const RECEIVE_KINDS: Record<ReceiveAssignmentKind, 'amount' | 'none'> = {
   Fungible: 'amount',
   InflationRight: 'amount',

@@ -123,6 +123,11 @@ interface Runtime {
 // One queue per native wallet object, even if sessions wrap the store differently.
 const runtimes = new WeakMap<BurnWallet, Runtime>();
 
+/**
+ * Durable burn journal over any wallet with `burn()`, not only RgbLibWallet.
+ * It moves with WebRGB to `@utexo/rgb-sdk` (stage 4), where it also wraps the
+ * RLN engine; that is why RLN error codes are still recognized below.
+ */
 export class BurnOperations {
   private readonly runtime: Runtime;
   constructor(
@@ -221,7 +226,7 @@ export class BurnOperations {
         if (record.state !== 'complete') {
           const failure = error as { code?: unknown; message?: unknown } | null;
           // These native errors occur while funding the PSBT, before broadcast.
-          // RLN reports its own codes; RGB Lib maps every Insufficient* variant
+          // RLN reports its own codes (see the class note); RGB Lib maps every Insufficient* variant
           // (funds, assets, allocation slots) to INSUFFICIENT_FUNDS.
           // UNSUPPORTED_CAPABILITY (including rgb-lib WatchOnly) is refused
           // before anything is signed, so nothing can have been broadcast.

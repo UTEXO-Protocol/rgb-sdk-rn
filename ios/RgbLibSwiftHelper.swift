@@ -141,7 +141,7 @@ private final class RgbLibSession {
   }
 }
 
-/// Mirrors the RLN helper: all wallet operations call generated UniFFI methods.
+/// All wallet operations call generated UniFFI methods.
 /// The registry lock is held only for handle lookup and ownership changes; each
 /// session's lock serializes its own native calls, including slow indexer I/O.
 @objc(RgbLibSwiftHelper)

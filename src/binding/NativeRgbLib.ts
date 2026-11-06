@@ -334,5 +334,6 @@ export interface Spec extends TurboModule {
   ): Promise<void>;
 }
 
-// Optional modules must not prevent an RLN-only application from importing the SDK.
+// Looked up without throwing: a missing native module is reported when a wallet
+// is first used (NATIVE_BACKEND_UNAVAILABLE), not on import.
 export default TurboModuleRegistry.get<Spec>('RgbLib');

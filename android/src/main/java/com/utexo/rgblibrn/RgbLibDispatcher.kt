@@ -1,4 +1,4 @@
-package com.rgbsdkrn
+package com.utexo.rgblibrn
 
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors

@@ -1,9 +1,7 @@
 import type {
   Assignment as CoreAssignment,
   Balance,
-  DecodedLnInvoice,
   InvoiceRequest,
-  LightningNodeInfo,
   ListAssets as CoreListAssets,
   OnchainReceiveRequestModel,
   Transfer as CoreTransfer,
@@ -59,21 +57,6 @@ export type Transfer = CoreTransfer &
     requestedAssignment?: TransferAssignment;
     assignments: TransferAssignment[];
   };
-
-/** `getNodeInfo()` result: core fields plus RLN node fields core does not declare. */
-export type LightningNodeDetails = LightningNodeInfo & {
-  eventualCloseFeesSat?: number;
-  pendingOutboundPaymentsSat?: number;
-  /** Account-level xpubs; public keys only. */
-  accountXpubVanilla?: string;
-  accountXpubColored?: string;
-};
-
-/** `decodeLnInvoice()` result: core fields plus the invoice CLTV delta. */
-export type DecodedLnInvoiceDetails = DecodedLnInvoice & {
-  /** Minimum final CLTV expiry delta, in blocks. */
-  minFinalCltvExpiryDelta?: number;
-};
 
 /** Asset schema names as both native engines report them. */
 export type AssetSchemaName = 'Nia' | 'Cfa' | 'Uda' | 'Ifa' | 'Bfa';

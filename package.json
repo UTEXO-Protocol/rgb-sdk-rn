@@ -1,7 +1,7 @@
 {
-  "name": "@utexo/rgb-sdk-rn",
+  "name": "@utexo/rgb-lib-rn",
   "version": "1.0.0-beta.40",
-  "description": "React Native SDK for Bitcoin RGB Protocol",
+  "description": "RGB_L1 wallet engine for React Native: native rgb-lib (iOS and Android) behind the @utexo/rgb-sdk-core SharedWalletApi contract",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {
@@ -24,17 +24,11 @@
     "lib/typescript/package.json",
     "android",
     "ios",
-    "cpp",
-    "scripts/download-rln-bindings.mjs",
     "scripts/setup-rgb-lib-bindings.mjs",
     "*.podspec",
     "!lib/module/bindings/**",
     "!lib/typescript/src/bindings/**",
     "!ios/build",
-    "!ios/RGBLightningNode.xcframework",
-    "!ios/RGBLightningNodeFFI.h",
-    "!ios/RGBLightningNodeFFI.modulemap",
-    "!ios/RGBLightningNode.swift",
     "!android/build",
     "!android/gradle",
     "!android/gradlew",
@@ -47,17 +41,15 @@
     "!ios/*.zip",
     "!ios/RgbLibBindings/**",
     "!android/src/test/**",
-    "!android/src/rlnTest/**",
-    "!android/src/rlnAndroidTest/**",
     "!android/src/androidTest/**"
   ],
   "scripts": {
     "dev": "tsc -w",
     "clean": "del-cli android/build ios/build lib",
     "prepare": "bob build",
-    "postinstall": "node scripts/download-rln-bindings.mjs && node scripts/setup-rgb-lib-bindings.mjs --optional",
+    "postinstall": "node scripts/setup-rgb-lib-bindings.mjs --optional",
     "typecheck": "tsc",
-    "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/binding && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbSpec android/build/generated/source/codegen com.rgbsdkrn",
+    "codegen": "mkdir -p android/build/generated/source/codegen && node node_modules/@react-native/codegen/lib/cli/combine/combine-js-to-schema-cli.js android/build/generated/source/codegen/schema.json src/binding && node node_modules/@react-native/codegen/lib/cli/generators/generate-all.js android/build/generated/source/codegen/schema.json RgbLibSpec android/build/generated/source/codegen com.utexo.rgblibrn",
     "codegen:rgb-lib": "node scripts/generate-rgb-lib-bridge.mjs && node scripts/generate-rgb-lib-dtos.mjs",
     "test:rgb-lib:ios": "node scripts/check-rgb-lib-ios.mjs",
     "test:rgb-lib:android": "node scripts/check-rgb-lib-android.mjs",
@@ -70,29 +62,28 @@
     "version:minor": "npm version minor && git push && git push --tags && npm publish --access public",
     "version:major": "npm version major && git push && git push --tags && npm publish --access public",
     "check:contract": "bob build && node --experimental-loader ./tests/support/rn-stub-loader.mjs scripts/check-contract.mjs",
-    "test": "npm run typecheck && npm run check:contract && npm run test:rgb-lib && npm run test:rln && npm run test:webrgb",
-    "test:rln": "bob build && node --experimental-loader ./tests/support/rn-stub-loader.mjs --test tests/rln-wallet.test.mjs && RN_STUB_WITHOUT_RLN=1 node --experimental-loader ./tests/support/rn-stub-loader.mjs --test tests/rln-unavailable.test.mjs",
+    "test": "npm run typecheck && npm run check:contract && npm run test:rgb-lib && npm run test:webrgb",
     "test:webrgb": "bob build && node --test tests/webrgb.test.mjs tests/webrgb-burn.test.mjs",
     "bindings:rgb-lib": "node scripts/setup-rgb-lib-bindings.mjs"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/UTEXO-Protocol/rgb-sdk-rn.git"
+    "url": "https://github.com/UTEXO-Protocol/rgb-lib-rn.git"
   },
   "keywords": [
     "rgb",
     "rgb-protocol",
+    "rgb-lib",
     "bitcoin",
-    "sdk",
-    "taproot",
-    "assets",
-    "blockchain",
+    "wallet",
     "react-native",
+    "turbo-module",
     "ios",
     "android"
   ],
   "license": "MIT",
   "peerDependencies": {
+    "@utexo/rgb-sdk-core": "^0.1.0",
     "@utexo/webrgb": "^0.1.3",
     "react": "*",
     "react-native": "*"
@@ -103,7 +94,9 @@
     "@types/react": "^19.2.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "@utexo/rgb-sdk-core": "file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz",
     "@utexo/webrgb": "0.1.3",
+    "@utexo/webrgb-walletconnect": "0.1.3",
     "del-cli": "^6.0.0",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
@@ -115,13 +108,8 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
-    "@noble/secp256k1": "3.0.0",
     "@scure/base": "^2.0.0",
-    "@scure/bip32": "^2.0.1",
-    "@scure/bip39": "^2.0.1",
-    "@scure/btc-signer": "^2.0.1",
-    "@utexo/rgb-sdk-core": "file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz",
-    "@utexo/webrgb-walletconnect": "0.1.3"
+    "@scure/bip32": "^2.0.1"
   },
   "react-native-builder-bob": {
     "source": "src",
@@ -141,15 +129,12 @@
       ]
     ]
   },
-  "rgbSdk": {
-    "rln": false
-  },
   "codegenConfig": {
-    "name": "RgbSpec",
+    "name": "RgbLibSpec",
     "type": "modules",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.rgbsdkrn"
+      "javaPackageName": "com.utexo.rgblibrn"
     }
   },
   "prettier": {

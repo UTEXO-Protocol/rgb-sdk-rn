@@ -1,4 +1,4 @@
-package com.rgbsdkrn
+package com.utexo.rgblibrn
 
 import com.facebook.react.BaseReactPackage
 import com.facebook.react.bridge.NativeModule
@@ -7,30 +7,14 @@ import com.facebook.react.module.model.ReactModuleInfo
 import com.facebook.react.module.model.ReactModuleInfoProvider
 import java.util.HashMap
 
-class RgbPackage : BaseReactPackage() {
+class RgbLibPackage : BaseReactPackage() {
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
-    return if (name == RlnModules.NAME) {
-      RlnModules.create(reactContext)
-    } else if (name == RgbLibModule.NAME) {
-      RgbLibModule(reactContext)
-    } else {
-      null
-    }
+    return if (name == RgbLibModule.NAME) RgbLibModule(reactContext) else null
   }
 
   override fun getReactModuleInfoProvider(): ReactModuleInfoProvider {
     return ReactModuleInfoProvider {
       val moduleInfos: MutableMap<String, ReactModuleInfo> = HashMap()
-      if (RlnModules.ENABLED) {
-        moduleInfos[RlnModules.NAME] = ReactModuleInfo(
-          RlnModules.NAME,
-          RlnModules.NAME,
-          false,  // canOverrideExistingModule
-          false,  // needsEagerInit
-          false,  // isCxxModule
-          true // isTurboModule
-        )
-      }
       moduleInfos[RgbLibModule.NAME] = ReactModuleInfo(
         RgbLibModule.NAME,
         RgbLibModule.NAME,

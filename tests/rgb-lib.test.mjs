@@ -415,6 +415,83 @@ test('without unlock, the first online operation connects once with the network 
   await wallet.dispose();
 });
 
+// Reads with skipSync: true use the stored state; native rgb-lib needs no
+// Online object for them, so they work before unlock, also on regtest.
+const btcReads = (calls) => ({
+  async getBtcBalance(handle, skipSync) {
+    calls.push(['btcBalance', skipSync]);
+    const zero = { settled: '0', future: '0', spendable: '0' };
+    return { vanilla: zero, colored: zero };
+  },
+  async listUnspents(handle, skipSync) {
+    calls.push(['unspents', skipSync]);
+    return [];
+  },
+  async listTransactions(handle, skipSync) {
+    calls.push(['transactions', skipSync]);
+    return [];
+  },
+});
+
+test('BTC reads with skipSync: true work offline; without it they need a connection', async () => {
+  const reads = [];
+  const { wallet, calls } = fixture(btcReads(reads));
+  await wallet.init();
+  const zero = { settled: 0, future: 0, spendable: 0 };
+  assert.deepEqual(await wallet.getBtcBalance({ skipSync: true }), {
+    vanilla: zero,
+    colored: zero,
+  });
+  assert.deepEqual(await wallet.listUnspents({ skipSync: true }), []);
+  assert.deepEqual(await wallet.listTransactions({ skipSync: true }), []);
+  assert.deepEqual(
+    await wallet.listTransactionsByTxid('a'.repeat(64), true),
+    []
+  );
+  assert.deepEqual(reads, [
+    ['btcBalance', true],
+    ['unspents', true],
+    ['transactions', true],
+    ['transactions', true],
+  ]);
+  assert.equal(onlineCalls(calls).length, 0);
+  // Without skipSync (or with false) they sync, so regtest needs unlock first.
+  for (const read of [
+    () => wallet.getBtcBalance(),
+    () => wallet.getBtcBalance({ skipSync: false }),
+    () => wallet.listUnspents({}),
+    () => wallet.listTransactions(null),
+    () => wallet.listTransactionsByTxid('a'.repeat(64)),
+  ]) {
+    await assert.rejects(read(), code('WALLET_OFFLINE'));
+  }
+  assert.equal(reads.length, 4);
+  // A skipSync getter is read once, from the owned snapshot.
+  let getterReads = 0;
+  const options = {
+    get skipSync() {
+      getterReads++;
+      return getterReads === 1;
+    },
+  };
+  await wallet.getBtcBalance(options);
+  assert.equal(getterReads, 1);
+  assert.deepEqual(reads.at(-1), ['btcBalance', true]);
+  await wallet.dispose();
+});
+
+test('BTC reads with skipSync: true do not connect lazily on networks with defaults', async () => {
+  const reads = [];
+  const { wallet, calls } = utexoFixture(btcReads(reads));
+  await wallet.init();
+  await wallet.getBtcBalance({ skipSync: true });
+  await wallet.listUnspents({ skipSync: true });
+  assert.equal(onlineCalls(calls).length, 0);
+  await wallet.getBtcBalance();
+  assert.equal(onlineCalls(calls).length, 1);
+  await wallet.dispose();
+});
+
 test('an explicit unlock keeps its endpoints, even while it is still connecting', async () => {
   const gate = deferred();
   const { wallet, calls } = utexoFixture({

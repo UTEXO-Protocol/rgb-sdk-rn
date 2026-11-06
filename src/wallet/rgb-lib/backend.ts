@@ -46,6 +46,14 @@ async function closeHandle(native: Spec, handle: string): Promise<void> {
 }
 
 /** One backend owns one native handle, one queue, and one immutable wallet profile. */
+/**
+ * Reads that sync first need a connection. With `skipSync: true` they read
+ * the stored state, which native rgb-lib allows without one: so they work
+ * offline, also on networks without default endpoints (regtest).
+ */
+const syncs = (options: { skipSync?: boolean } | null | undefined) =>
+  options?.skipSync !== true;
+
 export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockParams> {
   private readonly queue = new SerialExecutor();
   private readonly params: Readonly<RgbLibWalletParams>;
@@ -256,7 +264,8 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   /** Like input(), for an optional options object (may be undefined). */
   private withOptions<O, T>(
     operation: string,
-    requiresOnline: boolean,
+    // A function decides from the owned options, so a getter is read once.
+    requiresOnline: boolean | ((owned: O | undefined) => boolean),
     options: O | undefined,
     action: (native: Spec, handle: string, owned: O | undefined) => Promise<T>
   ): Promise<T> {
@@ -270,7 +279,11 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         'options'
       );
     const owned = snapshot(options);
-    return this.run(operation, requiresOnline, (native, handle) =>
+    const online =
+      typeof requiresOnline === 'function'
+        ? requiresOnline(owned)
+        : requiresOnline;
+    return this.run(operation, online, (native, handle) =>
       action(native, handle, owned)
     );
   }
@@ -616,7 +629,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       getBtcBalance: (options) =>
         this.withOptions(
           'getBtcBalance',
-          true,
+          syncs,
           options,
           async (native, handle, options) => {
             const value = await native.getBtcBalance(
@@ -632,7 +645,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       listUnspents: (options) =>
         this.withOptions(
           'listUnspents',
-          true,
+          syncs,
           options,
           async (native, handle, options) =>
             (await native.listUnspents(handle, options?.skipSync ?? false)).map(
@@ -1000,7 +1013,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
       listTransactions: (options) =>
         this.withOptions(
           'listTransactions',
-          true,
+          syncs,
           options,
           async (native, handle, options) =>
             (
@@ -1008,7 +1021,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
             ).map(map.transaction)
         ),
       listTransactionsByTxid: (txid, skipSync = false) =>
-        this.run('listTransactionsByTxid', true, async (native, handle) =>
+        this.run('listTransactionsByTxid', !skipSync, async (native, handle) =>
           (await native.listTransactions(handle, skipSync))
             .filter((t) => t.txid === txid)
             .map(map.transaction)

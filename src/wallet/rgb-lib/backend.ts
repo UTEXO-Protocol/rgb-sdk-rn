@@ -8,14 +8,16 @@ import { readRgbLibMnemonic, resolveRgbLibKeys } from './key-provider';
 import type { ResolvedRgbLibKeys, RgbLibKeys } from './key-provider';
 import type { OnchainWalletBackend, WalletIdentity } from '../wallet-api';
 import { CleanupFailure, WalletBackendError } from '../wallet-errors';
-import { ValidationError } from '@utexo/rgb-sdk-core';
+import {
+  ValidationError,
+  validateBurnParams,
+  validateConsignmentLookup,
+} from '@utexo/rgb-sdk-core';
 import { SerialExecutor } from '../runtime/serial-executor';
 import { snapshot } from '../runtime/snapshot';
 import {
   resolveReceiveAssignment,
   validateAssetSchemas,
-  validateBurnParams,
-  validateConsignmentLookup,
   localFilePath,
 } from '../operations/validation';
 import {

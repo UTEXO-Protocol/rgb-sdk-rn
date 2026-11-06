@@ -1628,7 +1628,7 @@
 
 "@utexo/rgb-sdk-core@file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz":
   version "0.1.0"
-  resolved "file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz#7ddb9e4b727b7dc41ba45129d1bb5861ce87e7e6"
+  resolved "file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz#3d83ce4dee2399648bf2814f26492a27c3690cc1"
   dependencies:
     "@noble/hashes" "^2.0.1"
     "@noble/secp256k1" "3.0.0"

@@ -1,7 +1,9 @@
 import { WalletBackendError } from '../wallet-errors';
 import type { RestoreFromBackupParams, WalletRestoreResponse } from '../types';
 import { getRgbLibBinding, assertRuntime } from './native';
-import { guardNative } from './errors';
+import { guardNative, toPublicError } from './errors';
+
+const OPERATION = 'restoreFromBackup';
 
 /**
  * RGB_L1 only. Restores a `createBackup()` archive into a new, empty wallet
@@ -33,14 +35,19 @@ export async function restoreFromBackupWith(
     throw new WalletBackendError(
       'INVALID_CONFIG',
       'Restore requires an absolute backupFilePath and dataDir and a nonempty password',
-      undefined,
+      OPERATION,
       'RGB_L1'
     );
   }
   const { backupFilePath, password, dataDir } = params;
-  const native = guardNative(loadBinding());
-  const runtime = await native.getRuntimeInfo();
-  assertRuntime(runtime);
-  await native.restoreBackup(backupFilePath, password, dataDir);
+  try {
+    const native = guardNative(loadBinding());
+    const runtime = await native.getRuntimeInfo();
+    assertRuntime(runtime);
+    await native.restoreBackup(backupFilePath, password, dataDir);
+  } catch (error) {
+    // Report the public name, not the native method (`restoreBackup`).
+    throw toPublicError(error, OPERATION);
+  }
   return { message: 'Wallet restored successfully' };
 }

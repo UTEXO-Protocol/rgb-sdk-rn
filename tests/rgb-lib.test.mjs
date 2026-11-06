@@ -1408,7 +1408,10 @@ test('restoreFromBackup validates paths and runtime version before restoring', a
     const { native, calls } = fixture();
     await assert.rejects(
       restoreFromBackupWith({ ...valid, ...invalid }, () => native),
-      code('INVALID_CONFIG')
+      (e) =>
+        e.code === 'INVALID_CONFIG' &&
+        e.operation === 'restoreFromBackup' &&
+        e.protocol === 'RGB_L1'
     );
     assert.deepEqual(calls, []);
   }
@@ -1432,10 +1435,42 @@ test('restoreFromBackup validates paths and runtime version before restoring', a
     });
     await assert.rejects(
       restoreFromBackupWith(valid, () => native),
-      code('NATIVE_VERSION_MISMATCH')
+      (e) =>
+        e.code === 'NATIVE_VERSION_MISMATCH' &&
+        e.operation === 'restoreFromBackup'
     );
     assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'restore'));
   }
+  // A native rejection names the public operation, not the bridge method.
+  {
+    const nativeError = Object.assign(new Error('bad pw'), {
+      code: 'RGB_LIB_WrongPassword',
+    });
+    const { native } = fixture({
+      async restoreBackup() {
+        throw nativeError;
+      },
+    });
+    await assert.rejects(
+      restoreFromBackupWith(valid, () => native),
+      (e) =>
+        e.code === 'NATIVE_ERROR' &&
+        e.operation === 'restoreFromBackup' &&
+        e.protocol === 'RGB_L1' &&
+        e.cause === nativeError
+    );
+  }
+  // A missing native module is reported the same way.
+  await assert.rejects(
+    restoreFromBackupWith(valid, () => {
+      throw Object.assign(new Error('no module'), {
+        code: 'NATIVE_BACKEND_UNAVAILABLE',
+      });
+    }),
+    (e) =>
+      e.code === 'NATIVE_BACKEND_UNAVAILABLE' &&
+      e.operation === 'restoreFromBackup'
+  );
   const { native, calls } = fixture();
   assert.deepEqual(await restoreFromBackupWith(valid, () => native), {
     message: 'Wallet restored successfully',
@@ -2055,8 +2090,8 @@ test('a key source rejecting with a non-Error value keeps it as the cause', asyn
 });
 
 test('consignment lookup reports the argument that is invalid', async () => {
-  const { validateConsignmentLookup } =
-    await import('../lib/module/wallet/operations/validation.js');
+  // The engine uses core's check; this pins the engine's dependency on it.
+  const { validateConsignmentLookup } = await import('@utexo/rgb-sdk-core');
   const assetId = 'rgb:asset';
   const txid = 'a'.repeat(64);
   for (const [args, field] of [

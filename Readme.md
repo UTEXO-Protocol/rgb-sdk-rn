@@ -98,7 +98,7 @@ Operations on a `RgbLibWallet` instance reject with an `EngineError`: an object 
 
 Outside wallet instances:
 
-- `restoreFromBackup()` rejects invalid parameters with `WalletBackendError` `INVALID_CONFIG` without an `operation`.
+- `restoreFromBackup()` rejects with a `WalletBackendError` whose `operation` is `'restoreFromBackup'` and `protocol` is `'RGB_L1'`: `INVALID_CONFIG` for invalid parameters, otherwise the mapped native code.
 - Helpers re-exported from core (`generateKeys()`, `deriveKeysFromMnemonic()` and others) throw core's own errors, such as `CryptoError`.
 
 ## WebRGB and burn journal
@@ -120,4 +120,10 @@ Outside wallet instances:
 npm test
 ```
 
-Runs the type check, the engine conformance suite and the rgb-lib tests in Node with a stubbed native module. `npm run test:rgb-lib:ios` and `npm run test:rgb-lib:android` run native checks that need Xcode or `kotlinc`.
+Runs the type check, the engine conformance suite and the rgb-lib tests in Node with a stubbed native module.
+
+Native checks:
+
+- `npm run test:rgb-lib:ios`: the TurboModule dispatcher on the host, then the rgb-lib UniFFI smoke on a simulator it creates and removes. Needs Xcode and the bindings (`npm run bindings:rgb-lib`).
+- `npm run test:rgb-lib:android`: the dispatcher on the host JVM. Needs `kotlinc` (or `KOTLINC`) and `java`.
+- `RgbLibSessionStoreInstrumentationTest` (`android/src/androidTest/`): the session store against the Maven Central AAR, on an emulator or device. Run it from a host app's Android project, for example `./gradlew :utexo_rgb-lib-rn:connectedDebugAndroidTest`. The npm package does not ship `androidTest`, so use a checkout of this repository as the library module.

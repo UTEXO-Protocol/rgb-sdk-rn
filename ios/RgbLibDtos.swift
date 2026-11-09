@@ -142,12 +142,13 @@ func rgbDto(_ v: RGBLib.Transfer) -> [String: Any] {
     "txid": v.txid.map { $0 as Any } ?? NSNull(),
     "recipientId": v.recipientId.map { $0 as Any } ?? NSNull(),
     "receiveUtxo": v.receiveUtxo.map { rgbDto($0) as Any } ?? NSNull(),
-    "changeUtxo": v.changeUtxo.map { rgbDto($0) as Any } ?? NSNull(),
+    "changeUtxos": v.changeUtxos.map { rgbDto($0) },
     "expiration": v.expirationTimestamp.map { String($0) as Any } ?? NSNull(),
     "transportEndpoints": v.transportEndpoints.map { rgbDto($0) },
     "invoiceString": v.invoiceString.map { $0 as Any } ?? NSNull(),
     "consignmentPath": v.consignmentPath.map { $0 as Any } ?? NSNull(),
   ]
+  result["changeUtxo"] = v.changeUtxos.first.map { rgbDto($0) as Any } ?? NSNull()
   return result
 }
 func rgbDto(_ v: RGBLib.TokenLight) -> [String: Any] {
@@ -290,6 +291,7 @@ func rgbDto(_ v: RGBLib.AssetBfa) -> [String: Any] {
     "addedAt": String(v.addedAt),
     "balance": rgbDto(v.balance),
     "media": v.media.map { rgbDto($0) as Any } ?? NSNull(),
+    "knownCirculatingSupply": String(v.knownCirculatingSupply),
     "ticker": v.ticker,
     "initialSupply": String(v.initialSupply),
     "rejectListUrl": v.rejectListUrl.map { $0 as Any } ?? NSNull(),
@@ -297,7 +299,6 @@ func rgbDto(_ v: RGBLib.AssetBfa) -> [String: Any] {
   result["schema"] = "Bfa"
   result["issuedSupply"] = NSNull()
   result["maxSupply"] = NSNull()
-  result["knownCirculatingSupply"] = NSNull()
   result["token"] = NSNull()
   return result
 }

@@ -38,6 +38,8 @@ Pod::Spec.new do |s|
       "ios/RGBLightningNodeFFI.h",
     ]
   end
+  pin = JSON.parse(File.read(File.join(__dir__, "src/bindings/rgb-lib/manifest.json")))
+  raise "This draft is Android-only: v6 iOS bindings are not available. See docs/android-v6-demo.md." unless pin["ios"]
   if File.file?(File.join(__dir__, "ios/RgbLibBindings/manifest.json"))
     pin = JSON.parse(File.read(File.join(__dir__, "src/bindings/rgb-lib/manifest.json")))
     installed = JSON.parse(File.read(File.join(__dir__, "ios/RgbLibBindings/manifest.json")))

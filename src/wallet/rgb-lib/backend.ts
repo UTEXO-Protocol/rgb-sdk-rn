@@ -303,6 +303,12 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         auth?.cookieFile ?? null,
         Object.keys(config.evmRpcUrls),
         Object.values(config.evmRpcUrls),
+        Object.keys(config.evmRpcUrls).map((id) =>
+          String(config.evmMintLockBlocks[id]!.min)
+        ),
+        Object.keys(config.evmRpcUrls).map((id) =>
+          String(config.evmMintLockBlocks[id]!.max)
+        ),
         Object.keys(config.proxyAuthKeys),
         Object.values(config.proxyAuthKeys)
       );

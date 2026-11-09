@@ -182,7 +182,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     }
   }
   private fun consignment(s: Session, p: JSONObject): File {
-    val paths = s.wallet.listTransfers(AssetFilter.Id(p.getString("assetId")),p.getString("txid")).mapNotNull { it.consignmentPath }.distinct()
+    val paths = s.wallet.listTransfers(AssetFilter.Id(p.getString("assetId")),TransferScope.Txid(p.getString("txid"))).mapNotNull { it.consignmentPath }.distinct()
     if (paths.size != 1) throw RgbLibBridgeError("CONSIGNMENT_NOT_FOUND","No unique consignment for this transfer")
     val file = File(paths.single()).canonicalFile
     if (!file.isFile || !file.path.startsWith(File(s.wallet.getWalletDir()).canonicalPath + File.separator))
@@ -212,7 +212,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     when(operation) {
       "getRuntimeInfo" -> {
         val artifact = runCatching { JSONObject(artifactInfo()!!) }.getOrNull()
-        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 4,"burn" to true,"consignment" to true,"bfa" to true)
+        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 5,"burn" to true,"consignment" to true,"bfa" to true)
       }
       "openWallet" -> return open(p)
       "restoreBackup" -> { restore(p); return null }
@@ -244,9 +244,15 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
           else -> fail("Unsupported indexer")
         }
         val ids=strings(p,"evmChainIds"); val urls=strings(p,"evmRpcUrls")
+        val mins=strings(p,"evmMinMintLockBlocks"); val maxs=strings(p,"evmMaxMintLockBlocks")
         val endpoints=strings(p,"proxyEndpoints"); val keys=strings(p,"proxyAuthKeys")
-        if (ids.size != urls.size || endpoints.size != keys.size) fail("Configuration arrays do not match")
-        s.online=w.goOnline(OnlineOptions(config,false,20U,86400U,endpoints.zip(keys).toMap(),ids.map { it.toULong() }.zip(urls).toMap()))
+        if (ids.size != urls.size || ids.size != mins.size || ids.size != maxs.size || endpoints.size != keys.size) fail("Configuration arrays do not match")
+        val chains=ids.indices.associate { i ->
+          val min=mins[i].toULong(); val max=maxs[i].toULong()
+          if (min > max) fail("Minimum mint lock blocks exceed maximum")
+          ids[i].toULong() to EvmChain(urls[i],min,max)
+        }
+        s.online=w.goOnline(OnlineOptions(config,false,20U,86400U,endpoints.zip(keys).toMap(),chains))
         null
       }
       "getAddress" -> {
@@ -267,7 +273,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       "getAssetMetadata" -> rgbDto(w.getAssetMetadata(p.getString("assetId")))
       "listUnspents" -> w.listUnspents(s.online,false,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransactions" -> w.listTransactions(s.online,p.getBoolean("skipSync")).map { rgbDto(it) }
-      "listTransfers" -> w.listTransfers(optional(p,"assetId")?.let { AssetFilter.Id(it) } ?: AssetFilter.AnyOrNone,optional(p,"txid")).map { rgbDto(it) }
+      "listTransfers" -> w.listTransfers(optional(p,"assetId")?.let { AssetFilter.Id(it) } ?: AssetFilter.AnyOrNone,optional(p,"txid")?.let { TransferScope.Txid(it) } ?: TransferScope.All).map { rgbDto(it) }
       "createUtxos" -> w.createUtxos(online(s),p.getBoolean("upTo"),if(p.isNull("num")) null else number(p,"num",255).toUByte(),if(p.isNull("size")) null else number(p,"size",0xffffffffL).toUInt(),amount(p,"feeRate"),p.getBoolean("skipSync")).toDouble()
       "sendBtc" -> w.sendBtc(online(s),p.getString("address"),amount(p,"amount"),amount(p,"feeRate"),p.getBoolean("skipSync"))
       "receive" -> {

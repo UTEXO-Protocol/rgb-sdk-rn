@@ -58,7 +58,7 @@ const records = {
     txid: 'string?',
     recipientId: 'string?',
     receiveUtxo: 'record?',
-    changeUtxo: 'record?',
+    changeUtxos: 'records',
     expirationTimestamp: 'decimal?',
     transportEndpoints: 'records',
     invoiceString: 'string?',
@@ -121,6 +121,7 @@ for (const [name, fields] of Object.entries({
     rejectListUrl: 'string?',
   },
   AssetBfa: {
+    knownCirculatingSupply: 'decimal',
     ticker: 'string',
     initialSupply: 'decimal',
     rejectListUrl: 'string?',
@@ -211,6 +212,12 @@ for (const [name, fields] of Object.entries(records)) {
   }));
   swift += `func rgbDto(_ v: RGBLib.${name}) -> [String: Any] {\n  var result: [String: Any] = [\n${entries.map((e) => `    "${e.key}": ${expr(e.type, `v.${e.field}`, true)},`).join('\n')}\n  ]\n`;
   kotlin += `internal fun rgbDto(v: ${name}): Map<String, Any?> {\n  val result = mutableMapOf<String, Any?>(\n${entries.map((e) => `    "${e.key}" to ${expr(e.type, `v.${e.field}`, false)},`).join('\n')}\n  )\n`;
+  if (name === 'Transfer') {
+    swift +=
+      '  result["changeUtxo"] = v.changeUtxos.first.map { rgbDto($0) as Any } ?? NSNull()\n';
+    kotlin +=
+      '  result["changeUtxo"] = v.changeUtxos.firstOrNull()?.let { rgbDto(it) }\n';
+  }
   if (name === 'TokenLight') {
     swift +=
       '  result["attachments"] = v.attachments.sorted { $0.key < $1.key }.map { key, media in var item = rgbDto(media); item["key"] = NSNumber(value:key); return item }\n';

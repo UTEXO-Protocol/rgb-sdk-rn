@@ -3,9 +3,9 @@ import { getNetworkDefaults } from '../network-endpoints';
 import { WalletBackendError } from '../wallet-errors';
 
 /** Release of the Swift and Kotlin bindings, as written in their `version.json`. */
-export const RGB_LIB_VERSION = '0.3.0-beta.7-upstream-dev-bfa.5-bfa';
-export const RGB_LIB_REVISION = '0a9d352f2690902df2b6fae9bca1a6c13c3354d4';
-export const RGB_LIB_BRIDGE_VERSION = 4;
+export const RGB_LIB_VERSION = '0.3.0-beta.7-upstream-dev-bfa.6-bfa.devnext.1';
+export const RGB_LIB_REVISION = '5010eefa355beb9c42a4c1b69883f7651241a111';
+export const RGB_LIB_BRIDGE_VERSION = 5;
 
 export interface RgbLibWalletParams {
   network: BitcoinNetwork;
@@ -33,6 +33,8 @@ type RgbLibOnlineConfig = {
    */
   proxyEndpoint?: string;
   evmRpcUrls?: Readonly<Record<string, string>>;
+  /** Explicit v6 mint lock policy, in blocks of the corresponding EVM chain. */
+  evmMintLockBlocks?: Readonly<Record<string, { min: number; max: number }>>;
   proxyAuthKeys?: Readonly<Record<string, string>>;
 };
 /** Omit both `indexer` and `indexerUrl` to use `DEFAULT_INDEXER_URLS[network]`. */
@@ -46,6 +48,7 @@ export interface ResolvedRgbLibConfig {
   indexer: RgbLibIndexer;
   proxyEndpoint: string;
   evmRpcUrls: Readonly<Record<string, string>>;
+  evmMintLockBlocks: Readonly<Record<string, { min: number; max: number }>>;
   proxyAuthKeys: Readonly<Record<string, string>>;
 }
 
@@ -190,6 +193,7 @@ export function resolveRgbLibConfig(
   if (!requestedProxy) invalidConfig('A proxy endpoint is required');
   const proxy = proxyEndpoint(requestedProxy);
   const evmRpcUrls = { ...params.evmRpcUrls };
+  const evmMintLockBlocks: Record<string, { min: number; max: number }> = {};
   for (const [chainId, endpoint] of Object.entries(evmRpcUrls)) {
     if (
       !/^[1-9]\d{0,19}$/.test(chainId) ||
@@ -198,6 +202,18 @@ export function resolveRgbLibConfig(
       invalidConfig('EVM chain IDs must be positive u64 decimal strings');
     }
     url(endpoint, ['https://', 'http://'], 'EVM RPC');
+    const bounds = params.evmMintLockBlocks?.[chainId];
+    if (!bounds)
+      invalidConfig(`EVM mint lock bounds are required for chain ${chainId}`);
+    integer(bounds.min, 'minMintLockBlocks', 0, Number.MAX_SAFE_INTEGER);
+    integer(bounds.max, 'maxMintLockBlocks', 1, Number.MAX_SAFE_INTEGER);
+    if (bounds.min > bounds.max)
+      invalidConfig('Minimum mint lock blocks exceed maximum');
+    evmMintLockBlocks[chainId] = { min: bounds.min, max: bounds.max };
+  }
+  for (const chainId of Object.keys(params.evmMintLockBlocks ?? {})) {
+    if (!Object.hasOwn(evmRpcUrls, chainId))
+      invalidConfig('Mint lock bounds require a matching EVM RPC');
   }
   const proxyAuthKeys: Record<string, string> = {};
   for (const [endpoint, key] of Object.entries(params.proxyAuthKeys ?? {})) {
@@ -210,7 +226,13 @@ export function resolveRgbLibConfig(
     }
     proxyAuthKeys[normalized] = key;
   }
-  return { indexer, proxyEndpoint: proxy, evmRpcUrls, proxyAuthKeys };
+  return {
+    indexer,
+    proxyEndpoint: proxy,
+    evmRpcUrls,
+    evmMintLockBlocks,
+    proxyAuthKeys,
+  };
 }
 
 export function configEquals(a: ResolvedRgbLibConfig, b: ResolvedRgbLibConfig) {
@@ -228,6 +250,7 @@ export function configEquals(a: ResolvedRgbLibConfig, b: ResolvedRgbLibConfig) {
       entries(a.indexer.auth) === entries(b.indexer.auth)) &&
     a.proxyEndpoint === b.proxyEndpoint &&
     entries(a.evmRpcUrls) === entries(b.evmRpcUrls) &&
+    entries(a.evmMintLockBlocks) === entries(b.evmMintLockBlocks) &&
     entries(a.proxyAuthKeys) === entries(b.proxyAuthKeys)
   );
 }

@@ -21,7 +21,7 @@ apply plugin: "kotlin-android"
 
 apply plugin: "com.facebook.react"
 
-// rgb-lib (RGB_L1) comes from Maven Central at the version pinned in the SDK.
+// The v6 draft uses a verified local AAR; published pins use Maven Central.
 def rgbLibPin = new groovy.json.JsonSlurper().parse(file("../src/bindings/rgb-lib/manifest.json"))
 // RLN (RGB_LN) is switched by `rgbSdk.rln` in the SDK's package.json. When off,
 // its sources and the RLN AAR are left out of the build.
@@ -82,6 +82,14 @@ android {
 }
 
 repositories {
+  if (rgbLibPin.localAndroidBuild) {
+    exclusiveContent {
+      forRepository {
+        maven { url uri(file("local-maven")) }
+      }
+      filter { includeModule("com.utexo", "rgb-lib-bfa-android") }
+    }
+  }
   mavenCentral()
   google()
 }

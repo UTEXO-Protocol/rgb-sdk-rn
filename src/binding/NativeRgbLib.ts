@@ -60,6 +60,7 @@ export type NativeTransfer = {
   recipientId: string | null;
   receiveUtxo: NativeOutpoint | null;
   changeUtxo: NativeOutpoint | null;
+  changeUtxos: NativeOutpoint[];
   expiration: string | null;
   transportEndpoints: {
     endpoint: string;
@@ -173,6 +174,8 @@ export interface Spec extends TurboModule {
     cookieFile: string | null,
     evmChainIds: string[],
     evmRpcUrls: string[],
+    evmMinMintLockBlocks: string[],
+    evmMaxMintLockBlocks: string[],
     proxyEndpoints: string[],
     proxyAuthKeys: string[]
   ): Promise<void>;

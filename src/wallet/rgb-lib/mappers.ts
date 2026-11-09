@@ -107,7 +107,9 @@ export function transferStatus(value: string): TransferStatus {
     'transfer status'
   );
 }
-export function transfer(value: NativeTransfer): WalletTransfer {
+export function transfer(
+  value: NativeTransfer
+): WalletTransfer & { changeUtxos: NativeTransfer['changeUtxos'] } {
   const assignments = value.assignments.map(assignment);
   const requestedAssignment = value.requestedAssignment
     ? assignment(value.requestedAssignment)
@@ -152,6 +154,7 @@ export function transfer(value: NativeTransfer): WalletTransfer {
     recipientId: value.recipientId ?? undefined,
     receiveUtxo: value.receiveUtxo ?? undefined,
     changeUtxo: value.changeUtxo ?? undefined,
+    changeUtxos: value.changeUtxos,
     expiration:
       value.expiration === null
         ? undefined

@@ -130,12 +130,13 @@ internal fun rgbDto(v: Transfer): Map<String, Any?> {
     "txid" to v.txid?.let { it },
     "recipientId" to v.recipientId?.let { it },
     "receiveUtxo" to v.receiveUtxo?.let { rgbDto(it) },
-    "changeUtxo" to v.changeUtxo?.let { rgbDto(it) },
+    "changeUtxos" to v.changeUtxos.map { rgbDto(it) },
     "expiration" to v.expirationTimestamp?.let { it.toString() },
     "transportEndpoints" to v.transportEndpoints.map { rgbDto(it) },
     "invoiceString" to v.invoiceString?.let { it },
     "consignmentPath" to v.consignmentPath?.let { it },
   )
+  result["changeUtxo"] = v.changeUtxos.firstOrNull()?.let { rgbDto(it) }
   return result
 }
 internal fun rgbDto(v: TokenLight): Map<String, Any?> {
@@ -278,6 +279,7 @@ internal fun rgbDto(v: AssetBfa): Map<String, Any?> {
     "addedAt" to v.addedAt.toString(),
     "balance" to rgbDto(v.balance),
     "media" to v.media?.let { rgbDto(it) },
+    "knownCirculatingSupply" to v.knownCirculatingSupply.toString(),
     "ticker" to v.ticker,
     "initialSupply" to v.initialSupply.toString(),
     "rejectListUrl" to v.rejectListUrl?.let { it },
@@ -285,7 +287,6 @@ internal fun rgbDto(v: AssetBfa): Map<String, Any?> {
   result["schema"] = "Bfa"
   result["issuedSupply"] = null
   result["maxSupply"] = null
-  result["knownCirculatingSupply"] = null
   result["token"] = null
   return result
 }

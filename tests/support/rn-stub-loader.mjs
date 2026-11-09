@@ -1,7 +1,7 @@
 /**
  * ESM loader hook that stubs `react-native` for Node.
  *
- * `src/binding/NativeRgbLib.ts` calls `TurboModuleRegistry.get('RgbLib')` at
+ * `src/native/NativeRgbLib.ts` calls `TurboModuleRegistry.get('RgbLib')` at
  * module load, and react-native's entry point is Flow-typed source Node cannot
  * parse. The contract checks in `check-contract.mjs` only inspect class fields
  * and getters — they never touch the native module — so a stub is enough and

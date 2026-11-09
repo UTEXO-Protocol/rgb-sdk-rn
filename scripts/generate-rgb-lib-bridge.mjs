@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = ts.createSourceFile(
   'NativeRgbLib.ts',
-  fs.readFileSync(path.join(root, 'src/binding/NativeRgbLib.ts'), 'utf8'),
+  fs.readFileSync(path.join(root, 'src/native/NativeRgbLib.ts'), 'utf8'),
   ts.ScriptTarget.Latest,
   true
 );

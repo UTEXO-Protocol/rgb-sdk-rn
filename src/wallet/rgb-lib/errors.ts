@@ -2,7 +2,7 @@ import { isEngineError } from '@utexo/rgb-sdk-core';
 import type { EngineError } from '@utexo/rgb-sdk-core';
 import { asCause, WalletBackendError, withOperation } from '../wallet-errors';
 import type { WalletBackendErrorCode } from '../wallet-errors';
-import type { Spec } from '../../binding/NativeRgbLib';
+import type { Spec } from '../../native/NativeRgbLib';
 
 export { NativeRejection } from '../wallet-errors';
 

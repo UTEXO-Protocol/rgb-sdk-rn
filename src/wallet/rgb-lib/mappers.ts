@@ -20,7 +20,7 @@ import type {
   NativeTransaction,
   NativeTransfer,
   NativeUnspent,
-} from '../../binding/NativeRgbLib';
+} from '../../native/NativeRgbLib';
 import type { AssetMetadata, ListAssets } from '../types';
 import type {
   WalletAssignment,

@@ -1,5 +1,5 @@
-import NativeRgbLib from '../../binding/NativeRgbLib';
-import type { Spec, NativeRuntimeInfo } from '../../binding/NativeRgbLib';
+import NativeRgbLib from '../../native/NativeRgbLib';
+import type { Spec, NativeRuntimeInfo } from '../../native/NativeRgbLib';
 import { WalletBackendError } from '../wallet-errors';
 import {
   RGB_LIB_VERSION,

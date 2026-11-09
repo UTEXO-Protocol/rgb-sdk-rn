@@ -222,10 +222,14 @@ test('native bridges report the manifest bridge version and read artifact proven
   const kotlin = source(
     'android/src/main/java/com/rgbsdkrn/RgbLibSessionStore.kt'
   );
-  assert.match(
-    swift,
-    new RegExp(`"bridgeVersion": ${RGB_LIB_BRIDGE_VERSION},`)
-  );
+  // The v6 draft deliberately does not enable the older iOS implementation.
+  const manifest = JSON.parse(source('src/bindings/rgb-lib/manifest.json'));
+  if (manifest.ios)
+    assert.match(
+      swift,
+      new RegExp(`"bridgeVersion": ${RGB_LIB_BRIDGE_VERSION},`)
+    );
+  else assert.match(source('Rgb.podspec'), /v6 iOS bindings are not available/);
   assert.match(
     kotlin,
     new RegExp(`"bridgeVersion" to ${RGB_LIB_BRIDGE_VERSION},`)

@@ -282,6 +282,10 @@ async function installIos() {
     log('Skipping iOS bindings: RGB_LIB_SKIP_IOS=1.');
     return;
   }
+  if (!pin.ios)
+    throw new Error(
+      'This draft pins a local Android-only v6 artifact. iOS v6 bindings are not available.'
+    );
   if (!force && installedMatches()) {
     log(`iOS bindings ${pin.version} already installed.`);
     return;
@@ -353,7 +357,9 @@ async function installIos() {
 try {
   await installIos();
   log(
-    `Android uses com.utexo:rgb-lib-bfa-android:${pin.version} from Maven Central.`
+    pin.localAndroidBuild
+      ? `Android requires the local v6 AAR; see docs/android-v6-demo.md.`
+      : `Android uses com.utexo:rgb-lib-bfa-android:${pin.version} from Maven Central.`
   );
 } catch (error) {
   const detail = error.stderr?.toString().trim() || error.message;

@@ -59,3 +59,6 @@ graphify-out/
 ios/RgbLibBindings/
 ios/RgbLibBindings.pending/
 ios/RgbLibBindings.previous/
+
+# Local v6 Android artifact (never commit binaries)
+android/local-maven/

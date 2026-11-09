@@ -16,7 +16,7 @@ RLN (`RGB_LN`) is not part of this split yet. An app that needs Lightning stays 
 
 ### Wallet data carries over
 
-No data migration is needed. The new engine opens a wallet directory written by `@utexo/rgb-sdk-rn@1.0.0-beta.40` as is, with the same identity, addresses, balances and transfers, and it restores beta.40 backup files. Both versions use the same native rgb-lib release and the same storage files (`rgb-sdk-profile.json`, `.rgb-sdk.lock`, the rgb-lib data directory). This was verified on iOS and Android by creating a wallet and a backup with beta.40, then opening both with the new packages (see `docs/04-rn-migration.md` in the workspace). It was not verified for a funded wallet.
+No data migration is needed. The new engine opens a wallet directory written by `@utexo/rgb-sdk-rn@1.0.0-beta.40` as is, with the same identity, addresses, balances and transfers, and it restores beta.40 backup files. Both versions use the same native rgb-lib release and the same storage files (`rgb-sdk-profile.json`, `.rgb-sdk.lock`, the rgb-lib data directory). This was verified on iOS and Android by creating a wallet and a backup with beta.40, then opening both with the new packages (see `docs/04-rn-migration.md` in the workspace). A funded wallet (settled BTC, an issued asset, allocations) was verified on iOS against a local regtest.
 
 Keep the same `storageDirPath`, mnemonic (or key reader) and `network`. Keep `reuseAddresses` as it was, or `getAddress()` behaves differently.
 
@@ -61,8 +61,11 @@ const wallet = new RgbLibWallet(params, keys);
 | `init()`, `initialize()`, `destroy()`, `dispose()`, `shutdown()`, `reinit()` | unchanged |
 | `goOnline(params)` | `unlock(params)` (same `RgbLibUnlockParams`; `{}` uses the network defaults) |
 | shared wallet methods (`getAddress`, `getBtcBalance`, `listAssets`, `sendBtc`, `onchainReceive`, `onchainSend`, `listTransfers`, `refreshWallet`, `syncWallet`, …) | unchanged, except the behaviour changes below |
+| `refreshTransfers(skipSync?)` | `refresh({ skipSync? })` on the facade or the engine (same `RefreshTransfersResult`); `refreshTransfers` stays on `RgbLibWallet` |
 | `createBackup`, `drainTo`, `deleteTransfers`, `getBfaCapabilities`, `burn`, `getConsignment`, `getConsignmentPath` | unchanged (rgb-lib extensions, present on the facade) |
-| `rotateVanillaAddress`, `checkIndexerUrl`, `getAssetMetadata`, `issueAssetCfa`, `issueAssetUda`, `listOnchainTransfers`, `listTransactionsByTxid`, `listTransfersByTxid`, `refreshTransfers` | `wallet.engine.<method>()` on a facade, or directly on `RgbLibWallet` |
+| `rotateVanillaAddress`, `checkIndexerUrl`, `getAssetMetadata`, `issueAssetCfa`, `issueAssetUda`, `listTransfersByTxid` | unchanged (core extensions, present on the facade) |
+| `listTransactionsByTxid(txid, skipSync?)` | `listTransactionsByTxid(txid, { skipSync? })` on the facade or the engine; the positional boolean still works on `RgbLibWallet` |
+| `listOnchainTransfers` | `wallet.engine.listOnchainTransfers()`, or `listTransfers()` (same result) |
 | `signMessage`, `verifyMessage`, `backupNow`, `vssClearFence` and every Lightning method | not available on RGB_L1 (they were RLN-only) |
 | `wallet.protocol`, `wallet.capabilities` | unchanged; read from the engine |
 

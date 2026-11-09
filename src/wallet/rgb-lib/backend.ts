@@ -1,5 +1,5 @@
 import { isEngineError } from '@utexo/rgb-sdk-core';
-import type { Network } from '@utexo/rgb-sdk-core';
+import type { Network, RefreshTransfersResult } from '@utexo/rgb-sdk-core';
 import type { ReceiveParams } from '../types';
 import { getRgbLibBinding, assertRuntime } from './native';
 import type { NativeRuntimeInfo, Spec } from '../../binding/NativeRgbLib';
@@ -64,6 +64,31 @@ function skipSyncOf(value: unknown): boolean {
   if (typeof value !== 'boolean')
     throw new ValidationError('skipSync must be a boolean', 'skipSync');
   return value;
+}
+
+/** One native refresh, mapped; shared by `refresh` and its compat aliases. */
+async function refreshed(
+  native: Spec,
+  handle: string,
+  skipSync: boolean
+): Promise<RefreshTransfersResult> {
+  return {
+    transfers: Object.fromEntries(
+      (await native.refresh(handle, skipSync)).map((item) => [
+        item.batchTransferIdx,
+        {
+          updatedStatus:
+            item.updatedStatus === null
+              ? undefined
+              : map.transferStatus(item.updatedStatus),
+          failure:
+            item.failure === null
+              ? undefined
+              : map.refreshFailure(item.failure),
+        },
+      ])
+    ),
+  };
 }
 
 export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockParams> {
@@ -1037,8 +1062,13 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
               )
             ).map(map.transaction)
         ),
-      listTransactionsByTxid: (txid, skipSync) => {
-        const skip = skipSyncOf(skipSync);
+      listTransactionsByTxid: (txid, options) => {
+        // An object is the contract form; anything else the old positional flag.
+        const skip = skipSyncOf(
+          typeof options === 'object' && options !== null
+            ? snapshot(options).skipSync
+            : options
+        );
         return this.run(
           'listTransactionsByTxid',
           !skip,
@@ -1057,10 +1087,25 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         this.listTransfers('listOnchainTransfers', assetId),
       syncWallet: () =>
         this.run('syncWallet', true, (native, handle) => native.sync(handle)),
+      refresh: (options) =>
+        this.withOptions(
+          'refresh',
+          // Always online; the flag is checked here, before any connect.
+          (owned) => (skipSyncOf(owned?.skipSync), true),
+          options,
+          (native, handle, owned) =>
+            refreshed(native, handle, skipSyncOf(owned?.skipSync))
+        ),
       refreshWallet: () =>
-        this.refreshTransfers('refreshWallet', false).then(() => undefined),
-      refreshTransfers: (skipSync) =>
-        this.refreshTransfers('refreshTransfers', skipSyncOf(skipSync)),
+        this.run('refreshWallet', true, (native, handle) =>
+          refreshed(native, handle, false)
+        ).then(() => undefined),
+      refreshTransfers: (skipSync) => {
+        const skip = skipSyncOf(skipSync);
+        return this.run('refreshTransfers', true, (native, handle) =>
+          refreshed(native, handle, skip)
+        );
+      },
     });
 
   // Shared by a method and its alias; each normalizes under its own name, once.
@@ -1070,26 +1115,6 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         map.transfer
       )
     );
-  }
-
-  private refreshTransfers(operation: string, skipSync: boolean) {
-    return this.run(operation, true, async (native, handle) => ({
-      transfers: Object.fromEntries(
-        (await native.refresh(handle, skipSync)).map((item) => [
-          item.batchTransferIdx,
-          {
-            updatedStatus:
-              item.updatedStatus === null
-                ? undefined
-                : map.transferStatus(item.updatedStatus),
-            failure:
-              item.failure === null
-                ? undefined
-                : map.refreshFailure(item.failure),
-          },
-        ])
-      ),
-    }));
   }
 
   readonly backup: OnchainWalletBackend<RgbLibUnlockParams>['backup'] =

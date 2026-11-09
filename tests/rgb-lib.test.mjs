@@ -496,8 +496,13 @@ test('skipSync must be a boolean; it is checked before connecting and reaches na
       () => wallet.getBtcBalance({ skipSync: bad }),
       () => wallet.listUnspents({ skipSync: bad }),
       () => wallet.listTransactions({ skipSync: bad }),
-      () => wallet.listTransactionsByTxid('a'.repeat(64), bad),
+      () => wallet.listTransactionsByTxid('a'.repeat(64), { skipSync: bad }),
+      // The old positional flag; an object there is the options form.
+      ...(typeof bad === 'object'
+        ? []
+        : [() => wallet.listTransactionsByTxid('a'.repeat(64), bad)]),
       () => wallet.refreshTransfers(bad),
+      () => wallet.refresh({ skipSync: bad }),
       () => wallet.createUtxos({ num: 1, feeRate: 1, skipSync: bad }),
       () => wallet.sendBtc({ address: 'btc', amount: 1, skipSync: bad }),
     ]) {
@@ -515,12 +520,20 @@ test('skipSync must be a boolean; it is checked before connecting and reaches na
   // null and omitted mean false (sync), so these connect once and pass false.
   await wallet.getBtcBalance({ skipSync: null });
   await wallet.listTransactionsByTxid('a'.repeat(64), null);
+  await wallet.listTransactionsByTxid('a'.repeat(64), { skipSync: true });
   await wallet.refreshTransfers();
+  await wallet.refresh({ skipSync: null });
+  await wallet.refresh({ skipSync: true });
   assert.deepEqual(reads, [
     ['btcBalance', false],
     ['transactions', false],
+    ['transactions', true],
   ]);
-  assert.deepEqual(native, [['refresh', false]]);
+  assert.deepEqual(native, [
+    ['refresh', false],
+    ['refresh', false],
+    ['refresh', true],
+  ]);
   assert.equal(onlineCalls(calls).length, 1);
   await wallet.dispose();
 });
@@ -1094,6 +1107,8 @@ test('refresh failures use the cross-platform RGB_LIB_<Variant> name', async () 
   await wallet.init();
   await wallet.unlock(config);
   const { transfers } = await wallet.refreshTransfers();
+  // refresh() is the contract name; it returns the same mapped result.
+  assert.deepEqual(await wallet.refresh(), { transfers });
   assert.deepEqual(transfers[4].failure, {
     name: 'RGB_LIB_InsufficientAssignments',
     message: 'Insufficient assignments',
@@ -2199,6 +2214,7 @@ test('aliases normalize once under their own name and keep the native cause', as
     ['listOnchainTransfers', () => wallet.listOnchainTransfers()],
     ['listTransfers', () => wallet.listTransfers()],
     ['refreshWallet', () => wallet.refreshWallet()],
+    ['refresh', () => wallet.refresh()],
   ]) {
     await assert.rejects(call(), (error) => {
       publicError('INVALID_PARAMS', operation)(error);

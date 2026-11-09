@@ -29,6 +29,7 @@ import type {
   Transfer,
 } from './types';
 import type { RefreshTransfersResult } from './refresh-types';
+import type { IndexerUrlInfo } from '@utexo/rgb-sdk-core';
 
 /** Public wallet mode, using the same vocabulary as WebRGB. */
 export type WalletProtocol = 'RGB_L1' | 'RGB_LN';
@@ -76,10 +77,12 @@ export interface WalletHistory {
   listTransactions(
     options?: ReadOptions
   ): ReturnType<IRgbAssets['listTransactions']>;
+  /** A boolean second argument is the old `skipSync` form; still accepted. */
   listTransactionsByTxid(
     txid: string,
-    skipSync?: boolean
+    options?: ReadOptions | boolean
   ): ReturnType<IRgbAssets['listTransactions']>;
+  refresh(options?: ReadOptions): Promise<RefreshTransfersResult>;
   refreshWallet(): Promise<void>;
   refreshTransfers(skipSync?: boolean): Promise<RefreshTransfersResult>;
   syncWallet(): Promise<void>;
@@ -107,7 +110,7 @@ export interface WalletBitcoin extends Omit<
   ): Promise<number>;
   rotateVanillaAddress(): Promise<string>;
   /** Detects the indexer protocol behind `url`. */
-  checkIndexerUrl(url: string): Promise<{ indexerProtocol: string }>;
+  checkIndexerUrl(url: string): Promise<IndexerUrlInfo>;
 }
 /** rgb-lib operations RLN has no equivalent for. Not part of the shared contract. */
 export interface WalletMaintenance {

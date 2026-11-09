@@ -85,44 +85,12 @@ export interface ReadOptions {
   skipSync?: boolean;
 }
 
-export interface IssueAssetCfaParams {
-  name: string;
-  details?: string | null;
-  precision: number;
-  amounts: number[];
-  /** Local media file (path or `file://` URI) attached to the contract. */
-  filePath?: string | null;
-}
-export interface IssueAssetUdaParams {
-  ticker: string;
-  name: string;
-  details?: string | null;
-  precision: number;
-  /** Local media file for the token. */
-  mediaFilePath?: string | null;
-  /** Local attachment files. */
-  attachmentsFilePaths?: string[];
-}
-
-/** Contract metadata; supplies are exact u64 decimal strings. */
-export interface AssetMetadata {
-  assetSchema: AssetSchemaName;
-  name: string;
-  precision: number;
-  ticker?: string;
-  details?: string;
-  /** **Unix seconds**. */
-  timestamp: number;
-  initialSupply: string;
-  maxSupply: string;
-  knownCirculatingSupply: string;
-  /** RGB_L1 only. */
-  rejectListUrl?: string;
-  /** RGB_L1 only: the contract an IFA/BFA asset was linked from. */
-  linkedFromContract?: string;
-  /** RGB_L1 only: the contract an IFA/BFA asset was linked to. */
-  linkedToContract?: string;
-}
+// Issuance and metadata models live in core with the extensions that use them.
+export type {
+  AssetMetadata,
+  IssueAssetCfaParams,
+  IssueAssetUdaParams,
+} from '@utexo/rgb-sdk-core';
 
 /** `restoreFromBackup()` input. Both paths are absolute. */
 export interface RestoreFromBackupParams {

@@ -10,13 +10,18 @@ import type {
 } from '../wallet-api';
 
 import type {
+  AddressRotationApi,
+  AssetMetadataApi,
   BurnApi,
   ConsignmentApi,
   ConsignmentFileApi,
   EngineCapabilities,
   FileBackupApi,
+  FileIssuanceApi,
+  IndexerCheckApi,
   RestartableWalletApi,
   SharedWalletApi,
+  TxidLookupApi,
   WalletMaintenanceApi as EngineMaintenanceApi,
 } from '@utexo/rgb-sdk-core';
 import { RgbLibWalletBackend } from './backend';
@@ -36,7 +41,12 @@ export class RgbLibWallet
     EngineMaintenanceApi,
     BurnApi,
     ConsignmentApi,
-    ConsignmentFileApi
+    ConsignmentFileApi,
+    IndexerCheckApi,
+    AssetMetadataApi,
+    FileIssuanceApi,
+    TxidLookupApi,
+    AddressRotationApi
 {
   /**
    * The engine contract this class implements. Embedded here, never read
@@ -199,6 +209,11 @@ export class RgbLibWallet
   ) {
     return this.ports.history.listOnchainTransfers(...args);
   }
+  /** Refreshes pending transfers; `skipSync: true` skips the sync first. */
+  refresh(...args: Parameters<WalletHistory['refresh']>) {
+    return this.ports.history.refresh(...args);
+  }
+  /** `refresh()` without the result. */
   refreshWallet() {
     return this.ports.history.refreshWallet();
   }

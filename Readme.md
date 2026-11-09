@@ -87,6 +87,23 @@ Keys: a mnemonic string, a sync or async reader, an object with `getMnemonic()`,
 
 Connection: `unlock(params)` takes an indexer (Electrum, Esplora or bitcoind) and a proxy endpoint; omitted values use `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS`. See [`RgbLibUnlockParams`](src/wallet/rgb-lib/config.ts).
 
+Custom endpoints can also be given once, as `online` in the constructor params. They are only stored there (construction makes no network call) and are used by the lazy connect and by `unlock()` without arguments; fields passed to `unlock(params)` override them. With `online`, a regtest wallet needs no explicit `unlock()`:
+
+```ts
+const wallet = new RgbLibWallet(
+  {
+    network: 'regtest',
+    storageDirPath,
+    online: { indexerUrl: 'tcp://localhost:50001', proxyEndpoint: 'rpc://localhost:3000/json-rpc' },
+  },
+  keys
+);
+await wallet.init();
+await wallet.getBtcBalance(); // connects with the configured endpoints
+```
+
+`unlock()` is optional on every network except regtest without `online`: the first operation that needs the network connects by itself. `goOnline(params)` is a deprecated alias of `unlock(params)`.
+
 Storage: each wallet needs its own directory. The engine refuses a directory that belongs to another wallet or engine, and holds a lock while a session is open.
 
 ## Errors

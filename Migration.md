@@ -59,7 +59,8 @@ const wallet = new RgbLibWallet(params, keys);
 | Before | After |
 | --- | --- |
 | `init()`, `initialize()`, `destroy()`, `dispose()`, `shutdown()`, `reinit()` | unchanged |
-| `goOnline(params)` | `unlock(params)` (same `RgbLibUnlockParams`; `{}` uses the network defaults) |
+| `goOnline(params)` | `unlock(params)` (same `RgbLibUnlockParams`). `goOnline` still works as a deprecated alias on `RgbLibWallet` and the facade |
+| endpoints passed on every connect | optionally once, as `online` in the constructor params; `unlock()`, `goOnline()` and the lazy connect use them, explicit fields override them |
 | shared wallet methods (`getAddress`, `getBtcBalance`, `listAssets`, `sendBtc`, `onchainReceive`, `onchainSend`, `listTransfers`, `refreshWallet`, `syncWallet`, …) | unchanged, except the behaviour changes below |
 | `refreshTransfers(skipSync?)` | `refresh({ skipSync? })` on the facade or the engine (same `RefreshTransfersResult`); `refreshTransfers` stays on `RgbLibWallet` |
 | `createBackup`, `drainTo`, `deleteTransfers`, `getBfaCapabilities`, `burn`, `getConsignment`, `getConsignmentPath` | unchanged (rgb-lib extensions, present on the facade) |
@@ -102,7 +103,8 @@ Codes are the same as in beta.40, plus `WALLET_INVALID_STATE` (for example `rein
 - [ ] Dependencies swapped, `pod install` run, iOS target 16.0, Android ABIs `arm64-v8a,x86_64`
 - [ ] Native app rebuilt and reinstalled
 - [ ] Same `storageDirPath`, keys, `network` and `reuseAddresses`
-- [ ] `goOnline` → `unlock`; engine-only methods via `wallet.engine`
+- [ ] `goOnline` → `unlock` (the alias still works, deprecated); custom endpoints can move to the constructor's `online`
+- [ ] `listOnchainTransfers` via `wallet.engine` (or `listTransfers()`); the other engine methods are on the facade
 - [ ] WebRGB imports moved to `@utexo/rgb-sdk/webrgb`
 - [ ] Error handling uses `code` and `isEngineError()`
 - [ ] On first launch, the identity (`getWalletIdentity().id`) matches the one stored before the update

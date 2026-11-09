@@ -66,6 +66,13 @@ function skipSyncOf(value: unknown): boolean {
   return value;
 }
 
+/** Drops fields set to `undefined`, so they do not override a configured value. */
+function definedOnly<T extends object>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined)
+  ) as T;
+}
+
 /** One native refresh, mapped; shared by `refresh` and its compat aliases. */
 async function refreshed(
   native: Spec,
@@ -93,7 +100,9 @@ async function refreshed(
 
 export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockParams> {
   private readonly queue = new SerialExecutor();
-  private readonly params: Readonly<RgbLibWalletParams>;
+  private readonly params: Readonly<Omit<RgbLibWalletParams, 'online'>>;
+  /** The constructor's `online`, owned and validated; read on every connect. */
+  private readonly configuredOnline?: Readonly<RgbLibUnlockParams>;
   private handle?: string;
   private native?: Spec;
   private runtime?: NativeRuntimeInfo;
@@ -124,7 +133,21 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   ) {
     validateWalletParams(params);
     this.keys = resolveRgbLibKeys(keys, params.network);
-    this.params = Object.freeze({ ...params });
+    const { online, ...rest } = params;
+    this.params = Object.freeze(rest);
+    if (online !== undefined) {
+      if (online === null || typeof online !== 'object')
+        throw new WalletBackendError(
+          'INVALID_CONFIG',
+          'online must be an object',
+          undefined,
+          'RGB_L1'
+        );
+      const owned = Object.freeze(definedOnly(snapshot(online)));
+      // Invalid endpoints fail here, not on the first online operation.
+      resolveRgbLibConfig(owned, params.network);
+      this.configuredOnline = owned;
+    }
   }
 
   /** Opened from public keys alone: it cannot sign. */
@@ -276,9 +299,15 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (this.sessionFailed) throw this.failedSessionError(operation);
     if (this.online || !this.handle) return;
     if (pending()) return pending();
-    // Regtest stacks are local and differ per setup, so they are never guessed.
+    // Regtest stacks are local and differ per setup, so they are never guessed:
+    // only the constructor's `online` connects a regtest wallet lazily.
     let defaults: ResolvedRgbLibConfig | undefined;
-    if (this.params.network !== 'regtest') {
+    if (this.configuredOnline) {
+      defaults = resolveRgbLibConfig(
+        this.configuredOnline,
+        this.params.network
+      );
+    } else if (this.params.network !== 'regtest') {
       try {
         defaults = resolveRgbLibConfig({}, this.params.network);
       } catch {
@@ -288,7 +317,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (!defaults) {
       throw new WalletBackendError(
         'WALLET_OFFLINE',
-        `${operation} needs a connection; on ${this.params.network} call unlock(params) with the indexer and proxy first`,
+        `${operation} needs a connection; on ${this.params.network} call unlock(params) with the indexer and proxy first, or pass them as \`online\` to the constructor`,
         operation,
         'RGB_L1'
       );
@@ -500,7 +529,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     return opening;
   }
 
-  private unlock(params: RgbLibUnlockParams): Promise<void> {
+  private unlock(params?: RgbLibUnlockParams): Promise<void> {
     let config: ResolvedRgbLibConfig;
     try {
       // Caller code (getters) runs here, before admission; see reinit().
@@ -517,14 +546,32 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
    * a code (a throwing getter) is an argument error, not a native one.
    */
   private readConfig(
-    params: RgbLibUnlockParams,
+    params: RgbLibUnlockParams | undefined,
     operation: string
   ): ResolvedRgbLibConfig {
     try {
-      return resolveRgbLibConfig(snapshot(params), this.params.network);
+      return resolveRgbLibConfig(
+        this.withConfigured(params === undefined ? {} : snapshot(params)),
+        this.params.network
+      );
     } catch (error) {
       throw toArgumentError(error, operation);
     }
+  }
+  /**
+   * Explicit fields override the constructor's `online` one by one; an
+   * explicit indexer (either form) replaces both indexer fields.
+   */
+  private withConfigured(owned: RgbLibUnlockParams): RgbLibUnlockParams {
+    // null keeps failing validation as before.
+    if (!this.configuredOnline || owned === null) return owned;
+    const explicit = definedOnly(owned);
+    const base: Record<string, unknown> = { ...this.configuredOnline };
+    if ('indexer' in explicit || 'indexerUrl' in explicit) {
+      delete base.indexer;
+      delete base.indexerUrl;
+    }
+    return { ...base, ...explicit } as RgbLibUnlockParams;
   }
 
   /** Connects with a resolved config. No admission check: callers are accepted. */

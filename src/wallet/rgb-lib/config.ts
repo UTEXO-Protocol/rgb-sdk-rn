@@ -14,6 +14,14 @@ export interface RgbLibWalletParams {
   witnessVersion?: 'taproot' | 'segwit-v0';
   maxAllocationsPerUtxo?: number;
   reuseAddresses?: boolean;
+  /**
+   * Indexer and proxy for this wallet, used when it connects without explicit
+   * parameters: lazily on first use, or on `unlock()` with no argument.
+   * Missing fields use the network defaults. Stored only: construction makes
+   * no network call. On regtest, which has no defaults, it makes `unlock()`
+   * optional.
+   */
+  online?: RgbLibUnlockParams;
 }
 
 export type RgbLibIndexer =

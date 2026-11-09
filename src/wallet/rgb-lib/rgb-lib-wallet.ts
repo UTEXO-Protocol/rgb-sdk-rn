@@ -84,8 +84,18 @@ export class RgbLibWallet
   initialize() {
     return this.init();
   }
-  unlock(params: RgbLibUnlockParams) {
+  /**
+   * Connects. Optional except on regtest without `online`: the first
+   * operation that needs the network connects by itself. Without params it
+   * uses the constructor's `online`, then the network defaults; explicit
+   * fields override them.
+   */
+  unlock(params?: RgbLibUnlockParams) {
     return this.ports.lifecycle.unlock(params);
+  }
+  /** @deprecated Use `unlock(params)`; same parameters and behavior. */
+  goOnline(params?: RgbLibUnlockParams) {
+    return this.unlock(params);
   }
   reinit(params?: RgbLibUnlockParams) {
     return this.ports.lifecycle.reinit(params);

@@ -55,8 +55,10 @@ export async function engineContract(
   void wallet.getNodeInfo();
   // @ts-expect-error No message signing extension on RGB Lib.
   void wallet.signMessage('message');
-  // @ts-expect-error goOnline was a facade alias; the engine uses unlock().
+  // goOnline is a deprecated alias of unlock(); both take optional params.
   void wallet.goOnline(unlock);
+  void wallet.goOnline();
+  void wallet.unlock();
   // @ts-expect-error The protocol is fixed.
   wallet.protocol = 'RGB_L1';
   // @ts-expect-error A URL alone is not an RGB Lib connection config.

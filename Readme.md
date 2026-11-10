@@ -1,23 +1,28 @@
 # @utexo/rgb-lib-rn
 
-The RGB_L1 wallet engine for React Native: native [rgb-lib](https://github.com/UTEXO-Protocol/rgb-lib) on iOS and Android, exposed as `RgbLibWallet`, which implements the `SharedWalletApi` contract from `@utexo/rgb-sdk-core`.
+[![npm](https://img.shields.io/npm/v/@utexo/rgb-lib-rn)](https://www.npmjs.com/package/@utexo/rgb-lib-rn)
+[![license](https://img.shields.io/npm/l/@utexo/rgb-lib-rn)](LICENSE)
 
-This is an engine package. It has no Lightning (RLN) code, no `UTEXOWallet` facade and no `createWallet()`. Apps that want the shared facade wrap the engine in `UTEXOWallet` from `@utexo/rgb-sdk`: `new UTEXOWallet({ engine: new RgbLibWallet(...) })`.
+An RGB wallet for React Native, powered by native [rgb-lib](https://github.com/UTEXO-Protocol/rgb-lib) on iOS and Android. Hold Bitcoin and RGB assets (NIA, CFA, UDA, IFA, BFA), create invoices, send and receive on-chain, and back up the wallet.
 
-> Coming from `@utexo/rgb-sdk-rn`? Wallet data carries over as is; see [Migration.md](Migration.md).
+`RgbLibWallet` implements the shared wallet API from `@utexo/rgb-sdk-core`. Use it directly, or wrap it in `UTEXOWallet` from [`@utexo/rgb-sdk`](https://www.npmjs.com/package/@utexo/rgb-sdk).
+
+> [!NOTE]
+> This is a beta. The API may change between beta releases; read [CHANGELOG.md](CHANGELOG.md) before upgrading.
+
+> [!WARNING]
+> Open each wallet in **one place at a time**. Running the same wallet in two apps or devices at once can spend the same UTXOs twice and lose RGB assets. Within one app the engine locks the wallet directory while a session is open.
 
 ## Requirements
 
-- React Native with the New Architecture (TurboModules).
-- iOS 16.0 or later (the minimum of the pinned rgb-lib release). React Native templates default to a lower target, so set it in the app's `ios/Podfile`, or `pod install` fails with "required a higher minimum deployment target":
+|              | Minimum                                                        |
+| ------------ | -------------------------------------------------------------- |
+| React Native | New Architecture (TurboModules) enabled                        |
+| iOS          | 16.0                                                           |
+| Android      | `minSdk` 24; ABIs `arm64-v8a` and `x86_64`                     |
+| Expo         | A development build (`expo prebuild`, `expo run`); not Expo Go |
 
-  ```ruby
-  platform :ios, '16.0'
-  ```
-- Android `minSdk` 24. The rgb-lib AAR ships `arm64-v8a` and `x86_64` only; set `reactNativeArchitectures=arm64-v8a,x86_64` in the app's `android/gradle.properties` (the template also builds `armeabi-v7a` and `x86`, where rgb-lib would not load).
-- Peer dependency: `@utexo/rgb-sdk-core`.
-
-## Install
+## Installation
 
 ```bash
 npm install @utexo/rgb-lib-rn @utexo/rgb-sdk-core
@@ -25,83 +30,140 @@ npm install react-native-get-random-values buffer
 cd ios && pod install
 ```
 
-Add `@utexo/rgb-sdk` as well for the `UTEXOWallet` facade or WebRGB.
+Set the iOS deployment target in `ios/Podfile` (templates default lower, and `pod install` fails):
 
-`postinstall` downloads the pinned rgb-lib iOS frameworks into the installed package's `ios/RgbLibBindings`. If that fails (offline, for example), `npm install` still succeeds, but `pod install` stops and prints the command to run. Run it **in the installed package**, not in the app or `ios/`:
-
-```bash
-cd my-app/node_modules/@utexo/rgb-lib-rn && npm run bindings:rgb-lib
+```ruby
+platform :ios, '16.0'
 ```
 
-Android resolves `com.utexo:rgb-lib-bfa-android` from Maven Central at the pinned version; no extra repository is needed.
+Limit Android to the supported ABIs in `android/gradle.properties` (rgb-lib does not load on `armeabi-v7a` or `x86`):
 
-Rebuild the app after installing or upgrading this package: the native rgb-lib version is pinned per release, and a JS bundle and native build from different releases refuse to start.
+```properties
+reactNativeArchitectures=arm64-v8a,x86_64
+```
 
-## App setup
+Load the polyfills at the top of the entry file, before anything imports the SDK:
 
-The app provides two JavaScript globals before any wallet code runs. This package does not install them:
-
-- a secure `crypto.getRandomValues` (used by `generateKeys()`), for example `react-native-get-random-values`;
-- `Buffer`, used by the core key helpers, for example from the `buffer` package.
-
-```typescript
-// index.js, before anything imports @utexo/rgb-lib-rn
+```ts
+// index.js
 import 'react-native-get-random-values';
 import { Buffer } from 'buffer';
 globalThis.Buffer ??= Buffer;
 ```
 
-Without them `generateKeys()` rejects with `CRYPTO_ERROR` (`crypto.getRandomValues must be defined` or `Buffer is not defined`).
+Rebuild the app after installing or upgrading: each release pins its native rgb-lib version.
 
 ## Quick start
 
-```typescript
+```ts
 import { RgbLibWallet, generateKeys } from '@utexo/rgb-lib-rn';
+import * as SecureStore from 'expo-secure-store';
 
-// First use only: save the mnemonic in secure storage before init().
-const { mnemonic } = await generateKeys('utexo');
+// 1. Create a mnemonic once and keep it in secure storage.
+const { mnemonic } = await generateKeys('signet'); // or 'mainnet', 'utexo', 'regtest'
+await SecureStore.setItemAsync('mnemonic', mnemonic);
 
+// 2. Create the wallet. Each wallet needs its own directory.
 const wallet = new RgbLibWallet(
-  { network: 'utexo', storageDirPath: '/path/to/wallet-storage' },
-  () => SecureStore.getItemAsync('mnemonic') // or the mnemonic string
+  { network: 'signet', storageDirPath: `${documentDir}/rgb-wallet` },
+  () => SecureStore.getItemAsync('mnemonic') // read only when needed
 );
 
-await wallet.init(); // opens local storage; works offline
-const address = await wallet.getAddress();
+// 3. Open it. This makes no network call.
+await wallet.init();
 
-// No connect call needed: the first online operation runs goOnline once
-// with the network defaults. Call wallet.goOnline(params) to connect explicitly.
-await wallet.createUtxos({ upTo: false, num: 4, feeRate: 1 });
-const { invoice } = await wallet.onchainReceive({ witness: false, minConfirmations: 1 });
+// 4. Use it. The first online call connects by itself.
+const address = await wallet.getAddress(); // fund it with BTC
+const { vanilla } = await wallet.getBtcBalance();
+const assets = await wallet.listAssets();
 
-await wallet.shutdown(); // keeps data; reopen with init()
-await wallet.destroy();  // releases the instance; data is kept
+// 5. Close it. The data stays on disk; reopen with a new instance and init().
+await wallet.destroy();
 ```
 
-Keys: a mnemonic string, a sync or async reader, an object with `getMnemonic()`, or public keys alone for a watch-only wallet (`capabilities.canSignTransactions` is then `false`). See [`RgbLibKeys`](src/wallet/rgb-lib/key-provider.ts).
+## Receive RGB assets
 
-Connection: `goOnline(params)` (rgb-lib's own connect) takes an indexer (Electrum, Esplora or bitcoind) and a proxy endpoint; omitted values use `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS`. See [`RgbLibUnlockParams`](src/wallet/rgb-lib/config.ts).
-
-Custom endpoints can also be given once, as `online` in the constructor params. They are only stored there (construction makes no network call) and are used by the lazy connect and by `goOnline()` without arguments; fields passed to `goOnline(params)` override them. With `online`, a regtest wallet needs no explicit `goOnline()`:
+RGB assets are received on UTXOs, so a new wallet first creates a few (this spends a little BTC):
 
 ```ts
-const wallet = new RgbLibWallet(
-  {
-    network: 'regtest',
-    storageDirPath,
-    online: { indexerUrl: 'tcp://localhost:50001', proxyEndpoint: 'rpc://localhost:3000/json-rpc' },
-  },
-  keys
-);
-await wallet.init();
-await wallet.getBtcBalance(); // connects with the configured endpoints
+await wallet.createUtxos({ num: 4, feeRate: 2 });
 ```
 
-`goOnline()` is optional on every network except regtest without `online`: the first operation that needs the network connects by itself, once. rgb-lib has no unlock step; `unlock(params)` exists only because the shared `SharedWalletApi` contract names the connect step that way, and it is the same call as `goOnline(params)`.
+Then create an invoice and give `invoice` to the sender:
 
-### EVM chains (BFA mints)
+```ts
+const { invoice, expirationTimestamp } = await wallet.blindReceive({
+  assetId, // omit to accept any asset
+  amount: 100, // omit to accept any amount
+  minConfirmations: 1,
+  durationSeconds: 86_400,
+});
+```
 
-Receiving a BFA asset minted from an EVM chain needs that chain's JSON-RPC endpoint. Set it per chain ID; the mint lock window the wallet accepts is optional and defaults to `DEFAULT_EVM_MINT_LOCK_BLOCKS` (`{ min: 1200, max: 28800 }` blocks of that chain):
+|                  | `blindReceive`                | `witnessReceive`                         |
+| ---------------- | ----------------------------- | ---------------------------------------- |
+| Receives on      | a blinded UTXO of this wallet | a new output of the sender's transaction |
+| Needs free UTXOs | yes                           | no                                       |
+| Sender pays      | the fee                       | the fee and the new output's sats        |
+
+Once the sender has paid, call `refresh()` until the transfer settles:
+
+```ts
+await wallet.refresh();
+const transfers = await wallet.listTransfers(assetId);
+```
+
+## Send RGB assets
+
+```ts
+const { txid } = await wallet.onchainSend({
+  invoice,
+  amount: 100,
+  feeRate: 2,
+  minConfirmations: 1,
+  witnessData: { amountSat: 1000 }, // only for a witness invoice
+});
+await wallet.refresh(); // settles the transfer after the receiver accepts it
+```
+
+## Send Bitcoin
+
+```ts
+const txid = await wallet.sendBtc({ address, amount: 10_000, feeRate: 2 });
+```
+
+## Issue an asset
+
+```ts
+const asset = await wallet.issueAssetNia({
+  ticker: 'USDT',
+  name: 'Tether',
+  amounts: [1_000_000],
+  precision: 6,
+});
+```
+
+`issueAssetCfa`, `issueAssetUda` and `issueAssetIfa` issue the other schemas.
+
+## Back up and restore
+
+The mnemonic recovers bitcoin only. RGB assets also need the wallet's data (contracts and transfer history), so make an encrypted backup after each transfer:
+
+```ts
+await wallet.createBackup({ backupPath, password });
+```
+
+To restore, unpack the backup into a new, empty directory before `init()`, then open the wallet there with the same mnemonic:
+
+```ts
+import { restoreFromBackup } from '@utexo/rgb-lib-rn';
+
+await restoreFromBackup({ backupFilePath, password, dataDir: storageDirPath });
+```
+
+## Configuration
+
+Each network has default endpoints. Override them once in the constructor, or per call with `goOnline(params)`:
 
 ```ts
 const wallet = new RgbLibWallet(
@@ -109,65 +171,81 @@ const wallet = new RgbLibWallet(
     network: 'utexo',
     storageDirPath,
     online: {
+      indexerUrl: 'https://esplora.example.com', // Esplora (https://) or Electrum (tcp://, ssl://)
+      proxyEndpoint: 'rpcs://proxy.example.com/json-rpc',
       evmRpcUrls: { '42161': 'https://arb1.arbitrum.io/rpc' },
-      evmMintLockBlocks: { '42161': { min: 1200, max: 28800 } }, // optional
     },
   },
   keys
 );
 ```
 
-Bounds for a chain without an `evmRpcUrls` entry, or with `min` above `max`, throw `INVALID_CONFIG`.
+| Option                   | Default                                | Notes                                                            |
+| ------------------------ | -------------------------------------- | ---------------------------------------------------------------- |
+| `indexerUrl` / `indexer` | `DEFAULT_INDEXER_URLS[network]`        | `indexer` also accepts `bitcoind` with credentials               |
+| `proxyEndpoint`          | `DEFAULT_TRANSPORT_ENDPOINTS[network]` | RGB proxy, protocol 1.0                                          |
+| `evmRpcUrls`             | none                                   | Needed to receive BFA assets minted on an EVM chain, by chain ID |
+| `evmMintLockBlocks`      | `{ min: 1200, max: 28800 }` per chain  | Mint lock window the wallet accepts, in blocks of that chain     |
+| `proxyAuthKeys`          | none                                   | Proxy endpoint → 32-byte hex key                                 |
 
-### Receiving
+`regtest` has no defaults: set `online`, or call `goOnline(params)` first.
 
-- `blindReceive(params)` receives on a blinded UTXO of this wallet; create free UTXOs first with `createUtxos()`.
-- `witnessReceive(params)` receives on a new output of the sender's transaction; no free UTXO is needed, the sender pays the output's sats.
+Wallet options: `witnessVersion` (`'taproot'` by default, or `'segwit-v0'`), `maxAllocationsPerUtxo` (default 5) and `reuseAddresses`.
 
-Both take `{ assetId?, amount?, minConfirmations?, durationSeconds? }` and return the invoice with its `recipientId`, `expirationTimestamp` and `batchTransferIdx`.
+The second constructor argument is the keys: a mnemonic string, a sync or async reader, an object with `getMnemonic()`, or account public keys alone for a watch-only wallet.
 
-### Storage
+## Error handling
 
-Each wallet needs its own directory. The engine refuses a directory that belongs to another wallet or engine, and holds a lock while a session is open.
+Every wallet method rejects with an engine error that has a stable `code`. Check it with `isEngineError`:
 
-## Errors
+```ts
+import { isEngineError } from '@utexo/rgb-sdk-core';
 
-Operations on a `RgbLibWallet` instance reject with an `EngineError`: an object with a stable `code`, the public `operation` and `protocol: 'RGB_L1'`. Recognize it with `isEngineError()` from core, not with `instanceof`; errors from this package are `WalletBackendError` instances.
-
-- `cause` is set when the error wraps another one (a native rejection, a failed key reader, a core validation error). Errors raised by this package's own checks may have none.
-- An engine error from another copy of the SDK that already carries the same `operation` and `protocol` is passed through unchanged, as the same object. It need not be an `Error` instance. Otherwise it is wrapped in a new `WalletBackendError` with the original as `cause`.
-
-Outside wallet instances:
-
-- `restoreFromBackup()` rejects with a `WalletBackendError` whose `operation` is `'restoreFromBackup'` and `protocol` is `'RGB_L1'`: `INVALID_CONFIG` for invalid parameters, otherwise the mapped native code.
-- Helpers re-exported from core (`generateKeys()`, `deriveKeysFromMnemonic()` and others) throw core's own errors, such as `CryptoError`.
-
-## WebRGB and burn journal
-
-`WebRgbProvider` and `BurnOperations` are in `@utexo/rgb-sdk/webrgb`; they work over this engine or a `UTEXOWallet` that wraps it. This package no longer has a `./webrgb` entry.
-
-## Native modules
-
-| | iOS | Android |
-| --- | --- | --- |
-| TurboModule | `RgbLib` | `RgbLib` |
-| Pod / package | `RgbLib` | `com.utexo.rgblibrn.RgbLibPackage` |
-| Module / namespace | `UtexoRgbLib` (not `RgbLib`: it would clash with the vendored `RGBLib.framework` on case-insensitive disks) | `com.utexo.rgblibrn` |
-| Codegen | `RgbLibSpec` | `RgbLibSpec` |
-
-## Tests
-
-In a checkout of the repository (the npm package ships no tests):
-
-```bash
-npm install
-npm test
+try {
+  await wallet.onchainSend({ invoice, amount: 100, feeRate: 2 });
+} catch (error) {
+  if (isEngineError(error, 'INSUFFICIENT_FUNDS')) {
+    // fund the wallet or create UTXOs
+  } else if (isEngineError(error)) {
+    console.warn(error.code, error.operation, error.cause);
+  } else {
+    throw error;
+  }
+}
 ```
 
-Runs the type check, the engine conformance suite and the rgb-lib tests in Node with a stubbed native module.
+| Code                                       | Meaning                                                               |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| `INVALID_PARAMS`, `INVALID_CONFIG`         | A parameter or the configuration is invalid                           |
+| `INSUFFICIENT_FUNDS`                       | Not enough BTC, free UTXOs or asset balance                           |
+| `ASSET_NOT_FOUND`                          | The wallet does not hold this asset                                   |
+| `WALLET_NOT_INITIALIZED`, `WALLET_OFFLINE` | Call `init()` first; on `regtest`, configure endpoints                |
+| `WALLET_STORAGE_IN_USE`                    | The directory is open in another session or belongs to another wallet |
+| `KEYS_UNAVAILABLE`                         | The mnemonic reader failed; see `cause`                               |
+| `UNSUPPORTED_CAPABILITY`                   | Not possible here, for example sending from a watch-only wallet       |
+| `NATIVE_ERROR`                             | rgb-lib rejected the call; `cause` holds the rgb-lib error            |
 
-Native checks:
+Prefer `isEngineError` to `instanceof`: it also works when the app bundles two copies of the SDK.
 
-- `npm run test:rgb-lib:ios`: the TurboModule dispatcher on the host, then the rgb-lib UniFFI smoke on a simulator it creates and removes. Needs Xcode and the bindings (`npm run bindings:rgb-lib`).
-- `npm run test:rgb-lib:android`: the dispatcher on the host JVM. Needs `kotlinc` (or `KOTLINC`) and `java`.
-- `RgbLibSessionStoreInstrumentationTest` (`android/src/androidTest/`): the session store against the Maven Central AAR, on an emulator or device. Run it from a host app's Android project, for example `./gradlew :utexo_rgb-lib-rn:connectedDebugAndroidTest`. Use the checkout as the library module.
+## Troubleshooting
+
+**`required a higher minimum deployment target`** during `pod install`: set `platform :ios, '16.0'` in `ios/Podfile`.
+
+**`pod install` asks you to run `npm run bindings:rgb-lib`**: the iOS frameworks are downloaded during `npm install`. If that ran offline, run the command in `node_modules/@utexo/rgb-lib-rn`, then `pod install` again.
+
+**`NATIVE_BACKEND_UNAVAILABLE`**: the native module is not in the app. Rebuild it after installing (`pod install` on iOS), and check that the New Architecture is enabled.
+
+**`NATIVE_VERSION_MISMATCH`**: the JavaScript bundle and the native build come from different versions of this package. Rebuild the app.
+
+**`generateKeys()` rejects with `CRYPTO_ERROR`**: the polyfills are missing or load too late. Import them at the top of the entry file (see Installation).
+
+**A BFA transfer stays pending** and the rgb-lib log says `no EVM RPC URL configured for chain ID …`: add that chain to `evmRpcUrls`, then call `refresh()`.
+
+## Related packages
+
+- [`@utexo/rgb-sdk`](https://www.npmjs.com/package/@utexo/rgb-sdk): the `UTEXOWallet` facade and the WebRGB provider for dApps.
+- [`@utexo/rgb-sdk-core`](https://www.npmjs.com/package/@utexo/rgb-sdk-core): shared types, errors and key helpers.
+
+## License
+
+[MIT](LICENSE)

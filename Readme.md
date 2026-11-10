@@ -193,6 +193,90 @@ Wallet options: `witnessVersion` (`'taproot'` by default, or `'segwit-v0'`), `ma
 
 The second constructor argument is the keys: a mnemonic string, a sync or async reader, an object with `getMnemonic()`, or account public keys alone for a watch-only wallet.
 
+## API
+
+All methods are async except `getNetwork()`, `isDisposed()` and the `capabilities` getter. Parameter and result types are exported from the package.
+
+**Lifecycle**
+
+| Method              | Description                                                                      |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `init()`            | Opens the wallet directory. No network call                                      |
+| `goOnline(params?)` | Connects to the indexer and proxy. Optional: the first online call connects      |
+| `shutdown()`        | Closes the session; the same instance can be reopened                            |
+| `reinit(params?)`   | Reopens after `shutdown()`; with `params`, also connects                         |
+| `destroy()`         | Closes the session for good; create a new instance to reopen                     |
+| `isDisposed()`      | Whether `destroy()` was called                                                   |
+| `capabilities`      | What this wallet can do, for example `canSignTransactions` (false if watch-only) |
+
+**Network**
+
+| Method                 | Description                                                 |
+| ---------------------- | ----------------------------------------------------------- |
+| `getNetwork()`         | The configured network                                      |
+| `getNetworkInfo()`     | Network and current block height                            |
+| `getWalletIdentity()`  | Stable wallet ID, protocol and network                      |
+| `checkIndexerUrl(url)` | Detects the indexer protocol behind a URL before you use it |
+
+**Bitcoin**
+
+| Method                    | Description                                       |
+| ------------------------- | ------------------------------------------------- |
+| `getAddress()`            | The current BTC receive address                   |
+| `rotateVanillaAddress()`  | A new BTC receive address                         |
+| `getBtcBalance(options?)` | Vanilla and colored BTC balances                  |
+| `listUnspents(options?)`  | The wallet's UTXOs with their RGB allocations     |
+| `createUtxos(params)`     | Creates UTXOs to receive RGB assets on            |
+| `sendBtc(params)`         | Sends BTC; returns the txid                       |
+| `estimateFeeRate(blocks)` | Fee rate for confirmation within `blocks`         |
+| `drainTo(params)`         | Sends the whole vanilla BTC balance to an address |
+
+**RGB assets**
+
+| Method                                                             | Description                              |
+| ------------------------------------------------------------------ | ---------------------------------------- |
+| `listAssets(options?)`                                             | Assets the wallet holds, by schema       |
+| `getAssetBalance(assetId)`                                         | Settled, future and spendable balance    |
+| `getAssetMetadata(assetId)`                                        | Contract metadata of one asset           |
+| `issueAssetNia`, `issueAssetCfa`, `issueAssetUda`, `issueAssetIfa` | Issues an asset of that schema           |
+| `inflate(params)`                                                  | Issues more of an inflatable (IFA) asset |
+
+**Receive and send**
+
+| Method                     | Description                                                           |
+| -------------------------- | --------------------------------------------------------------------- |
+| `onchainReceive(params)`   | Creates an invoice; witness by default (`witness: false` for blinded) |
+| `witnessReceive(params)`   | Creates a witness invoice                                             |
+| `blindReceive(params)`     | Creates a blinded invoice                                             |
+| `decodeRGBInvoice(params)` | Reads an invoice's asset, amount, recipient and expiry                |
+| `onchainSend(params)`      | Pays an invoice; returns the txid                                     |
+
+**History**
+
+| Method                         | Description                                      |
+| ------------------------------ | ------------------------------------------------ |
+| `listTransfers(assetId?)`      | RGB transfers, for one asset or all              |
+| `listTransfersByTxid(txid)`    | RGB transfers of one Bitcoin transaction         |
+| `listTransactions(options?)`   | The wallet's Bitcoin transactions                |
+| `listTransactionsByTxid(txid)` | One Bitcoin transaction, if the wallet has it    |
+| `refresh(options?)`            | Advances pending transfers; returns what changed |
+| `syncWallet()`                 | Syncs the wallet with the indexer                |
+| `failTransfers(params)`        | Marks pending transfers as failed                |
+| `deleteTransfers(params?)`     | Removes failed transfers from the local database |
+
+**Backup and BFA**
+
+| Method                              | Description                                                  |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `createBackup(params)`              | Writes an encrypted backup file                              |
+| `restoreFromBackup(params)`         | Function export: unpacks a backup into an empty directory    |
+| `getBfaCapabilities()`              | Whether this build and wallet can burn and read consignments |
+| `burn(params)`                      | Burns RGB assets                                             |
+| `getConsignment(assetId, txid)`     | A transfer's consignment as a string                         |
+| `getConsignmentPath(assetId, txid)` | A transfer's consignment as a local file                     |
+
+Aliases kept for the shared contract and older code: `initialize` (`init`), `unlock` (`goOnline`), `dispose` (`destroy`), `refreshWallet` (`refresh` without a result), `refreshTransfers(skipSync?)` (`refresh`) and `listOnchainTransfers` (`listTransfers`).
+
 ## Error handling
 
 Every wallet method rejects with an engine error that has a stable `code`. Check it with `isEngineError`:

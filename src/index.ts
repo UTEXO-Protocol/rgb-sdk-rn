@@ -7,6 +7,7 @@ export { RgbLibWallet } from './wallet/rgb-lib/rgb-lib-wallet';
 export { restoreFromBackup } from './wallet/rgb-lib/restore';
 export type {
   RgbLibWalletParams,
+  RgbLibWalletOptions,
   RgbLibUnlockParams,
   RgbLibIndexer,
   RgbLibMintLockBlocks,

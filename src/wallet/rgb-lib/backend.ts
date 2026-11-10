@@ -24,11 +24,13 @@ import {
   configEquals,
   integer,
   resolveRgbLibConfig,
+  splitWalletParams,
   validateWalletParams,
 } from './config';
 import type {
   ResolvedRgbLibConfig,
   RgbLibUnlockParams,
+  RgbLibWalletOptions,
   RgbLibWalletParams,
 } from './config';
 import { feeRate, issuanceAmounts, u64 } from './amounts';
@@ -100,8 +102,8 @@ async function refreshed(
 
 export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockParams> {
   private readonly queue = new SerialExecutor();
-  private readonly params: Readonly<Omit<RgbLibWalletParams, 'online'>>;
-  /** The constructor's `online`, owned and validated; read on every connect. */
+  private readonly params: Readonly<RgbLibWalletOptions>;
+  /** The constructor's connection settings, owned and validated; read on every connect. */
   private readonly configuredOnline?: Readonly<RgbLibUnlockParams>;
   private handle?: string;
   private native?: Spec;
@@ -133,17 +135,10 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   ) {
     validateWalletParams(params);
     this.keys = resolveRgbLibKeys(keys, params.network);
-    const { online, ...rest } = params;
-    this.params = Object.freeze(rest);
-    if (online !== undefined) {
-      if (online === null || typeof online !== 'object')
-        throw new WalletBackendError(
-          'INVALID_CONFIG',
-          'online must be an object',
-          undefined,
-          'RGB_L1'
-        );
-      const owned = Object.freeze(definedOnly(snapshot(online)));
+    const { options, connection } = splitWalletParams(params);
+    this.params = Object.freeze(options);
+    if (connection) {
+      const owned = Object.freeze(snapshot(connection));
       // Invalid endpoints fail here, not on the first online operation.
       resolveRgbLibConfig(owned, params.network);
       this.configuredOnline = owned;
@@ -300,7 +295,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (this.online || !this.handle) return;
     if (pending()) return pending();
     // Regtest stacks are local and differ per setup, so they are never guessed:
-    // only the constructor's `online` connects a regtest wallet lazily.
+    // only the constructor's connection settings connect a regtest wallet lazily.
     let defaults: ResolvedRgbLibConfig | undefined;
     if (this.configuredOnline) {
       defaults = resolveRgbLibConfig(
@@ -563,7 +558,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     }
   }
   /**
-   * Explicit fields override the constructor's `online` one by one; an
+   * Explicit fields override the constructor's connection settings one by one; an
    * explicit indexer (either form) replaces both indexer fields.
    */
   private withConfigured(owned: RgbLibUnlockParams): RgbLibUnlockParams {

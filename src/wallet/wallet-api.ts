@@ -159,7 +159,7 @@ export interface WalletNetwork {
   getWalletIdentity(): Promise<WalletIdentity>;
 }
 export interface WalletLifecycle<T> extends IWalletLifecycle<T> {
-  /** Without params: the constructor's `online`, then the network defaults. */
+  /** Without params: the constructor's connection settings, then the network defaults. */
   goOnline(params?: T): Promise<void>;
   /** The shared contract's name for `goOnline`; same call. */
   unlock(params?: T): Promise<void>;

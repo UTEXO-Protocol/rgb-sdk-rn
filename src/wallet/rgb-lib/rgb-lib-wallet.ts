@@ -86,9 +86,10 @@ export class RgbLibWallet
   }
   /**
    * Connects to the indexer and proxy (rgb-lib `goOnline`). Optional except
-   * on regtest without `online`: the first operation that needs the network
-   * connects by itself, once. Without params it uses the constructor's
-   * `online`, then the network defaults; explicit fields override them.
+   * on regtest without connection settings: the first operation that needs
+   * the network connects by itself, once. Without params it uses the
+   * constructor's connection settings, then the network defaults; explicit
+   * fields override them.
    */
   goOnline(params?: RgbLibUnlockParams) {
     return this.ports.lifecycle.goOnline(params);

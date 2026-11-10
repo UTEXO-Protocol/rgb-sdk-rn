@@ -111,3 +111,37 @@ export function keysForms(
   new RgbLibWallet(params, () => 42);
   return wallets;
 }
+
+// Connection settings sit next to the wallet settings, like `goOnline(params)`.
+export function flatConstructorParams(keys: RgbLibKeys) {
+  new RgbLibWallet(
+    {
+      network: 'utexo',
+      storageDirPath: '/wallets/a',
+      indexerUrl: 'https://esplora.example.com',
+      proxyEndpoint: 'rpcs://proxy.example.com/json-rpc',
+      evmRpcUrls: { '42161': 'https://arb1.arbitrum.io/rpc' },
+      evmMintLockBlocks: { '42161': { min: 1200, max: 28800 } },
+    },
+    keys
+  );
+  new RgbLibWallet(
+    {
+      network: 'regtest',
+      storageDirPath: '/wallets/b',
+      indexerUrl: 'http://localhost:3000',
+      // @ts-expect-error: indexer and indexerUrl are exclusive
+      indexer: { type: 'esplora', url: 'http://localhost:3000' },
+    },
+    keys
+  );
+  new RgbLibWallet(
+    {
+      network: 'signet',
+      storageDirPath: '/wallets/c',
+      // @ts-expect-error: no nested `online` object
+      online: { indexerUrl: 'https://esplora.example.com' },
+    },
+    keys
+  );
+}

@@ -7,21 +7,52 @@ export const RGB_LIB_VERSION = '0.3.0-beta.7-upstream-dev-bfa.6-bfa';
 export const RGB_LIB_REVISION = '5010eefa355beb9c42a4c1b69883f7651241a111';
 export const RGB_LIB_BRIDGE_VERSION = 5;
 
-export interface RgbLibWalletParams {
+/** Settings fixed for the wallet's lifetime. */
+export interface RgbLibWalletOptions {
   network: BitcoinNetwork;
   /** Dedicated to this profile; never point this at another wallet's directory (RLN included). */
   storageDirPath: string;
   witnessVersion?: 'taproot' | 'segwit-v0';
   maxAllocationsPerUtxo?: number;
   reuseAddresses?: boolean;
-  /**
-   * Indexer and proxy for this wallet, used when it connects without explicit
-   * parameters: lazily on first use, or on `goOnline()` with no argument.
-   * Missing fields use the network defaults. Stored only: construction makes
-   * no network call. On regtest, which has no defaults, it makes `goOnline()`
-   * optional.
-   */
-  online?: RgbLibUnlockParams;
+}
+
+/**
+ * Wallet settings, plus the connection settings of `goOnline(params)`
+ * (indexer, proxy, EVM). The wallet uses the connection settings when it
+ * connects without explicit parameters: lazily on first use, or on
+ * `goOnline()` with no argument. Missing ones use the network defaults.
+ * Stored only: construction makes no network call. On regtest, which has no
+ * defaults, they make `goOnline()` optional.
+ */
+export type RgbLibWalletParams = RgbLibWalletOptions & RgbLibUnlockParams;
+
+const CONNECTION_KEYS = [
+  'indexer',
+  'indexerUrl',
+  'proxyEndpoint',
+  'evmRpcUrls',
+  'evmMintLockBlocks',
+  'proxyAuthKeys',
+] as const;
+
+/** Splits constructor params; `connection` is undefined when none is set. */
+export function splitWalletParams(params: RgbLibWalletParams): {
+  options: RgbLibWalletOptions;
+  connection?: RgbLibUnlockParams;
+} {
+  const options: Record<string, unknown> = { ...params };
+  const connection: Record<string, unknown> = {};
+  for (const key of CONNECTION_KEYS) {
+    if (options[key] !== undefined) connection[key] = options[key];
+    delete options[key];
+  }
+  return {
+    options: options as unknown as RgbLibWalletOptions,
+    connection: Object.keys(connection).length
+      ? (connection as RgbLibUnlockParams)
+      : undefined,
+  };
 }
 
 export type RgbLibIndexer =

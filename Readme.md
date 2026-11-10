@@ -164,18 +164,16 @@ await restoreFromBackup({ backupFilePath, password, dataDir: storageDirPath });
 
 ## Configuration
 
-Each network has default endpoints. Override them once in the constructor, or per call with `goOnline(params)`:
+Each network has default endpoints. Override them in the constructor, or per call with `goOnline(params)`, which takes the same fields:
 
 ```ts
 const wallet = new RgbLibWallet(
   {
     network: 'utexo',
     storageDirPath,
-    online: {
-      indexerUrl: 'https://esplora.example.com', // Esplora (https://) or Electrum (tcp://, ssl://)
-      proxyEndpoint: 'rpcs://proxy.example.com/json-rpc',
-      evmRpcUrls: { '42161': 'https://arb1.arbitrum.io/rpc' },
-    },
+    indexerUrl: 'https://esplora.example.com', // Esplora (https://) or Electrum (tcp://, ssl://)
+    proxyEndpoint: 'rpcs://proxy.example.com/json-rpc',
+    evmRpcUrls: { '42161': 'https://arb1.arbitrum.io/rpc' },
   },
   keys
 );
@@ -189,7 +187,7 @@ const wallet = new RgbLibWallet(
 | `evmMintLockBlocks`      | `{ min: 1200, max: 28800 }` per chain  | Mint lock window the wallet accepts, in blocks of that chain     |
 | `proxyAuthKeys`          | none                                   | Proxy endpoint → 32-byte hex key                                 |
 
-`regtest` has no defaults: set `online`, or call `goOnline(params)` first.
+`regtest` has no defaults: set the indexer and proxy in the constructor, or call `goOnline(params)` first.
 
 Wallet options: `witnessVersion` (`'taproot'` by default, or `'segwit-v0'`), `maxAllocationsPerUtxo` (default 5) and `reuseAddresses`.
 

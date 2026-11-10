@@ -612,12 +612,11 @@ test('a failed lazy connection reaches the caller and the next operation retries
   await wallet.dispose();
 });
 
-test('constructor online config: lazy connect on regtest, unlock() and goOnline() defaults, explicit fields override', async () => {
-  const online = { ...config };
-  const withOnline = { ...params, online };
-  // Lazy: the first online operation connects with the constructor's config.
+test('constructor connection settings: lazy connect on regtest, unlock() and goOnline() defaults, explicit fields override', async () => {
+  const withOnline = { ...params, ...config };
+  // Lazy: the first online operation connects with the constructor's settings.
   const lazy = publicWalletFixture({}, withOnline);
-  online.indexerUrl = 'http://changed-after-construction:1'; // owned copy is used
+  withOnline.indexerUrl = 'http://changed-after-construction:1'; // owned copy is used
   await lazy.wallet.init();
   assert.equal(onlineCalls(lazy.calls).length, 0);
   assert.equal(
@@ -634,7 +633,7 @@ test('constructor online config: lazy connect on regtest, unlock() and goOnline(
     (w) => w.goOnline(),
     (w) => w.unlock({ indexerUrl: undefined }),
   ]) {
-    const f = publicWalletFixture({}, { ...params, online: config });
+    const f = publicWalletFixture({}, { ...params, ...config });
     await f.wallet.init();
     await call(f.wallet);
     assert.deepEqual(onlineCalls(f.calls)[0].slice(2, 4), [
@@ -645,7 +644,7 @@ test('constructor online config: lazy connect on regtest, unlock() and goOnline(
   }
 
   // An explicit indexer replaces the configured one; the deprecated alias behaves the same.
-  const explicit = publicWalletFixture({}, { ...params, online: config });
+  const explicit = publicWalletFixture({}, { ...params, ...config });
   await explicit.wallet.init();
   await explicit.wallet.goOnline({ indexerUrl: 'tcp://localhost:50001' });
   assert.deepEqual(onlineCalls(explicit.calls)[0].slice(2, 4), [
@@ -655,18 +654,18 @@ test('constructor online config: lazy connect on regtest, unlock() and goOnline(
   await explicit.wallet.dispose();
 });
 
-test('an invalid constructor online config is rejected at construction', () => {
+test('invalid constructor connection settings are rejected at construction', () => {
   const keys = { getMnemonic: () => 'test mnemonic' };
-  for (const online of [
-    'http://localhost:3000',
-    null,
+  for (const connection of [
     { indexerUrl: 'ftp://localhost:3000' },
     { indexerUrl: 'http://x', indexer: { type: 'esplora', url: 'http://x' } },
+    { ...config, proxyEndpoint: 'ftp://localhost:3000' },
+    { ...config, evmRpcUrls: { 0: 'http://localhost:8545' } },
   ]) {
     assert.throws(
-      () => new RgbLibWallet({ ...params, online }, keys, () => ({})),
+      () => new RgbLibWallet({ ...params, ...connection }, keys, () => ({})),
       code('INVALID_CONFIG'),
-      String(online)
+      JSON.stringify(connection)
     );
   }
 });

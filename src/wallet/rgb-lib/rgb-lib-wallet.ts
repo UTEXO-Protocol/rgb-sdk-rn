@@ -85,17 +85,21 @@ export class RgbLibWallet
     return this.init();
   }
   /**
-   * Connects. Optional except on regtest without `online`: the first
-   * operation that needs the network connects by itself. Without params it
-   * uses the constructor's `online`, then the network defaults; explicit
-   * fields override them.
+   * Connects to the indexer and proxy (rgb-lib `goOnline`). Optional except
+   * on regtest without `online`: the first operation that needs the network
+   * connects by itself, once. Without params it uses the constructor's
+   * `online`, then the network defaults; explicit fields override them.
+   */
+  goOnline(params?: RgbLibUnlockParams) {
+    return this.ports.lifecycle.goOnline(params);
+  }
+  /**
+   * The `SharedWalletApi` name for {@link goOnline}: same parameters and
+   * behavior, for code written against the shared contract. rgb-lib has no
+   * separate unlock step.
    */
   unlock(params?: RgbLibUnlockParams) {
     return this.ports.lifecycle.unlock(params);
-  }
-  /** @deprecated Use `unlock(params)`; same parameters and behavior. */
-  goOnline(params?: RgbLibUnlockParams) {
-    return this.unlock(params);
   }
   reinit(params?: RgbLibUnlockParams) {
     return this.ports.lifecycle.reinit(params);

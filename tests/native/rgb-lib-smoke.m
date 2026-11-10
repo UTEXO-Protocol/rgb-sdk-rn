@@ -19,7 +19,7 @@ static void check(BOOL value, const char *message) {
 int main(void) {
   @autoreleasepool {
     NSDictionary *runtime = call(@"getRuntimeInfo", @{});
-    check([runtime[@"bridgeVersion"] isEqual:@4], "Wrong bridge version");
+    check([runtime[@"bridgeVersion"] isEqual:@5], "Wrong bridge version");
     // Read from the framework's copy of the release version.json.
     check([runtime[@"sourceRevision"] length] == 40 && [runtime[@"version"] length] > 0, "Missing artifact provenance");
 

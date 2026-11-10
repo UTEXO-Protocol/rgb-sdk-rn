@@ -58,7 +58,7 @@ const records = {
     txid: 'string?',
     recipientId: 'string?',
     receiveUtxo: 'record?',
-    changeUtxo: 'record?',
+    changeUtxos: 'records',
     expirationTimestamp: 'decimal?',
     transportEndpoints: 'records',
     invoiceString: 'string?',
@@ -123,6 +123,7 @@ for (const [name, fields] of Object.entries({
   AssetBfa: {
     ticker: 'string',
     initialSupply: 'decimal',
+    knownCirculatingSupply: 'decimal',
     rejectListUrl: 'string?',
   },
 }))

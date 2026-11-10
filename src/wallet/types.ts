@@ -35,6 +35,8 @@ export interface AssetBfa {
   details?: string;
   precision: number;
   initialSupply: number;
+  /** Supply known to circulate, as read from the bridge contract. */
+  knownCirculatingSupply: number;
   timestamp: number;
   addedAt: number;
   balance: Balance & { offchainOutbound?: number; offchainInbound?: number };

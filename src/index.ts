@@ -9,7 +9,9 @@ export type {
   RgbLibWalletParams,
   RgbLibUnlockParams,
   RgbLibIndexer,
+  RgbLibMintLockBlocks,
 } from './wallet/rgb-lib/config';
+export { DEFAULT_EVM_MINT_LOCK_BLOCKS } from './wallet/rgb-lib/config';
 export { CallbackRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
 export type {
   IRgbLibKeyProvider,

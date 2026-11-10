@@ -14,6 +14,7 @@ import {
   RGB_LIB_BRIDGE_VERSION,
   resolveRgbLibConfig,
   configEquals,
+  DEFAULT_EVM_MINT_LOCK_BLOCKS,
 } from '../lib/module/wallet/rgb-lib/config.js';
 import * as amounts from '../lib/module/wallet/rgb-lib/amounts.js';
 import * as map from '../lib/module/wallet/rgb-lib/mappers.js';
@@ -393,6 +394,29 @@ const utexoFixture = (overrides = {}) =>
 const onlineCalls = (calls) =>
   calls.filter((c) => Array.isArray(c) && c[0] === 'online');
 
+test('goOnline is the rgb-lib connect; lazy, explicit goOnline and unlock share one native goOnline', async () => {
+  const { wallet, calls } = utexoFixture();
+  await wallet.init();
+  // Lazy connect, then explicit calls with the same config: one native goOnline.
+  assert.equal(await wallet.sendBtc({ address: 'btc', amount: 1 }), 'txid');
+  await wallet.goOnline();
+  await wallet.unlock();
+  assert.equal(await wallet.sendBtc({ address: 'btc', amount: 1 }), 'txid');
+  assert.equal(onlineCalls(calls).length, 1);
+  // Each public name reports itself.
+  await assert.rejects(
+    wallet.goOnline({ proxyEndpoint: 'http://localhost:3999' }),
+    (error) =>
+      error.code === 'WALLET_CONFIG_MISMATCH' && error.operation === 'goOnline'
+  );
+  await assert.rejects(
+    wallet.unlock({ proxyEndpoint: 'http://localhost:3999' }),
+    (error) =>
+      error.code === 'WALLET_CONFIG_MISMATCH' && error.operation === 'unlock'
+  );
+  assert.equal(onlineCalls(calls).length, 1);
+  await wallet.dispose();
+});
 test('without unlock, the first online operation connects once with the network defaults', async () => {
   const { wallet, calls } = utexoFixture();
   await wallet.init();
@@ -658,7 +682,7 @@ test('regtest never connects lazily and online operations before init report WAL
     wallet.sendBtc({ address: 'btc', amount: 1 }),
     (error) => {
       assert.equal(error.code, 'WALLET_OFFLINE');
-      assert.match(error.message, /unlock\(params\)/);
+      assert.match(error.message, /goOnline\(params\)/);
       return true;
     }
   );
@@ -1278,7 +1302,7 @@ test('history preserves new statuses, mint rights, exact amounts and real batch 
     txid: 'txid',
     recipientId: null,
     receiveUtxo: null,
-    changeUtxo: null,
+    changeUtxos: [],
     expiration: null,
     transportEndpoints: [],
     invoiceString: null,
@@ -1293,7 +1317,7 @@ test('history preserves new statuses, mint rights, exact amounts and real batch 
     code('INVALID_NATIVE_RESPONSE')
   );
 });
-test('history maps link transfers and link rights from rgb-lib bfa.5', () => {
+test('history maps link transfers and link rights', () => {
   const transfer = map.transfer({
     idx: 5,
     batchTransferIdx: 20,
@@ -1306,7 +1330,7 @@ test('history maps link transfers and link rights from rgb-lib bfa.5', () => {
     txid: 'txid',
     recipientId: null,
     receiveUtxo: null,
-    changeUtxo: null,
+    changeUtxos: [],
     expiration: null,
     transportEndpoints: [],
     invoiceString: null,
@@ -1315,6 +1339,139 @@ test('history maps link transfers and link rights from rgb-lib bfa.5', () => {
   assert.equal(transfer.kind, 'Link');
   assert.deepEqual(transfer.assignments, [{ type: 'LinkRight' }]);
   assert.equal(transfer.amountBaseUnits, undefined);
+});
+test('history keeps every change output and the first one as the deprecated changeUtxo', () => {
+  const change = [
+    { txid: 'a', vout: 1 },
+    { txid: 'b', vout: 0 },
+  ];
+  const transfer = map.transfer({
+    idx: 6,
+    batchTransferIdx: 21,
+    createdAt: '100',
+    updatedAt: '101',
+    status: 'Settled',
+    requestedAssignment: null,
+    assignments: [],
+    kind: 'Send',
+    txid: 'txid',
+    recipientId: null,
+    receiveUtxo: null,
+    changeUtxos: change,
+    expiration: null,
+    transportEndpoints: [],
+    invoiceString: null,
+    consignmentPath: null,
+  });
+  assert.deepEqual(transfer.changeUtxos, change);
+  assert.deepEqual(transfer.changeUtxo, change[0]);
+  const none = map.transfer({
+    ...transfer,
+    createdAt: '100',
+    updatedAt: '101',
+    status: 'Settled',
+    kind: 'Send',
+    assignments: [],
+    requestedAssignment: null,
+    txid: null,
+    recipientId: null,
+    receiveUtxo: null,
+    changeUtxos: [],
+    expiration: null,
+    invoiceString: null,
+    consignmentPath: null,
+  });
+  assert.deepEqual(none.changeUtxos, []);
+  assert.equal(none.changeUtxo, undefined);
+});
+test('BFA assets report the known circulating supply', () => {
+  const listed = map.assets([
+    {
+      schema: 'Bfa',
+      assetId: 'bfa-id',
+      ticker: 'BFA',
+      name: 'Bridged',
+      details: null,
+      precision: 0,
+      issuedSupply: null,
+      initialSupply: '1000',
+      maxSupply: null,
+      knownCirculatingSupply: '750',
+      timestamp: '1',
+      addedAt: '2',
+      balance: { settled: '0', future: '0', spendable: '0' },
+      media: null,
+      token: null,
+      rejectListUrl: null,
+    },
+  ]);
+  assert.equal(listed.bfa[0].knownCirculatingSupply, 750);
+});
+test('EVM mint lock bounds default per chain and reach native in order', async () => {
+  const evmRpcUrls = {
+    1: 'https://eth.example',
+    137: 'http://polygon.example',
+  };
+  const evmMintLockBlocks = { 137: { min: 5, max: 5 } };
+  assert.deepEqual(DEFAULT_EVM_MINT_LOCK_BLOCKS, { min: 1200, max: 28800 });
+  const resolved = resolveRgbLibConfig({
+    ...config,
+    evmRpcUrls,
+    evmMintLockBlocks,
+  });
+  assert.deepEqual(resolved.evmRpcUrls, evmRpcUrls);
+  // Chain 1 has no entry, so it takes the default bounds.
+  assert.deepEqual(resolved.evmMintLockBlocks, {
+    1: { min: 1200, max: 28800 },
+    137: { min: 5, max: 5 },
+  });
+  assert.ok(
+    configEquals(
+      resolved,
+      resolveRgbLibConfig({ ...config, evmRpcUrls, evmMintLockBlocks })
+    )
+  );
+  assert.ok(!configEquals(resolved, resolveRgbLibConfig(config)));
+  assert.ok(
+    !configEquals(resolved, resolveRgbLibConfig({ ...config, evmRpcUrls }))
+  );
+  const bad =
+    (bounds, urls = { 1: 'https://eth.example' }) =>
+    () =>
+      resolveRgbLibConfig({
+        ...config,
+        evmRpcUrls: urls,
+        evmMintLockBlocks: bounds,
+      });
+  assert.throws(bad({ 1: { min: 3, max: 2 } }), code('INVALID_CONFIG'));
+  assert.throws(bad({ 1: { min: 1 } }), code('INVALID_CONFIG'));
+  assert.throws(bad({ 1: { min: -1, max: 2 } }), code('INVALID_CONFIG'));
+  assert.throws(bad({ 1: { min: 1.5, max: 2 } }), code('INVALID_CONFIG'));
+  assert.throws(
+    bad({ 1: { min: 0, max: Number.MAX_SAFE_INTEGER + 1 } }),
+    code('INVALID_CONFIG')
+  );
+  assert.throws(bad({ 1: '1200' }), code('INVALID_CONFIG'));
+  // Bounds for a chain without an RPC URL are a mistake, not ignored.
+  assert.throws(bad({ 2: { min: 1, max: 2 } }), code('INVALID_CONFIG'));
+  assert.throws(bad({}, { 1: 'wss://eth.example' }), code('INVALID_CONFIG'));
+  assert.throws(bad({}, { 0: 'https://eth.example' }), code('INVALID_CONFIG'));
+
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  await wallet.goOnline({ ...config, evmRpcUrls, evmMintLockBlocks });
+  const online = calls.filter((c) => Array.isArray(c) && c[0] === 'online');
+  assert.equal(online.length, 1);
+  // goOnline(handle, kind, url, user, password, cookie, ids, rpcUrls, minLocks, maxLocks, proxies, keys)
+  assert.deepEqual(online[0].slice(7), [
+    ['1', '137'],
+    ['https://eth.example', 'http://polygon.example'],
+    ['1200', '5'],
+    ['28800', '5'],
+    [],
+    [],
+  ]);
+  await wallet.dispose();
 });
 test('configuration normalizes transport URLs and compares auth independently of property order', () => {
   const a = resolveRgbLibConfig({

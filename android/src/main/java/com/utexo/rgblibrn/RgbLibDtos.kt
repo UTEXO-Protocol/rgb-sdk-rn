@@ -130,7 +130,7 @@ internal fun rgbDto(v: Transfer): Map<String, Any?> {
     "txid" to v.txid?.let { it },
     "recipientId" to v.recipientId?.let { it },
     "receiveUtxo" to v.receiveUtxo?.let { rgbDto(it) },
-    "changeUtxo" to v.changeUtxo?.let { rgbDto(it) },
+    "changeUtxos" to v.changeUtxos.map { rgbDto(it) },
     "expiration" to v.expirationTimestamp?.let { it.toString() },
     "transportEndpoints" to v.transportEndpoints.map { rgbDto(it) },
     "invoiceString" to v.invoiceString?.let { it },
@@ -280,12 +280,12 @@ internal fun rgbDto(v: AssetBfa): Map<String, Any?> {
     "media" to v.media?.let { rgbDto(it) },
     "ticker" to v.ticker,
     "initialSupply" to v.initialSupply.toString(),
+    "knownCirculatingSupply" to v.knownCirculatingSupply.toString(),
     "rejectListUrl" to v.rejectListUrl?.let { it },
   )
   result["schema"] = "Bfa"
   result["issuedSupply"] = null
   result["maxSupply"] = null
-  result["knownCirculatingSupply"] = null
   result["token"] = null
   return result
 }

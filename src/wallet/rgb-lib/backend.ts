@@ -273,7 +273,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
         if (requiresOnline && !this.online) {
           throw new WalletBackendError(
             'WALLET_OFFLINE',
-            'Call unlock() before this operation',
+            'Call goOnline() before this operation',
             operation,
             'RGB_L1'
           );
@@ -284,8 +284,8 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
   }
 
   /**
-   * unlock() is optional: the first operation that needs a connection makes
-   * one with the network defaults. An explicit unlock(params) that is
+   * goOnline() is optional: the first operation that needs a connection makes
+   * one with the network defaults. An explicit goOnline(params) that is
    * already connecting is awaited instead.
    */
   private async connectLazily(operation: string): Promise<void> {
@@ -317,7 +317,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     if (!defaults) {
       throw new WalletBackendError(
         'WALLET_OFFLINE',
-        `${operation} needs a connection; on ${this.params.network} call unlock(params) with the indexer and proxy first, or pass them as \`online\` to the constructor`,
+        `${operation} needs a connection; on ${this.params.network} call goOnline(params) with the indexer and proxy first, or pass them as \`online\` to the constructor`,
         operation,
         'RGB_L1'
       );
@@ -529,11 +529,15 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     return opening;
   }
 
-  private unlock(params?: RgbLibUnlockParams): Promise<void> {
+  /** rgb-lib's goOnline; the contract's unlock() is the same call. */
+  private goOnline(
+    params: RgbLibUnlockParams | undefined,
+    operation: 'goOnline' | 'unlock'
+  ): Promise<void> {
     let config: ResolvedRgbLibConfig;
     try {
       // Caller code (getters) runs here, before admission; see reinit().
-      config = this.readConfig(params, 'unlock');
+      config = this.readConfig(params, operation);
       this.assertAccepting();
     } catch (error) {
       return Promise.reject(error);
@@ -600,23 +604,33 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
             )
           );
     }
-    const connecting = this.execute('unlock', false, async (native, handle) => {
-      const auth =
-        config.indexer.type === 'bitcoind' ? config.indexer.auth : undefined;
-      await native.goOnline(
-        handle,
-        config.indexer.type,
-        config.indexer.url,
-        auth?.username ?? null,
-        auth?.password ?? null,
-        auth?.cookieFile ?? null,
-        Object.keys(config.evmRpcUrls),
-        Object.values(config.evmRpcUrls),
-        Object.keys(config.proxyAuthKeys),
-        Object.values(config.proxyAuthKeys)
-      );
-      this.online = config;
-    });
+    const connecting = this.execute(
+      'goOnline',
+      false,
+      async (native, handle) => {
+        const auth =
+          config.indexer.type === 'bitcoind' ? config.indexer.auth : undefined;
+        await native.goOnline(
+          handle,
+          config.indexer.type,
+          config.indexer.url,
+          auth?.username ?? null,
+          auth?.password ?? null,
+          auth?.cookieFile ?? null,
+          Object.keys(config.evmRpcUrls),
+          Object.keys(config.evmRpcUrls).map((id) => config.evmRpcUrls[id]!),
+          Object.keys(config.evmRpcUrls).map((id) =>
+            String(config.evmMintLockBlocks[id]!.min)
+          ),
+          Object.keys(config.evmRpcUrls).map((id) =>
+            String(config.evmMintLockBlocks[id]!.max)
+          ),
+          Object.keys(config.proxyAuthKeys),
+          Object.values(config.proxyAuthKeys)
+        );
+        this.online = config;
+      }
+    );
     this.connecting = { config, promise: connecting };
     void connecting.then(
       () => {
@@ -670,7 +684,10 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     this.guarded(
       {
         init: () => this.publicly('init', this.init()),
-        unlock: (params) => this.publicly('unlock', this.unlock(params)),
+        goOnline: (params) =>
+          this.publicly('goOnline', this.goOnline(params, 'goOnline')),
+        unlock: (params) =>
+          this.publicly('unlock', this.goOnline(params, 'unlock')),
         reinit: (params) => this.publicly('reinit', this.reinit(params)),
         shutdown: () => this.publicly('shutdown', this.close(false)),
         destroy: () => this.publicly('destroy', this.close(true)),

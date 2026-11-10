@@ -46,11 +46,15 @@ export interface WalletAssignment {
 }
 export type WalletTransfer = Omit<
   Transfer,
-  'kind' | 'assignments' | 'requestedAssignment'
+  'kind' | 'assignments' | 'requestedAssignment' | 'changeUtxo'
 > & {
   kind: TransferKind | 'Mint' | 'Link';
   assignments: WalletAssignment[];
   requestedAssignment?: WalletAssignment;
+  /** Every change output of the transfer; empty when it has none. */
+  changeUtxos: NonNullable<Transfer['changeUtxo']>[];
+  /** @deprecated A transfer can have several change outputs; use `changeUtxos`. This is its first element. */
+  changeUtxo?: Transfer['changeUtxo'];
 };
 export type WalletUnspent = Omit<Unspent, 'rgbAllocations'> & {
   rgbAllocations: {
@@ -156,6 +160,8 @@ export interface WalletNetwork {
 }
 export interface WalletLifecycle<T> extends IWalletLifecycle<T> {
   /** Without params: the constructor's `online`, then the network defaults. */
+  goOnline(params?: T): Promise<void>;
+  /** The shared contract's name for `goOnline`; same call. */
   unlock(params?: T): Promise<void>;
   initialize(): Promise<void>;
   reinit(params?: T): Promise<void>;

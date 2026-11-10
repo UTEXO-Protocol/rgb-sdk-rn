@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+__changed__
+
+- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.5` (`0a9d352`) to `v0.3.0-beta.7-upstream-dev-bfa.6` (`5010eef`): iOS from the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.6-bfa), Android from `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.6-bfa`. Rebuild the app (`pod install` on iOS).
+- `evmMintLockBlocks` in `RgbLibUnlockParams` and `online` sets the mint lock window the wallet accepts for each `evmRpcUrls` chain, in blocks of that chain. It is optional: a chain without an entry uses `DEFAULT_EVM_MINT_LOCK_BLOCKS` (`{ min: 1200, max: 28800 }`), so existing `evmRpcUrls` configs keep working.
+  ```ts
+  evmRpcUrls: { '42161': 'https://arb1.arbitrum.io/rpc' },
+  evmMintLockBlocks: { '42161': { min: 1200, max: 28800 } },
+  ```
+  Bounds are safe integers with `min` not above `max`. Bounds for a chain that has no `evmRpcUrls` entry throw `INVALID_CONFIG`. `DEFAULT_EVM_MINT_LOCK_BLOCKS` and the `RgbLibMintLockBlocks` type are exported.
+- Transfers return `changeUtxos` (every change output, possibly empty). `changeUtxo` is deprecated and is the first of them.
+- BFA assets from `listAssets()` report `knownCirculatingSupply`.
+- `goOnline(params?)` is the documented connect call again (rgb-lib has no unlock step); it is no longer deprecated. `unlock(params?)` stays as the `SharedWalletApi` name for the same call. Errors and the lazy connect now report `goOnline`, and an explicit `goOnline()`/`unlock()` after the lazy connect with the same config makes no native call.
+- The native bridge version is 5 (the `goOnline` arguments changed); a JS bundle and a native build from different versions refuse to start.
+- rgb-lib renamed some error variants; the native rejection in `error.cause` (`RGB_LIB_<Variant>`) and the message carry the new names: `MintEventExpired` / `MintEventNotFound` are now `MintLockExpired` / `MintLockNotFound`, and `NoAnchorResolver` is `NoClaimResolver`. `PsbtTooLarge` no longer exists; `CannotLinkToItself` and `InvalidEvmChain` (`INVALID_PARAMS`) are new.
+
 ## 1.0.0-beta.40
 
 __added__

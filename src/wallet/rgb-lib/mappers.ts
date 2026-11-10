@@ -151,7 +151,8 @@ export function transfer(value: NativeTransfer): WalletTransfer {
     txid: value.txid ?? undefined,
     recipientId: value.recipientId ?? undefined,
     receiveUtxo: value.receiveUtxo ?? undefined,
-    changeUtxo: value.changeUtxo ?? undefined,
+    changeUtxos: value.changeUtxos,
+    changeUtxo: value.changeUtxos[0],
     expiration:
       value.expiration === null
         ? undefined
@@ -319,6 +320,10 @@ export function assets(values: NativeAsset[]): ListAssets {
           initialSupply: safeAmount(
             required(value.initialSupply, 'initialSupply'),
             'initialSupply'
+          ),
+          knownCirculatingSupply: safeAmount(
+            required(value.knownCirculatingSupply, 'knownCirculatingSupply'),
+            'knownCirculatingSupply'
           ),
           rejectListUrl: value.rejectListUrl ?? undefined,
         });

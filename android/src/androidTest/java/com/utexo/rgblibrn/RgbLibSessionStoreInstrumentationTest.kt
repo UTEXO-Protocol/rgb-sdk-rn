@@ -30,7 +30,7 @@ class RgbLibSessionStoreInstrumentationTest {
   @Test
   fun runtimeInfo_reportsTheAarProvenance() {
     val info = store.execute("getRuntimeInfo", emptyMap()) as Map<String, Any?>
-    assertEquals(4, info["bridgeVersion"])
+    assertEquals(5, info["bridgeVersion"])
     assertTrue("version from the AAR asset", (info["version"] as String).isNotEmpty())
     assertEquals(40, (info["sourceRevision"] as String).length)
   }

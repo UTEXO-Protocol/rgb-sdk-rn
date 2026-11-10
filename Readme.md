@@ -4,8 +4,6 @@ The RGB_L1 wallet engine for React Native: native [rgb-lib](https://github.com/U
 
 This is an engine package. It has no Lightning (RLN) code, no `UTEXOWallet` facade and no `createWallet()`. Apps that want the shared facade wrap the engine in `UTEXOWallet` from `@utexo/rgb-sdk`: `new UTEXOWallet({ engine: new RgbLibWallet(...) })`.
 
-> Status: local development build. Neither this package nor `@utexo/rgb-sdk-core` is published; install them from local tarballs (below).
->
 > Coming from `@utexo/rgb-sdk-rn`? Wallet data carries over as is; see [Migration.md](Migration.md).
 
 ## Requirements
@@ -19,21 +17,15 @@ This is an engine package. It has no Lightning (RLN) code, no `UTEXOWallet` faca
 - Android `minSdk` 24. The rgb-lib AAR ships `arm64-v8a` and `x86_64` only; set `reactNativeArchitectures=arm64-v8a,x86_64` in the app's `android/gradle.properties` (the template also builds `armeabi-v7a` and `x86`, where rgb-lib would not load).
 - Peer dependency: `@utexo/rgb-sdk-core`.
 
-## Install (local tarballs)
-
-Build both packages into tarballs, then add them to the app:
+## Install
 
 ```bash
-(cd rgb-sdk-core && npm run build && npm pack --pack-destination ../.local-packages)
-(cd rgb-lib-rn && npm pack --pack-destination ../.local-packages)
-```
-
-```bash
-cd my-app
-npm install ../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz ../.local-packages/utexo-rgb-lib-rn-1.0.0-beta.40.tgz
+npm install @utexo/rgb-lib-rn @utexo/rgb-sdk-core
 npm install react-native-get-random-values buffer
 cd ios && pod install
 ```
+
+Add `@utexo/rgb-sdk` as well for the `UTEXOWallet` facade or WebRGB.
 
 `postinstall` downloads the pinned rgb-lib iOS frameworks into the installed package's `ios/RgbLibBindings`. If that fails (offline, for example), `npm install` still succeeds, but `pod install` stops and prints the command to run. Run it **in the installed package**, not in the app or `ios/`:
 
@@ -41,7 +33,9 @@ cd ios && pod install
 cd my-app/node_modules/@utexo/rgb-lib-rn && npm run bindings:rgb-lib
 ```
 
-Android resolves `com.utexo:rgb-lib-bfa-android` from Maven Central at the version in `src/bindings/rgb-lib/manifest.json`.
+Android resolves `com.utexo:rgb-lib-bfa-android` from Maven Central at the pinned version; no extra repository is needed.
+
+Rebuild the app after installing or upgrading this package: the native rgb-lib version is pinned per release, and a JS bundle and native build from different releases refuse to start.
 
 ## App setup
 
@@ -75,7 +69,8 @@ const wallet = new RgbLibWallet(
 await wallet.init(); // opens local storage; works offline
 const address = await wallet.getAddress();
 
-await wallet.unlock({}); // connects with the network defaults
+// No connect call needed: the first online operation runs goOnline once
+// with the network defaults. Call wallet.goOnline(params) to connect explicitly.
 await wallet.createUtxos({ upTo: false, num: 4, feeRate: 1 });
 const { invoice } = await wallet.onchainReceive({ witness: false, minConfirmations: 1 });
 
@@ -85,9 +80,9 @@ await wallet.destroy();  // releases the instance; data is kept
 
 Keys: a mnemonic string, a sync or async reader, an object with `getMnemonic()`, or public keys alone for a watch-only wallet (`capabilities.canSignTransactions` is then `false`). See [`RgbLibKeys`](src/wallet/rgb-lib/key-provider.ts).
 
-Connection: `unlock(params)` takes an indexer (Electrum, Esplora or bitcoind) and a proxy endpoint; omitted values use `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS`. See [`RgbLibUnlockParams`](src/wallet/rgb-lib/config.ts).
+Connection: `goOnline(params)` (rgb-lib's own connect) takes an indexer (Electrum, Esplora or bitcoind) and a proxy endpoint; omitted values use `DEFAULT_INDEXER_URLS` and `DEFAULT_TRANSPORT_ENDPOINTS`. See [`RgbLibUnlockParams`](src/wallet/rgb-lib/config.ts).
 
-Custom endpoints can also be given once, as `online` in the constructor params. They are only stored there (construction makes no network call) and are used by the lazy connect and by `unlock()` without arguments; fields passed to `unlock(params)` override them. With `online`, a regtest wallet needs no explicit `unlock()`:
+Custom endpoints can also be given once, as `online` in the constructor params. They are only stored there (construction makes no network call) and are used by the lazy connect and by `goOnline()` without arguments; fields passed to `goOnline(params)` override them. With `online`, a regtest wallet needs no explicit `goOnline()`:
 
 ```ts
 const wallet = new RgbLibWallet(
@@ -102,9 +97,38 @@ await wallet.init();
 await wallet.getBtcBalance(); // connects with the configured endpoints
 ```
 
-`unlock()` is optional on every network except regtest without `online`: the first operation that needs the network connects by itself. `goOnline(params)` is a deprecated alias of `unlock(params)`.
+`goOnline()` is optional on every network except regtest without `online`: the first operation that needs the network connects by itself, once. rgb-lib has no unlock step; `unlock(params)` exists only because the shared `SharedWalletApi` contract names the connect step that way, and it is the same call as `goOnline(params)`.
 
-Storage: each wallet needs its own directory. The engine refuses a directory that belongs to another wallet or engine, and holds a lock while a session is open.
+### EVM chains (BFA mints)
+
+Receiving a BFA asset minted from an EVM chain needs that chain's JSON-RPC endpoint. Set it per chain ID; the mint lock window the wallet accepts is optional and defaults to `DEFAULT_EVM_MINT_LOCK_BLOCKS` (`{ min: 1200, max: 28800 }` blocks of that chain):
+
+```ts
+const wallet = new RgbLibWallet(
+  {
+    network: 'utexo',
+    storageDirPath,
+    online: {
+      evmRpcUrls: { '42161': 'https://arb1.arbitrum.io/rpc' },
+      evmMintLockBlocks: { '42161': { min: 1200, max: 28800 } }, // optional
+    },
+  },
+  keys
+);
+```
+
+Bounds for a chain without an `evmRpcUrls` entry, or with `min` above `max`, throw `INVALID_CONFIG`.
+
+### Receiving
+
+- `blindReceive(params)` receives on a blinded UTXO of this wallet; create free UTXOs first with `createUtxos()`.
+- `witnessReceive(params)` receives on a new output of the sender's transaction; no free UTXO is needed, the sender pays the output's sats.
+
+Both take `{ assetId?, amount?, minConfirmations?, durationSeconds? }` and return the invoice with its `recipientId`, `expirationTimestamp` and `batchTransferIdx`.
+
+### Storage
+
+Each wallet needs its own directory. The engine refuses a directory that belongs to another wallet or engine, and holds a lock while a session is open.
 
 ## Errors
 
@@ -133,7 +157,10 @@ Outside wallet instances:
 
 ## Tests
 
+In a checkout of the repository (the npm package ships no tests):
+
 ```bash
+npm install
 npm test
 ```
 
@@ -143,4 +170,4 @@ Native checks:
 
 - `npm run test:rgb-lib:ios`: the TurboModule dispatcher on the host, then the rgb-lib UniFFI smoke on a simulator it creates and removes. Needs Xcode and the bindings (`npm run bindings:rgb-lib`).
 - `npm run test:rgb-lib:android`: the dispatcher on the host JVM. Needs `kotlinc` (or `KOTLINC`) and `java`.
-- `RgbLibSessionStoreInstrumentationTest` (`android/src/androidTest/`): the session store against the Maven Central AAR, on an emulator or device. Run it from a host app's Android project, for example `./gradlew :utexo_rgb-lib-rn:connectedDebugAndroidTest`. The npm package does not ship `androidTest`, so use a checkout of this repository as the library module.
+- `RgbLibSessionStoreInstrumentationTest` (`android/src/androidTest/`): the session store against the Maven Central AAR, on an emulator or device. Run it from a host app's Android project, for example `./gradlew :utexo_rgb-lib-rn:connectedDebugAndroidTest`. Use the checkout as the library module.

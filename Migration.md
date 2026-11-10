@@ -12,8 +12,6 @@
 
 RLN (`RGB_LN`) is not part of this split yet. An app that needs Lightning stays on `@utexo/rgb-sdk-rn` for now.
 
-> Status: local development builds; nothing is published. Versions are in [the compatibility table](../docs/05-compatibility.md).
-
 ### Wallet data carries over
 
 No data migration is needed. The new engine opens a wallet directory written by `@utexo/rgb-sdk-rn@1.0.0-beta.40` as is, with the same identity, addresses, balances and transfers, and it restores beta.40 backup files. Both versions use the same native rgb-lib release and the same storage files (`rgb-sdk-profile.json`, `.rgb-sdk.lock`, the rgb-lib data directory). This was verified on iOS and Android by creating a wallet and a backup with beta.40, then opening both with the new packages (see `docs/04-rn-migration.md` in the workspace). A funded wallet (settled BTC, an issued asset, allocations) was verified on iOS against a local regtest.
@@ -26,7 +24,7 @@ Keep the same `storageDirPath`, mnemonic (or key reader) and `network`. Keep `re
 
 ```bash
 npm uninstall @utexo/rgb-sdk-rn @utexo/webrgb-walletconnect
-npm install @utexo/rgb-sdk-core @utexo/rgb-lib-rn @utexo/rgb-sdk   # local tarballs for now
+npm install @utexo/rgb-sdk-core @utexo/rgb-lib-rn @utexo/rgb-sdk
 npm install @utexo/webrgb                                          # only if you use WebRGB
 ```
 
@@ -59,8 +57,8 @@ const wallet = new RgbLibWallet(params, keys);
 | Before | After |
 | --- | --- |
 | `init()`, `initialize()`, `destroy()`, `dispose()`, `shutdown()`, `reinit()` | unchanged |
-| `goOnline(params)` | `unlock(params)` (same `RgbLibUnlockParams`). `goOnline` still works as a deprecated alias on `RgbLibWallet` and the facade |
-| endpoints passed on every connect | optionally once, as `online` in the constructor params; `unlock()`, `goOnline()` and the lazy connect use them, explicit fields override them |
+| `goOnline(params)` | unchanged, and now optional: the first online operation connects by itself. `unlock(params)` is the shared contract's name for the same call |
+| endpoints passed on every connect | optionally once, as `online` in the constructor params; `goOnline()` and the lazy connect use them, explicit fields override them |
 | shared wallet methods (`getAddress`, `getBtcBalance`, `listAssets`, `sendBtc`, `onchainReceive`, `onchainSend`, `listTransfers`, `refreshWallet`, `syncWallet`, …) | unchanged, except the behaviour changes below |
 | `refreshTransfers(skipSync?)` | `refresh({ skipSync? })` on the facade or the engine (same `RefreshTransfersResult`); `refreshTransfers` stays on `RgbLibWallet` |
 | `createBackup`, `drainTo`, `deleteTransfers`, `getBfaCapabilities`, `burn`, `getConsignment`, `getConsignmentPath` | unchanged (rgb-lib extensions, present on the facade) |
@@ -103,7 +101,7 @@ Codes are the same as in beta.40, plus `WALLET_INVALID_STATE` (for example `rein
 - [ ] Dependencies swapped, `pod install` run, iOS target 16.0, Android ABIs `arm64-v8a,x86_64`
 - [ ] Native app rebuilt and reinstalled
 - [ ] Same `storageDirPath`, keys, `network` and `reuseAddresses`
-- [ ] `goOnline` → `unlock` (the alias still works, deprecated); custom endpoints can move to the constructor's `online`
+- [ ] Custom endpoints can move to the constructor's `online`; the explicit `goOnline()` call can then go (the first online operation connects)
 - [ ] `listOnchainTransfers` via `wallet.engine` (or `listTransfers()`); the other engine methods are on the facade
 - [ ] WebRGB imports moved to `@utexo/rgb-sdk/webrgb`
 - [ ] Error handling uses `code` and `isEngineError()`

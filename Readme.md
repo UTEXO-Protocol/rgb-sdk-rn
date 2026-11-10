@@ -83,28 +83,29 @@ await wallet.destroy();
 
 ## Receive RGB assets
 
-RGB assets are received on UTXOs, so a new wallet first creates a few (this spends a little BTC):
+Create an invoice and give `invoice` to the sender:
 
 ```ts
-await wallet.createUtxos({ num: 4, feeRate: 2 });
-```
-
-Then create an invoice and give `invoice` to the sender:
-
-```ts
-const { invoice, expirationTimestamp } = await wallet.blindReceive({
+const { invoice, expirationTimestamp } = await wallet.onchainReceive({
   assetId, // omit to accept any asset
   amount: 100, // omit to accept any amount
   minConfirmations: 1,
   durationSeconds: 86_400,
+  // witness: false, // receive on a blinded UTXO of this wallet instead
 });
+
+// Same invoice types, as shortcuts:
+// await wallet.witnessReceive({ ... }); // = onchainReceive({ witness: true })
+// await wallet.blindReceive({ ... });   // = onchainReceive({ witness: false })
 ```
 
-|                  | `blindReceive`                | `witnessReceive`                         |
-| ---------------- | ----------------------------- | ---------------------------------------- |
-| Receives on      | a blinded UTXO of this wallet | a new output of the sender's transaction |
-| Needs free UTXOs | yes                           | no                                       |
-| Sender pays      | the fee                       | the fee and the new output's sats        |
+By default the invoice is a witness invoice: the asset arrives on a new output of the sender's transaction, so the wallet needs no free UTXOs, and the sender pays the fee and that output's sats (`witnessData` in `onchainSend`).
+
+A blinded invoice (`witness: false`) receives on a UTXO of this wallet. Create a few first; this spends a little BTC:
+
+```ts
+await wallet.createUtxos({ num: 4, feeRate: 2 });
+```
 
 Once the sender has paid, call `refresh()` until the transfer settles:
 

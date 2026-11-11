@@ -4,6 +4,7 @@
 
 __changed__
 
+- Backup names follow one rule across engines (every name says `Backup`): `exportBackupToFile({ filePath, password })` replaces `createBackup({ backupPath, password })`, and `restoreBackupFromFile({ filePath, password, dataDir })` replaces `restoreFromBackup({ backupFilePath, password, dataDir })`. The old names still work with their old parameters and are deprecated; errors name the method that was called. `FileBackupApi` in core now has `exportBackupToFile`, so the `UTEXOWallet` facade forwards that name. A backup restores only on the engine that made it.
 - rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.5` (`0a9d352`) to `v0.3.0-beta.7-upstream-dev-bfa.6` (`5010eef`): iOS from the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.6-bfa), Android from `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.6-bfa`. Rebuild the app (`pod install` on iOS).
 - `evmMintLockBlocks` in `RgbLibUnlockParams` and the constructor sets the mint lock window the wallet accepts for each `evmRpcUrls` chain, in blocks of that chain. It is optional: a chain without an entry uses `DEFAULT_EVM_MINT_LOCK_BLOCKS` (`{ min: 1200, max: 28800 }`), so existing `evmRpcUrls` configs keep working.
   ```ts

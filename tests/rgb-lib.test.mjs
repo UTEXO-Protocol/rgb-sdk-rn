@@ -5,6 +5,8 @@ import { SDKError } from '@utexo/rgb-sdk-core';
 import { WalletBackendError } from '../lib/module/wallet/wallet-errors.js';
 import { RgbLibWallet } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
 import {
+  restoreBackupFromFile,
+  restoreBackupFromFileWith,
   restoreFromBackup,
   restoreFromBackupWith,
 } from '../lib/module/wallet/rgb-lib/restore.js';
@@ -1743,6 +1745,98 @@ test('createBackup requires an absolute path and nonempty password', async () =>
     ['backup', 'handle-1', '/backups/w.rgb', 'pw']
   );
   await wallet.dispose();
+});
+test('exportBackupToFile requires an absolute filePath and nonempty password', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  for (const invalid of [
+    { filePath: 'relative/backup', password: 'pw' },
+    { filePath: '/backup', password: '' },
+    { filePath: '/backup' },
+    // The deprecated field name is not read by the new method.
+    { backupPath: '/backup', password: 'pw' },
+  ]) {
+    await assert.rejects(
+      wallet.exportBackupToFile(invalid),
+      (e) => e.code === 'INVALID_CONFIG' && e.operation === 'exportBackupToFile'
+    );
+  }
+  assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'backup'));
+  assert.deepEqual(
+    await wallet.exportBackupToFile({
+      filePath: '/backups/w.rgb',
+      password: 'pw',
+    }),
+    { message: 'Backup created successfully', backupPath: '/backups/w.rgb' }
+  );
+  assert.deepEqual(
+    calls.find((c) => Array.isArray(c) && c[0] === 'backup'),
+    ['backup', 'handle-1', '/backups/w.rgb', 'pw']
+  );
+  // The deprecated name reports its own operation.
+  await assert.rejects(
+    wallet.createBackup({ backupPath: 'relative', password: 'pw' }),
+    (e) => e.code === 'INVALID_CONFIG' && e.operation === 'createBackup'
+  );
+  await wallet.dispose();
+});
+test('restoreBackupFromFile takes filePath and reports its own name', async () => {
+  const valid = {
+    filePath: '/backups/w.rgb',
+    password: 'pw',
+    dataDir: '/wallets/restored',
+  };
+  for (const invalid of [
+    { filePath: 'backups/w.rgb' },
+    { filePath: undefined, backupFilePath: '/backups/w.rgb' },
+    { dataDir: 'wallets/restored' },
+    { password: '' },
+    { filePath: '/backups/w\0.rgb' },
+  ]) {
+    const { native, calls } = fixture();
+    await assert.rejects(
+      restoreBackupFromFileWith({ ...valid, ...invalid }, () => native),
+      (e) =>
+        e.code === 'INVALID_CONFIG' &&
+        e.operation === 'restoreBackupFromFile' &&
+        /filePath/.test(e.message)
+    );
+    assert.deepEqual(calls, []);
+  }
+  for (const missing of [null, undefined]) {
+    await assert.rejects(
+      restoreBackupFromFile(missing),
+      (e) =>
+        e.code === 'INVALID_CONFIG' && e.operation === 'restoreBackupFromFile'
+    );
+  }
+  const nativeError = Object.assign(new Error('bad pw'), {
+    code: 'RGB_LIB_WrongPassword',
+  });
+  {
+    const { native } = fixture({
+      async restoreBackup() {
+        throw nativeError;
+      },
+    });
+    await assert.rejects(
+      restoreBackupFromFileWith(valid, () => native),
+      (e) =>
+        e.code === 'NATIVE_ERROR' &&
+        e.operation === 'restoreBackupFromFile' &&
+        e.cause === nativeError
+    );
+  }
+  const { native, calls } = fixture();
+  assert.deepEqual(await restoreBackupFromFileWith(valid, () => native), {
+    message: 'Wallet restored successfully',
+  });
+  assert.deepEqual(calls.at(-1), [
+    'restore',
+    valid.filePath,
+    valid.password,
+    valid.dataDir,
+  ]);
 });
 test('restoreFromBackup validates paths and runtime version before restoring', async () => {
   const valid = {

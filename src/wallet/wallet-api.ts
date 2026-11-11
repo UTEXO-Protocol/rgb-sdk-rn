@@ -92,6 +92,12 @@ export interface WalletHistory {
   syncWallet(): Promise<void>;
 }
 export interface WalletBackup {
+  /** Writes the encrypted backup archive to an absolute `filePath`. */
+  exportBackupToFile(params: {
+    filePath: string;
+    password: string;
+  }): Promise<WalletBackupResponse>;
+  /** @deprecated Use `exportBackupToFile({ filePath, password })`. */
   createBackup(params: {
     backupPath: string;
     password: string;

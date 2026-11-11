@@ -1,15 +1,19 @@
 import { asCause, WalletBackendError } from '../wallet-errors';
-import type { RestoreFromBackupParams, WalletRestoreResponse } from '../types';
+import type {
+  RestoreBackupFromFileParams,
+  RestoreFromBackupParams,
+  WalletRestoreResponse,
+} from '../types';
 import { getRgbLibBinding, assertRuntime } from './native';
 import { guardNative, toPublicError } from './errors';
 
-const OPERATION = 'restoreFromBackup';
+type Operation = 'restoreBackupFromFile' | 'restoreFromBackup';
 
-const invalid = (message: string, cause?: unknown) =>
+const invalid = (operation: Operation, message: string, cause?: unknown) =>
   new WalletBackendError(
     'INVALID_CONFIG',
     message,
-    OPERATION,
+    operation,
     'RGB_L1',
     cause === undefined ? undefined : asCause(cause)
   );
@@ -18,14 +22,22 @@ const invalid = (message: string, cause?: unknown) =>
  * Reads each parameter once (a getter may throw or change between reads),
  * then validates the captured values; only those reach native.
  */
-function readParams(params: RestoreFromBackupParams) {
+function readParams(
+  operation: Operation,
+  params: RestoreBackupFromFileParams | RestoreFromBackupParams
+) {
   let backupFilePath: unknown;
   let password: unknown;
   let dataDir: unknown;
   try {
-    ({ backupFilePath, password, dataDir } = params);
+    backupFilePath =
+      operation === 'restoreFromBackup'
+        ? (params as RestoreFromBackupParams).backupFilePath
+        : (params as RestoreBackupFromFileParams).filePath;
+    ({ password, dataDir } = params);
   } catch (error) {
     throw invalid(
+      operation,
       params == null
         ? 'Restore requires parameters'
         : 'Could not read the restore parameters',
@@ -43,21 +55,33 @@ function readParams(params: RestoreFromBackupParams) {
     !password
   ) {
     throw invalid(
-      'Restore requires an absolute backupFilePath and dataDir and a nonempty password'
+      operation,
+      operation === 'restoreFromBackup'
+        ? 'Restore requires an absolute backupFilePath and dataDir and a nonempty password'
+        : 'Restore requires an absolute filePath and dataDir and a nonempty password'
     );
   }
   return { backupFilePath, password, dataDir };
 }
 
 /**
- * RGB_L1 only. Restores a `createBackup()` archive into a new, empty wallet
- * directory. Call it before `init()`, then create the wallet with
- * `storageDirPath: dataDir`. RGB_LN restores from VSS during `unlock()`.
+ * RGB_L1 only. Restores an `exportBackupToFile()` archive into a new, empty
+ * wallet directory. Call it before `init()`, then create the wallet with
+ * `storageDirPath: dataDir`. A backup restores only on this engine: a web
+ * (`exportBackup()`) backup does not open here. RGB_LN restores from VSS
+ * during `unlock()`.
  */
+export async function restoreBackupFromFile(
+  params: RestoreBackupFromFileParams
+): Promise<WalletRestoreResponse> {
+  return restoreWith('restoreBackupFromFile', params, getRgbLibBinding);
+}
+
+/** @deprecated Use `restoreBackupFromFile({ filePath, password, dataDir })`. */
 export async function restoreFromBackup(
   params: RestoreFromBackupParams
 ): Promise<WalletRestoreResponse> {
-  return restoreFromBackupWith(params, getRgbLibBinding);
+  return restoreWith('restoreFromBackup', params, getRgbLibBinding);
 }
 
 /** @internal Transport-injectable implementation; not exported from the package. */
@@ -65,7 +89,23 @@ export async function restoreFromBackupWith(
   params: RestoreFromBackupParams,
   loadBinding: typeof getRgbLibBinding
 ): Promise<WalletRestoreResponse> {
-  const { backupFilePath, password, dataDir } = readParams(params);
+  return restoreWith('restoreFromBackup', params, loadBinding);
+}
+
+/** @internal Transport-injectable implementation; not exported from the package. */
+export async function restoreBackupFromFileWith(
+  params: RestoreBackupFromFileParams,
+  loadBinding: typeof getRgbLibBinding
+): Promise<WalletRestoreResponse> {
+  return restoreWith('restoreBackupFromFile', params, loadBinding);
+}
+
+async function restoreWith(
+  operation: Operation,
+  params: RestoreBackupFromFileParams | RestoreFromBackupParams,
+  loadBinding: typeof getRgbLibBinding
+): Promise<WalletRestoreResponse> {
+  const { backupFilePath, password, dataDir } = readParams(operation, params);
   try {
     const native = guardNative(loadBinding());
     const runtime = await native.getRuntimeInfo();
@@ -73,7 +113,7 @@ export async function restoreFromBackupWith(
     await native.restoreBackup(backupFilePath, password, dataDir);
   } catch (error) {
     // Report the public name, not the native method (`restoreBackup`).
-    throw toPublicError(error, OPERATION);
+    throw toPublicError(error, operation);
   }
   return { message: 'Wallet restored successfully' };
 }

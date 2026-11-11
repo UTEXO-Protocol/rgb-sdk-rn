@@ -4,7 +4,10 @@
 
 // Engine
 export { RgbLibWallet } from './wallet/rgb-lib/rgb-lib-wallet';
-export { restoreFromBackup } from './wallet/rgb-lib/restore';
+export {
+  restoreBackupFromFile,
+  restoreFromBackup,
+} from './wallet/rgb-lib/restore';
 export type {
   RgbLibWalletParams,
   RgbLibWalletOptions,
@@ -241,6 +244,7 @@ export type {
   IssueAssetCfaParams,
   IssueAssetUdaParams,
   AssetMetadata,
+  RestoreBackupFromFileParams,
   RestoreFromBackupParams,
   WalletRestoreResponse,
 } from './wallet/types';

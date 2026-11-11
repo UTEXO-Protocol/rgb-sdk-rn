@@ -94,7 +94,16 @@ export type {
   IssueAssetUdaParams,
 } from '@utexo/rgb-sdk-core';
 
-/** `restoreFromBackup()` input. Both paths are absolute. */
+/** `restoreBackupFromFile()` input. Both paths are absolute. */
+export interface RestoreBackupFromFileParams {
+  /** Archive written by RGB_L1 `exportBackupToFile()`. */
+  filePath: string;
+  password: string;
+  /** New, empty directory; pass it as `storageDirPath` to the wallet. */
+  dataDir: string;
+}
+
+/** @deprecated `restoreFromBackup()` input; use `RestoreBackupFromFileParams`. */
 export interface RestoreFromBackupParams {
   /** Archive written by RGB_L1 `createBackup()`. */
   backupFilePath: string;

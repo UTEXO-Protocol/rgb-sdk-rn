@@ -1,6 +1,7 @@
 // Compile-only checks for the public engine API (checked by `npm run typecheck`).
 import {
   RgbLibWallet,
+  restoreBackupFromFile,
   restoreFromBackup,
   type OnchainWalletApi,
   type RgbLibKeys,
@@ -84,6 +85,16 @@ export const restoreShape: Promise<WalletRestoreResponse> = restoreFromBackup({
 const renamed = { backupPath: '/b', password: 'pw', storageDirPath: '/w' };
 // @ts-expect-error The old field names are required.
 void restoreFromBackup(renamed);
+
+export const restoredFromFile: Promise<WalletRestoreResponse> =
+  restoreBackupFromFile({
+    filePath: '/backups/w.rgb',
+    password: 'pw',
+    dataDir: '/wallets/restored',
+  });
+const oldFields = { backupFilePath: '/b', password: 'pw', dataDir: '/w' };
+// @ts-expect-error restoreBackupFromFile takes filePath, not backupFilePath.
+void restoreBackupFromFile(oldFields);
 
 // Compile-only coverage of every `keys` form.
 declare const SecureStore: {

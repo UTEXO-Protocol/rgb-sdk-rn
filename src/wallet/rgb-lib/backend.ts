@@ -1176,33 +1176,43 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibUnlockPar
     );
   }
 
+  /** One backup to a file; each public name reports its own operation. */
+  private backupToFile(
+    operation: string,
+    params: unknown,
+    read: (owned: Record<string, unknown>) => unknown
+  ) {
+    return this.input(
+      operation,
+      false,
+      params as Record<string, unknown>,
+      async (native, handle, owned) => {
+        const path = read(owned);
+        if (
+          typeof path !== 'string' ||
+          !path.startsWith('/') ||
+          typeof owned.password !== 'string' ||
+          !owned.password
+        ) {
+          throw new WalletBackendError(
+            'INVALID_CONFIG',
+            'Backup requires an absolute path and a nonempty password',
+            undefined,
+            'RGB_L1'
+          );
+        }
+        await native.backup(handle, path, owned.password);
+        return { message: 'Backup created successfully', backupPath: path };
+      }
+    );
+  }
+
   readonly backup: OnchainWalletBackend<RgbLibUnlockParams>['backup'] =
     this.guarded({
+      exportBackupToFile: (params) =>
+        this.backupToFile('exportBackupToFile', params, (p) => p.filePath),
       createBackup: (params) =>
-        this.input(
-          'createBackup',
-          false,
-          params,
-          async (native, handle, params) => {
-            if (
-              !params.backupPath?.startsWith('/') ||
-              typeof params.password !== 'string' ||
-              !params.password
-            ) {
-              throw new WalletBackendError(
-                'INVALID_CONFIG',
-                'Backup requires an absolute path and a nonempty password',
-                undefined,
-                'RGB_L1'
-              );
-            }
-            await native.backup(handle, params.backupPath, params.password);
-            return {
-              message: 'Backup created successfully',
-              backupPath: params.backupPath,
-            };
-          }
-        ),
+        this.backupToFile('createBackup', params, (p) => p.backupPath),
     });
 
   readonly maintenance: OnchainWalletBackend<RgbLibUnlockParams>['maintenance'] =

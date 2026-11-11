@@ -239,6 +239,10 @@ export class RgbLibWallet
     return this.ports.history.syncWallet();
   }
 
+  exportBackupToFile(...args: Parameters<WalletBackup['exportBackupToFile']>) {
+    return this.ports.backup.exportBackupToFile(...args);
+  }
+  /** @deprecated Use `exportBackupToFile({ filePath, password })`. */
   createBackup(...args: Parameters<WalletBackup['createBackup']>) {
     return this.ports.backup.createBackup(...args);
   }

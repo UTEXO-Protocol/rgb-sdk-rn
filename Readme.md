@@ -151,16 +151,18 @@ const asset = await wallet.issueAssetNia({
 The mnemonic recovers bitcoin only. RGB assets also need the wallet's data (contracts and transfer history), so make an encrypted backup after each transfer:
 
 ```ts
-await wallet.createBackup({ backupPath, password });
+await wallet.exportBackupToFile({ filePath, password });
 ```
 
 To restore, unpack the backup into a new, empty directory before `init()`, then open the wallet there with the same mnemonic:
 
 ```ts
-import { restoreFromBackup } from '@utexo/rgb-lib-rn';
+import { restoreBackupFromFile } from '@utexo/rgb-lib-rn';
 
-await restoreFromBackup({ backupFilePath, password, dataDir: storageDirPath });
+await restoreBackupFromFile({ filePath, password, dataDir: storageDirPath });
 ```
+
+A backup restores only on this engine: a backup made by the web engine (`@utexo/rgb-sdk-web`) does not open here. The earlier names `createBackup({ backupPath })` and `restoreFromBackup({ backupFilePath })` still work and are deprecated.
 
 ## Configuration
 
@@ -268,8 +270,8 @@ All methods are async except `getNetwork()`, `isDisposed()` and the `capabilitie
 
 | Method                              | Description                                                  |
 | ----------------------------------- | ------------------------------------------------------------ |
-| `createBackup(params)`              | Writes an encrypted backup file                              |
-| `restoreFromBackup(params)`         | Function export: unpacks a backup into an empty directory    |
+| `exportBackupToFile(params)`        | Writes an encrypted backup file                              |
+| `restoreBackupFromFile(params)`     | Function export: unpacks a backup into an empty directory    |
 | `getBfaCapabilities()`              | Whether this build and wallet can burn and read consignments |
 | `burn(params)`                      | Burns RGB assets                                             |
 | `getConsignment(assetId, txid)`     | A transfer's consignment as a string                         |

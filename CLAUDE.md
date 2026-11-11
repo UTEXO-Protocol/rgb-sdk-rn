@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`@utexo/rgb-lib-rn` is the RGB_L1 engine for React Native: `RgbLibWallet` over native rgb-lib (the BFA build), with no RLN or LDK. It implements the `SharedWalletApi` engine contract from `@utexo/rgb-sdk-core` plus the rgb-lib extensions (burn, consignment, backups, VSS, maintenance and others). The optional `UTEXOWallet` facade and WebRGB live in `@utexo/rgb-sdk`. The library uses the React Native new architecture (TurboModules + Codegen) and upstream UniFFI bindings on iOS and Android; it does not build a Rust adapter.
+`@utexo/rgb-sdk-rn` is the RGB_L1 engine for React Native: `RgbLibWallet` over native rgb-lib (the BFA build), with no RLN or LDK. It implements the `SharedWalletApi` engine contract from `@utexo/rgb-sdk-core` plus the rgb-lib extensions (burn, consignment, backups, VSS, maintenance and others). The optional `UTEXOWallet` facade and WebRGB live in `@utexo/rgb-sdk`. The library uses the React Native new architecture (TurboModules + Codegen) and upstream UniFFI bindings on iOS and Android; it does not build a Rust adapter.
 
 ## Commands
 

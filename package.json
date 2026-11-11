@@ -1,5 +1,5 @@
 {
-  "name": "@utexo/rgb-lib-rn",
+  "name": "@utexo/rgb-sdk-rn",
   "version": "1.0.0-beta.40",
   "description": "RGB_L1 wallet engine for React Native: native rgb-lib (iOS and Android) behind the @utexo/rgb-sdk-core SharedWalletApi contract",
   "main": "./lib/module/index.js",
@@ -62,7 +62,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/UTEXO-Protocol/rgb-lib-rn.git"
+    "url": "https://github.com/UTEXO-Protocol/rgb-sdk-rn.git"
   },
   "keywords": [
     "rgb",

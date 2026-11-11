@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Runtime contract conformance for @utexo/rgb-lib-rn.
+ * Runtime contract conformance for @utexo/rgb-sdk-rn.
  *
  * Runs core's engine suite (`runEngineConformanceChecks` from
  * `@utexo/rgb-sdk-core/conformance`) on `RgbLibWallet` with a minimal runner
@@ -84,7 +84,7 @@ const createRgbLibSync = (keys = { mnemonic: 'test mnemonic' }) =>
   );
 
 runEngineConformanceChecks({
-  name: 'rgb-lib-rn RgbLibWallet',
+  name: 'rgb-sdk-rn RgbLibWallet',
   engineClass: RgbLibWallet,
   createEngineSync: createRgbLibSync,
   extensions: [
@@ -105,7 +105,7 @@ runEngineConformanceChecks({
   expect,
 });
 
-describe('rgb-lib-rn RgbLibWallet — contract version', () => {
+describe('rgb-sdk-rn RgbLibWallet — contract version', () => {
   it('rejects an unaccepted contract version before init, with no native call', () => {
     const wallet = createRgbLibSync();
     assert.throws(
@@ -123,10 +123,10 @@ for (const run of pending) await run();
 
 if (failures.length > 0) {
   console.error(
-    `\n✗ rgb-lib-rn contract conformance — ${failures.length} failed, ${passed} passed\n`
+    `\n✗ rgb-sdk-rn contract conformance — ${failures.length} failed, ${passed} passed\n`
   );
   for (const f of failures) console.error(`  ✗ ${f.title}\n      ${f.message}`);
   process.exit(1);
 }
 
-console.log(`✓ rgb-lib-rn contract conformance — ${passed} checks passed`);
+console.log(`✓ rgb-sdk-rn contract conformance — ${passed} checks passed`);

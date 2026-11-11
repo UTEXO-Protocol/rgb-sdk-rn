@@ -1,7 +1,7 @@
 require "json"
 
 package = JSON.parse(File.read(File.join(__dir__, "package.json")))
-repository = package.dig("repository", "url") || "https://github.com/UTEXO-Protocol/rgb-lib-rn.git"
+repository = package.dig("repository", "url") || "https://github.com/UTEXO-Protocol/rgb-sdk-rn.git"
 
 Pod::Spec.new do |s|
   s.name         = "RgbLib"

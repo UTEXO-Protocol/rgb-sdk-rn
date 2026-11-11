@@ -1,7 +1,7 @@
-# @utexo/rgb-lib-rn
+# @utexo/rgb-sdk-rn
 
-[![npm](https://img.shields.io/npm/v/@utexo/rgb-lib-rn)](https://www.npmjs.com/package/@utexo/rgb-lib-rn)
-[![license](https://img.shields.io/npm/l/@utexo/rgb-lib-rn)](LICENSE)
+[![npm](https://img.shields.io/npm/v/@utexo/rgb-sdk-rn)](https://www.npmjs.com/package/@utexo/rgb-sdk-rn)
+[![license](https://img.shields.io/npm/l/@utexo/rgb-sdk-rn)](LICENSE)
 
 An RGB wallet for React Native, powered by native [rgb-lib](https://github.com/UTEXO-Protocol/rgb-lib) on iOS and Android. Hold Bitcoin and RGB assets (NIA, CFA, UDA, IFA, BFA), create invoices, send and receive on-chain, and back up the wallet.
 
@@ -25,7 +25,7 @@ An RGB wallet for React Native, powered by native [rgb-lib](https://github.com/U
 ## Installation
 
 ```bash
-npm install @utexo/rgb-lib-rn @utexo/rgb-sdk-core
+npm install @utexo/rgb-sdk-rn @utexo/rgb-sdk-core
 npm install react-native-get-random-values buffer
 cd ios && pod install
 ```
@@ -56,7 +56,7 @@ Rebuild the app after installing or upgrading: each release pins its native rgb-
 ## Quick start
 
 ```ts
-import { RgbLibWallet, generateKeys } from '@utexo/rgb-lib-rn';
+import { RgbLibWallet, generateKeys } from '@utexo/rgb-sdk-rn';
 import * as SecureStore from 'expo-secure-store';
 
 // 1. Create a mnemonic once and keep it in secure storage.
@@ -157,7 +157,7 @@ await wallet.exportBackupToFile({ filePath, password });
 To restore, unpack the backup into a new, empty directory before `init()`, then open the wallet there with the same mnemonic:
 
 ```ts
-import { restoreBackupFromFile } from '@utexo/rgb-lib-rn';
+import { restoreBackupFromFile } from '@utexo/rgb-sdk-rn';
 
 await restoreBackupFromFile({ filePath, password, dataDir: storageDirPath });
 ```
@@ -316,7 +316,7 @@ Prefer `isEngineError` to `instanceof`: it also works when the app bundles two c
 
 **`required a higher minimum deployment target`** during `pod install`: set `platform :ios, '16.0'` in `ios/Podfile`.
 
-**`pod install` asks you to run `npm run bindings:rgb-lib`**: the iOS frameworks are downloaded during `npm install`. If that ran offline, run the command in `node_modules/@utexo/rgb-lib-rn`, then `pod install` again.
+**`pod install` asks you to run `npm run bindings:rgb-lib`**: the iOS frameworks are downloaded during `npm install`. If that ran offline, run the command in `node_modules/@utexo/rgb-sdk-rn`, then `pod install` again.
 
 **`NATIVE_BACKEND_UNAVAILABLE`**: the native module is not in the app. Rebuild it after installing (`pod install` on iOS), and check that the New Architecture is enabled.
 

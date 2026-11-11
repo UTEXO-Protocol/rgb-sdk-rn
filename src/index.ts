@@ -1,4 +1,4 @@
-// @utexo/rgb-lib-rn — the RGB_L1 engine for React Native (native rgb-lib, no
+// @utexo/rgb-sdk-rn — the RGB_L1 engine for React Native (native rgb-lib, no
 // RLN / LDK). The engine is the primary API; the optional UTEXOWallet facade
 // lives in @utexo/rgb-sdk.
 

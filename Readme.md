@@ -332,8 +332,11 @@ Prefer `isEngineError` to `instanceof`: it also works when the app bundles two c
 
 ## Related packages
 
-- [`@utexo/rgb-sdk`](https://www.npmjs.com/package/@utexo/rgb-sdk): the `UTEXOWallet` facade and the WebRGB provider for dApps.
-- [`@utexo/rgb-sdk-core`](https://www.npmjs.com/package/@utexo/rgb-sdk-core): shared types, errors and key helpers.
+- [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk): the `UTEXOWallet` facade and the WebRGB provider for dApps.
+- [`@utexo/rgb-sdk-core`](https://www.npmjs.com/package/@utexo/rgb-sdk-core) ([GitHub](https://github.com/UTEXO-Protocol/rgb-sdk-core)): shared types, errors and key helpers.
+- [`@utexo/rgb-sdk-web`](https://github.com/UTEXO-Protocol/rgb-sdk-web): the browser engine with the same API.
+
+Source of this package: [UTEXO-Protocol/rgb-sdk-rn](https://github.com/UTEXO-Protocol/rgb-sdk-rn).
 
 ## License
 

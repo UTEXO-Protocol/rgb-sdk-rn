@@ -1,6 +1,6 @@
 // Compile-only checks for the public engine API (checked by `npm run typecheck`).
 import {
-  RgbLibWallet,
+  RgbLibRn,
   restoreBackupFromFile,
   restoreFromBackup,
   type OnchainWalletApi,
@@ -29,7 +29,7 @@ export async function engineContract(
   keys: RgbLibKeys,
   unlock: RgbLibUnlockParams
 ) {
-  const wallet = new RgbLibWallet(params, keys);
+  const wallet = new RgbLibRn(params, keys);
   const shared: SharedWalletApi<RgbLibUnlockParams> = wallet;
   const extensions: [
     RestartableWalletApi<RgbLibUnlockParams>,
@@ -113,19 +113,19 @@ export function keysForms(
     { mnemonic: 'mnemonic words', ...publicKeys },
     publicKeys,
   ];
-  const wallets = forms.map((keys) => new RgbLibWallet(params, keys));
+  const wallets = forms.map((keys) => new RgbLibRn(params, keys));
   // @ts-expect-error A mnemonic source must not be given twice.
-  new RgbLibWallet(params, { mnemonic: 'a', getMnemonic: () => 'b' });
+  new RgbLibRn(params, { mnemonic: 'a', getMnemonic: () => 'b' });
   // @ts-expect-error Without a mnemonic, all public keys are required.
-  new RgbLibWallet(params, { accountXpubVanilla: 'tpub' });
+  new RgbLibRn(params, { accountXpubVanilla: 'tpub' });
   // @ts-expect-error The reader returns the mnemonic as text.
-  new RgbLibWallet(params, () => 42);
+  new RgbLibRn(params, () => 42);
   return wallets;
 }
 
 // Connection settings sit next to the wallet settings, like `goOnline(params)`.
 export function flatConstructorParams(keys: RgbLibKeys) {
-  new RgbLibWallet(
+  new RgbLibRn(
     {
       network: 'utexo',
       storageDirPath: '/wallets/a',
@@ -136,7 +136,7 @@ export function flatConstructorParams(keys: RgbLibKeys) {
     },
     keys
   );
-  new RgbLibWallet(
+  new RgbLibRn(
     {
       network: 'regtest',
       storageDirPath: '/wallets/b',
@@ -146,7 +146,7 @@ export function flatConstructorParams(keys: RgbLibKeys) {
     },
     keys
   );
-  new RgbLibWallet(
+  new RgbLibRn(
     {
       network: 'signet',
       storageDirPath: '/wallets/c',

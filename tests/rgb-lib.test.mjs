@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { SDKError } from '@utexo/rgb-sdk-core';
 import { WalletBackendError } from '../lib/module/wallet/wallet-errors.js';
-import { RgbLibWallet } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
+import { RgbLibRn } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
 import {
   restoreBackupFromFile,
   restoreBackupFromFileWith,
@@ -142,14 +142,14 @@ function fixture(overrides = {}) {
       return 'test mnemonic';
     },
   };
-  const wallet = new RgbLibWallet(params, keys, () => native);
+  const wallet = new RgbLibRn(params, keys, () => native);
   return { wallet, native, calls, keys };
 }
 
 function publicWalletFixture(overrides = {}, walletParams = params) {
   const f = fixture(overrides);
   // The engine itself is the public API; only the native transport is faked.
-  const wallet = new RgbLibWallet(walletParams, f.keys, () => f.native);
+  const wallet = new RgbLibRn(walletParams, f.keys, () => f.native);
   return { ...f, wallet };
 }
 
@@ -294,7 +294,7 @@ test('utexo rejects a custom-signet native identity instead of treating it as st
 test('missing native artifacts fail explicitly without loading key material', async () => {
   let reads = 0;
   // No fake transport: the real binding loader finds no native module.
-  const w = new RgbLibWallet(params, {
+  const w = new RgbLibRn(params, {
     async getMnemonic() {
       reads++;
       return 'unused';
@@ -665,7 +665,7 @@ test('invalid constructor connection settings are rejected at construction', () 
     { ...config, evmRpcUrls: { 0: 'http://localhost:8545' } },
   ]) {
     assert.throws(
-      () => new RgbLibWallet({ ...params, ...connection }, keys, () => ({})),
+      () => new RgbLibRn({ ...params, ...connection }, keys, () => ({})),
       code('INVALID_CONFIG'),
       JSON.stringify(connection)
     );
@@ -2230,7 +2230,7 @@ const PUBLIC_KEYS = {
 /** Opens a wallet with `keys` and returns the mnemonic and public keys sent to native. */
 async function openWith(keys) {
   const { native, calls } = fixture();
-  const wallet = new RgbLibWallet(params, keys, () => native);
+  const wallet = new RgbLibRn(params, keys, () => native);
   await wallet.init();
   const open = calls.find((c) => Array.isArray(c) && c[0] === 'open');
   await wallet.dispose();
@@ -2270,7 +2270,7 @@ test('keys with a mnemonic and public keys send both; public keys alone open wat
 test('the mnemonic reader is called on each native session and never cached', async () => {
   let reads = 0;
   const { native } = fixture();
-  const wallet = new RgbLibWallet(
+  const wallet = new RgbLibRn(
     params,
     () => {
       reads += 1;
@@ -2326,7 +2326,7 @@ test('a mismatch reported by native keeps its own code after the mnemonic is rea
       );
     },
   });
-  const wallet = new RgbLibWallet(params, 'words', () => native);
+  const wallet = new RgbLibRn(params, 'words', () => native);
   await assert.rejects(wallet.init(), code('WALLET_PROFILE_MISMATCH'));
 });
 
@@ -2334,7 +2334,7 @@ test('invalid keys are rejected at construction with INVALID_CONFIG', () => {
   const { native } = fixture();
   const reject = (keys, message) =>
     assert.throws(
-      () => new RgbLibWallet(params, keys, () => native),
+      () => new RgbLibRn(params, keys, () => native),
       (error) => {
         assert.equal(error.code, 'INVALID_CONFIG');
         assert.equal(error.protocol, 'RGB_L1');
@@ -2370,7 +2370,7 @@ test('invalid keys are rejected at construction with INVALID_CONFIG', () => {
   }
   assert.throws(
     () =>
-      new RgbLibWallet(
+      new RgbLibRn(
         { ...params, network: 'mainnet' },
         { ...PUBLIC_KEYS, accountXpubVanilla: 'xpubNotAValidKey' },
         () => native
@@ -2378,7 +2378,7 @@ test('invalid keys are rejected at construction with INVALID_CONFIG', () => {
     /accountXpubVanilla is not a valid xpub/
   );
   // A real mainnet xpub is accepted on mainnet.
-  new RgbLibWallet(
+  new RgbLibRn(
     { ...params, network: 'mainnet' },
     {
       accountXpubVanilla: testKey(1, MAINNET_VERSIONS).publicExtendedKey,
@@ -2391,7 +2391,7 @@ test('invalid keys are rejected at construction with INVALID_CONFIG', () => {
 
 test('a watch-only wallet reports burn unavailable and refuses it before native', async () => {
   const { native, calls } = fixture();
-  const wallet = new RgbLibWallet(params, PUBLIC_KEYS, () => native);
+  const wallet = new RgbLibRn(params, PUBLIC_KEYS, () => native);
   await wallet.init();
   await wallet.unlock(config);
   const caps = await wallet.getBfaCapabilities();
@@ -2400,7 +2400,7 @@ test('a watch-only wallet reports burn unavailable and refuses it before native'
   await assert.rejects(wallet.burn(burnParams), code('UNSUPPORTED_CAPABILITY'));
   assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'burn'));
   // The same wallet with a mnemonic can burn.
-  const signing = new RgbLibWallet(
+  const signing = new RgbLibRn(
     params,
     { mnemonic: 'words', ...PUBLIC_KEYS },
     () => fixture().native
@@ -2561,7 +2561,7 @@ test('a foreign error renamed to the public operation is kept whole as the cause
 
 test('a key source rejecting with a non-Error value keeps it as the cause', async () => {
   const rejection = { reason: 'locked' };
-  const wallet = new RgbLibWallet(
+  const wallet = new RgbLibRn(
     params,
     {
       async getMnemonic() {
@@ -2712,11 +2712,7 @@ test('the facade has no messageSigning carrier and reports canSignTransactions',
   const signing = fixture().wallet;
   assert.equal('messageSigning' in signing, false);
   assert.equal(signing.capabilities.canSignTransactions, true);
-  const watchOnly = new RgbLibWallet(
-    params,
-    PUBLIC_KEYS,
-    () => fixture().native
-  );
+  const watchOnly = new RgbLibRn(params, PUBLIC_KEYS, () => fixture().native);
   assert.equal(watchOnly.capabilities.canSignTransactions, false);
 });
 
@@ -2732,7 +2728,7 @@ test('reinit on an active session rejects with WALLET_INVALID_STATE', async () =
 
 test('onchainSend refuses skipSync: true before connecting and passes false otherwise', async () => {
   const { native, calls } = fixture(signetIdentity);
-  const wallet = new RgbLibWallet(utexoParams, fixture().keys, () => native);
+  const wallet = new RgbLibRn(utexoParams, fixture().keys, () => native);
   await wallet.init();
   const send = { invoice: 'rgb:invoice', amount: 1, feeRate: 1 };
   await assert.rejects(
@@ -2754,7 +2750,7 @@ test('a watch-only wallet refuses signing operations before connecting or callin
       return { vanilla: zero, colored: zero };
     },
   });
-  const wallet = new RgbLibWallet(utexoParams, PUBLIC_KEYS, () => native);
+  const wallet = new RgbLibRn(utexoParams, PUBLIC_KEYS, () => native);
   await wallet.init();
   const before = calls.length;
   for (const [operation, call] of [
@@ -2782,7 +2778,7 @@ test('a watch-only wallet refuses signing operations before connecting or callin
 
 test('receive and send arguments are validated before the lazy connect', async () => {
   const { native, calls } = fixture(signetIdentity);
-  const wallet = new RgbLibWallet(utexoParams, fixture().keys, () => native);
+  const wallet = new RgbLibRn(utexoParams, fixture().keys, () => native);
   await wallet.init();
   for (const [operation, call] of [
     ['blindReceive', () => wallet.blindReceive({ assignmentKind: 'Nope' })],

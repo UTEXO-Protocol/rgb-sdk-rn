@@ -30,7 +30,7 @@ import type { RgbLibKeys } from './key-provider';
 import { getRgbLibBinding } from './native';
 
 /** The RGB_L1 engine and this package's main entry point. The backend owns native sessions and serialization. */
-export class RgbLibWallet
+export class RgbLibRn
   implements
     OnchainWalletApi<RgbLibUnlockParams>,
     WalletMaintenance,

@@ -4,6 +4,7 @@
 
 __changed__
 
+- The engine class is renamed `RgbLibWallet` → `RgbLibRn`, to match `RgbLibWeb` in `@utexo/rgb-sdk-web`. Its option and parameter types keep their names.
 - Backup names follow one rule across engines (every name says `Backup`): `exportBackupToFile({ filePath, password })` replaces `createBackup({ backupPath, password })`, and `restoreBackupFromFile({ filePath, password, dataDir })` replaces `restoreFromBackup({ backupFilePath, password, dataDir })`. The old names still work with their old parameters and are deprecated; errors name the method that was called. `FileBackupApi` in core now has `exportBackupToFile`, so the `UTEXOWallet` facade forwards that name. A backup restores only on the engine that made it.
 - rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.5` (`0a9d352`) to `v0.3.0-beta.7-upstream-dev-bfa.6` (`5010eef`): iOS from the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.6-bfa), Android from `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.6-bfa`. Rebuild the app (`pod install` on iOS).
 - `evmMintLockBlocks` in `RgbLibUnlockParams` and the constructor sets the mint lock window the wallet accepts for each `evmRpcUrls` chain, in blocks of that chain. It is optional: a chain without an entry uses `DEFAULT_EVM_MINT_LOCK_BLOCKS` (`{ min: 1200, max: 28800 }`), so existing `evmRpcUrls` configs keep working.
@@ -14,7 +15,7 @@ __changed__
   Bounds are safe integers with `min` not above `max`. Bounds for a chain that has no `evmRpcUrls` entry throw `INVALID_CONFIG`. `DEFAULT_EVM_MINT_LOCK_BLOCKS` and the `RgbLibMintLockBlocks` type are exported.
 - The constructor also takes the connection settings of `goOnline(params)` (`indexerUrl` or `indexer`, `proxyEndpoint`, `evmRpcUrls`, `evmMintLockBlocks`, `proxyAuthKeys`), next to `network` and `storageDirPath`. The wallet uses them when it connects without explicit parameters, so on `regtest` they make `goOnline()` optional. Invalid values throw `INVALID_CONFIG` from the constructor, which still makes no network call. The wallet settings alone are typed `RgbLibWalletOptions`.
   ```ts
-  new RgbLibWallet(
+  new RgbLibRn(
     { network: 'utexo', storageDirPath, indexerUrl, proxyEndpoint },
     keys
   );

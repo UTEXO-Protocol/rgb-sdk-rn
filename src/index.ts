@@ -3,7 +3,7 @@
 // lives in @utexo/rgb-sdk.
 
 // Engine
-export { RgbLibWallet } from './wallet/rgb-lib/rgb-lib-wallet';
+export { RgbLibRn } from './wallet/rgb-lib/rgb-lib-wallet';
 export {
   restoreBackupFromFile,
   restoreFromBackup,
@@ -166,7 +166,7 @@ export type {
   GeneratedKeys,
   AccountXpubs,
   // UTEXO protocol contract types from core, re-exported for convenience.
-  // RgbLibWallet does not implement the Lightning carriers; see SharedWalletApi.
+  // RgbLibRn does not implement the Lightning carriers; see SharedWalletApi.
   IUTEXOProtocol,
   IUTEXOProtocolCore,
   IWalletLifecycle,

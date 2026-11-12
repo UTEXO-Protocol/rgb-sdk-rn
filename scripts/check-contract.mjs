@@ -3,7 +3,7 @@
  * Runtime contract conformance for @utexo/rgb-sdk-rn.
  *
  * Runs core's engine suite (`runEngineConformanceChecks` from
- * `@utexo/rgb-sdk-core/conformance`) on `RgbLibWallet` with a minimal runner
+ * `@utexo/rgb-sdk-core/conformance`) on `RgbLibRn` with a minimal runner
  * supplied here, so this package needs no test toolchain.
  *
  * What it proves that TypeScript cannot: at runtime the engine has every base
@@ -21,7 +21,7 @@
 import assert from 'node:assert/strict';
 import { assertEngineContract, isEngineError } from '@utexo/rgb-sdk-core';
 import { runEngineConformanceChecks } from '@utexo/rgb-sdk-core/conformance';
-import { RgbLibWallet } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
+import { RgbLibRn } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
 
 // ── Minimal describe/it/expect ───────────────────────────────────────────────
 
@@ -77,15 +77,15 @@ const noNative = () => {
   throw new Error('Unexpected native binding load');
 };
 const createRgbLibSync = (keys = { mnemonic: 'test mnemonic' }) =>
-  new RgbLibWallet(
+  new RgbLibRn(
     { network: 'regtest', storageDirPath: '/tmp/rgb-lib-conformance' },
     keys,
     noNative
   );
 
 runEngineConformanceChecks({
-  name: 'rgb-sdk-rn RgbLibWallet',
-  engineClass: RgbLibWallet,
+  name: 'rgb-sdk-rn RgbLibRn',
+  engineClass: RgbLibRn,
   createEngineSync: createRgbLibSync,
   extensions: [
     'restartable',
@@ -105,7 +105,7 @@ runEngineConformanceChecks({
   expect,
 });
 
-describe('rgb-sdk-rn RgbLibWallet — contract version', () => {
+describe('rgb-sdk-rn RgbLibRn — contract version', () => {
   it('rejects an unaccepted contract version before init, with no native call', () => {
     const wallet = createRgbLibSync();
     assert.throws(

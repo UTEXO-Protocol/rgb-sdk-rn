@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`@utexo/rgb-sdk-rn` is the RGB_L1 engine for React Native: `RgbLibWallet` over native rgb-lib (the BFA build), with no RLN or LDK. It implements the `SharedWalletApi` engine contract from `@utexo/rgb-sdk-core` plus the rgb-lib extensions (burn, consignment, backups, VSS, maintenance and others). The optional `UTEXOWallet` facade and WebRGB live in `@utexo/rgb-sdk`. The library uses the React Native new architecture (TurboModules + Codegen) and upstream UniFFI bindings on iOS and Android; it does not build a Rust adapter.
+`@utexo/rgb-sdk-rn` is the RGB_L1 engine for React Native: `RgbLibRn` over native rgb-lib (the BFA build), with no RLN or LDK. It implements the `SharedWalletApi` engine contract from `@utexo/rgb-sdk-core` plus the rgb-lib extensions (burn, consignment, backups, VSS, maintenance and others). The optional `UTEXOWallet` facade and WebRGB live in `@utexo/rgb-sdk`. The library uses the React Native new architecture (TurboModules + Codegen) and upstream UniFFI bindings on iOS and Android; it does not build a Rust adapter.
 
 ## Commands
 
@@ -30,15 +30,15 @@ Use `.mjs` (ES modules) for Node scripts, runtime tests and ESLint config. `babe
 ## Architecture
 
 ```
-RgbLibWallet (src/wallet/rgb-lib/rgb-lib-wallet.ts)
+RgbLibRn (src/wallet/rgb-lib/rgb-lib-wallet.ts)
   └── RgbLibWalletBackend (backend.ts, SerialExecutor) → native.ts → NativeRgbLib ('RgbLib')
         ├── RgbLibModule.kt → RgbLibDispatcher → RgbLibSessionStore   (Android)
         └── RgbLib.mm → RgbLibDispatcher → RgbLibSwiftHelper          (iOS)
 ```
 
-### `RgbLibWallet`
+### `RgbLibRn`
 
-`new RgbLibWallet(params, keys)`. `params.online` (optional) holds the indexer and proxy endpoints; it is validated and stored at construction, with no network call. Lifecycle: `init()`, then the first online operation connects lazily (`connectLazily()`, using `online`, then the network defaults; regtest has no defaults). `goOnline(params?)` connects explicitly (rgb-lib's own name); explicit fields override `online` field by field. `unlock(params?)` is the `SharedWalletApi` name for the same call; rgb-lib has no unlock step, so docs, errors and the demo use `goOnline`. Reads with `skipSync: true` never connect. `refresh(options?)` returns the refresh result; `refreshWallet()` is refresh without it. `restoreFromBackup` is a separate pre-init operation in `wallet/rgb-lib/restore.ts`.
+`new RgbLibRn(params, keys)`. `params.online` (optional) holds the indexer and proxy endpoints; it is validated and stored at construction, with no network call. Lifecycle: `init()`, then the first online operation connects lazily (`connectLazily()`, using `online`, then the network defaults; regtest has no defaults). `goOnline(params?)` connects explicitly (rgb-lib's own name); explicit fields override `online` field by field. `unlock(params?)` is the `SharedWalletApi` name for the same call; rgb-lib has no unlock step, so docs, errors and the demo use `goOnline`. Reads with `skipSync: true` never connect. `refresh(options?)` returns the refresh result; `refreshWallet()` is refresh without it. `restoreFromBackup` is a separate pre-init operation in `wallet/rgb-lib/restore.ts`.
 
 `keys` (`wallet/rgb-lib/key-provider.ts`) is a mnemonic string, a reader function, `{ mnemonic }` / `{ getMnemonic }`, optionally with public keys, or public keys alone (watch-only). `resolveRgbLibKeys` validates the shape in the constructor (`INVALID_CONFIG`); `readRgbLibMnemonic` wraps only the reader call (`KEYS_UNAVAILABLE` with `cause`). Native `open` derives xpubs from the mnemonic, checks given public keys against them, or opens watch-only with `mnemonic: nil`; rgb-lib's `WatchOnly` maps to `UNSUPPORTED_CAPABILITY`, and `getBfaCapabilities()` reports `burn: false` for a watch-only wallet.
 
@@ -94,11 +94,11 @@ The package allowlist includes production source/build output and only the bindi
 
 - `strict: true`, `import type` for type-only imports, no `any` in status/amount code paths.
 - Errors extend base classes from `@utexo/rgb-sdk-core`; call `Object.setPrototypeOf(this, new.target.prototype)` in constructors.
-- All native calls go through the backend's `SerialExecutor` and its guarded native transport. Never call native methods directly from `RgbLibWallet`.
+- All native calls go through the backend's `SerialExecutor` and its guarded native transport. Never call native methods directly from `RgbLibRn`.
 - The native layer returns `null` for missing values; the TypeScript surface uses `undefined`. Mappers convert explicitly.
 - No wire types (DTOs) leak into the public surface.
 
-**Adding a native method:** add it to `src/native/NativeRgbLib.ts`, run `npm run codegen:rgb-lib`, implement it in `RgbLibDispatcher` on both platforms, wrap it in the backend (through the serial executor), and expose it on `RgbLibWallet`. If it belongs to the shared contract or an extension, change `@utexo/rgb-sdk-core` first and keep `scripts/check-contract.mjs` passing.
+**Adding a native method:** add it to `src/native/NativeRgbLib.ts`, run `npm run codegen:rgb-lib`, implement it in `RgbLibDispatcher` on both platforms, wrap it in the backend (through the serial executor), and expose it on `RgbLibRn`. If it belongs to the shared contract or an extension, change `@utexo/rgb-sdk-core` first and keep `scripts/check-contract.mjs` passing.
 
 ## Code Review Focus Areas
 

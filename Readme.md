@@ -5,7 +5,7 @@
 
 An RGB wallet for React Native, powered by native [rgb-lib](https://github.com/UTEXO-Protocol/rgb-lib) on iOS and Android. Hold Bitcoin and RGB assets (NIA, CFA, UDA, IFA, BFA), create invoices, send and receive on-chain, and back up the wallet.
 
-`RgbLibWallet` implements the shared wallet API from `@utexo/rgb-sdk-core`. Use it directly, or wrap it in `UTEXOWallet` from [`@utexo/rgb-sdk`](https://www.npmjs.com/package/@utexo/rgb-sdk).
+`RgbLibRn` implements the shared wallet API from `@utexo/rgb-sdk-core`. Use it directly, or wrap it in `UTEXOWallet` from [`@utexo/rgb-sdk`](https://github.com/UTEXO-Protocol/rgb-sdk).
 
 > [!NOTE]
 > This is a beta. The API may change between beta releases; read [CHANGELOG.md](CHANGELOG.md) before upgrading.
@@ -56,7 +56,7 @@ Rebuild the app after installing or upgrading: each release pins its native rgb-
 ## Quick start
 
 ```ts
-import { RgbLibWallet, generateKeys } from '@utexo/rgb-sdk-rn';
+import { RgbLibRn, generateKeys } from '@utexo/rgb-sdk-rn';
 import * as SecureStore from 'expo-secure-store';
 
 // 1. Create a mnemonic once and keep it in secure storage.
@@ -64,7 +64,7 @@ const { mnemonic } = await generateKeys('signet'); // or 'mainnet', 'utexo', 're
 await SecureStore.setItemAsync('mnemonic', mnemonic);
 
 // 2. Create the wallet. Each wallet needs its own directory.
-const wallet = new RgbLibWallet(
+const wallet = new RgbLibRn(
   { network: 'signet', storageDirPath: `${documentDir}/rgb-wallet` },
   () => SecureStore.getItemAsync('mnemonic') // read only when needed
 );
@@ -169,7 +169,7 @@ A backup restores only with this engine; backups made by other engines do not op
 Each network has default endpoints. Override them in the constructor, or per call with `goOnline(params)`, which takes the same fields:
 
 ```ts
-const wallet = new RgbLibWallet(
+const wallet = new RgbLibRn(
   {
     network: 'utexo',
     storageDirPath,

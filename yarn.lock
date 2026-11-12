@@ -1626,9 +1626,10 @@
     "@typescript-eslint/types" "8.55.0"
     eslint-visitor-keys "^4.2.1"
 
-"@utexo/rgb-sdk-core@file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz":
-  version "0.1.0"
-  resolved "file:../.local-packages/utexo-rgb-sdk-core-0.1.0.tgz#3d83ce4dee2399648bf2814f26492a27c3690cc1"
+"@utexo/rgb-sdk-core@1.0.0-beta.10":
+  version "1.0.0-beta.10"
+  resolved "https://registry.npmjs.org/@utexo/rgb-sdk-core/-/rgb-sdk-core-1.0.0-beta.10.tgz"
+  integrity sha512-FkU6EXqVkOCkKqeb608rWg1xCMOGcZfyy90+Rz+47N6CoIk+JZEr+XbYPgTTY5iy0frAPtP4//hLcopn6seDzg==
   dependencies:
     "@noble/hashes" "^2.0.1"
     "@noble/secp256k1" "3.0.0"

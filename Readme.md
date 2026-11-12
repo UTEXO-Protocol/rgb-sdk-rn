@@ -25,7 +25,7 @@ An RGB wallet for React Native, powered by native [rgb-lib](https://github.com/U
 ## Installation
 
 ```bash
-npm install @utexo/rgb-sdk-rn @utexo/rgb-sdk-core
+npm install @utexo/rgb-sdk-rn @utexo/rgb-sdk-core@1.0.0-beta.10
 npm install react-native-get-random-values buffer
 cd ios && pod install
 ```

@@ -60,12 +60,12 @@ import { RgbLibRn, generateKeys } from '@utexo/rgb-sdk-rn';
 import * as SecureStore from 'expo-secure-store';
 
 // 1. Create a mnemonic once and keep it in secure storage.
-const { mnemonic } = await generateKeys('signet'); // or 'mainnet', 'utexo', 'regtest'
+const { mnemonic } = await generateKeys('utexo'); // or 'mainnet', 'signet', 'regtest'
 await SecureStore.setItemAsync('mnemonic', mnemonic);
 
 // 2. Create the wallet. Each wallet needs its own directory.
 const wallet = new RgbLibRn(
-  { network: 'signet', storageDirPath: `${documentDir}/rgb-wallet` },
+  { network: 'utexo', storageDirPath: `${documentDir}/rgb-wallet` },
   () => SecureStore.getItemAsync('mnemonic') // read only when needed
 );
 

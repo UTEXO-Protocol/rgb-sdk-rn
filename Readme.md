@@ -162,7 +162,7 @@ import { restoreBackupFromFile } from '@utexo/rgb-sdk-rn';
 await restoreBackupFromFile({ filePath, password, dataDir: storageDirPath });
 ```
 
-A backup restores only on this engine: a backup made by the web engine (`@utexo/rgb-sdk-web`) does not open here. The earlier names `createBackup({ backupPath })` and `restoreFromBackup({ backupFilePath })` still work and are deprecated.
+A backup restores only with this engine; backups made by other engines do not open here. The earlier names `createBackup({ backupPath })` and `restoreFromBackup({ backupFilePath })` still work and are deprecated.
 
 ## Configuration
 
@@ -306,6 +306,10 @@ try {
 | `ASSET_NOT_FOUND`                          | The wallet does not hold this asset                                   |
 | `WALLET_NOT_INITIALIZED`, `WALLET_OFFLINE` | Call `init()` first; on `regtest`, configure endpoints                |
 | `WALLET_STORAGE_IN_USE`                    | The directory is open in another session or belongs to another wallet |
+| `WALLET_STORAGE_NOT_EMPTY`                 | The directory holds other files; use a separate empty one             |
+| `WALLET_INVALID_STATE`                     | The call is not allowed in the current lifecycle state                |
+| `WALLET_DISPOSED`                          | `destroy()` was called; create a new instance                         |
+| `INVALID_AMOUNT`, `AMOUNT_OVERFLOW`        | An amount is invalid, or a native value does not fit the number field |
 | `KEYS_UNAVAILABLE`                         | The mnemonic reader failed; see `cause`                               |
 | `UNSUPPORTED_CAPABILITY`                   | Not possible here, for example sending from a watch-only wallet       |
 | `NATIVE_ERROR`                             | rgb-lib rejected the call; `cause` holds the rgb-lib error            |

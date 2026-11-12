@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { SDKError } from '@utexo/rgb-sdk-core';
 import { WalletBackendError } from '../lib/module/wallet/wallet-errors.js';
-import { RgbLibRn } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
+import { RgbLibRn } from '../lib/module/wallet/rgb-lib/rgb-lib-rn.js';
 import {
   restoreBackupFromFile,
   restoreBackupFromFileWith,
@@ -20,6 +20,7 @@ import {
 } from '../lib/module/wallet/rgb-lib/config.js';
 import * as amounts from '../lib/module/wallet/rgb-lib/amounts.js';
 import * as map from '../lib/module/wallet/rgb-lib/mappers.js';
+import { decodeNativeBase64 } from '../lib/module/wallet/rgb-lib/base64.js';
 import { toBackendError } from '../lib/module/wallet/rgb-lib/errors.js';
 import {
   DEFAULT_INDEXER_URLS,
@@ -130,6 +131,10 @@ function fixture(overrides = {}) {
     },
     async backup(...args) {
       calls.push(['backup', ...args]);
+    },
+    async exportBackup(...args) {
+      calls.push(['exportBackup', ...args]);
+      return 'AAEC/w==';
     },
     async restoreBackup(...args) {
       calls.push(['restore', ...args]);
@@ -1780,6 +1785,61 @@ test('exportBackupToFile requires an absolute filePath and nonempty password', a
   );
   await wallet.dispose();
 });
+test('exportBackup returns the native backup as bytes, offline', async () => {
+  const { wallet, calls } = fixture();
+  await wallet.init();
+  const bytes = await wallet.exportBackup({ password: 'pw' });
+  assert.ok(bytes instanceof Uint8Array);
+  assert.deepEqual([...bytes], [0, 1, 2, 255]);
+  assert.deepEqual(
+    calls.find((c) => Array.isArray(c) && c[0] === 'exportBackup'),
+    ['exportBackup', 'handle-1', 'pw']
+  );
+  assert.equal(onlineCalls(calls).length, 0);
+  await wallet.dispose();
+});
+test('exportBackup requires a nonempty password and checks the native bytes', async () => {
+  const { wallet, calls } = fixture({
+    async exportBackup() {
+      return 'not base64!';
+    },
+  });
+  await wallet.init();
+  for (const invalid of [{}, { password: '' }, { password: 1 }])
+    await assert.rejects(
+      wallet.exportBackup(invalid),
+      (e) => e.code === 'INVALID_CONFIG' && e.operation === 'exportBackup'
+    );
+  assert.ok(!calls.some((c) => Array.isArray(c) && c[0] === 'exportBackup'));
+  await assert.rejects(
+    wallet.exportBackup({ password: 'pw' }),
+    (e) =>
+      e.code === 'INVALID_NATIVE_RESPONSE' && e.operation === 'exportBackup'
+  );
+  await wallet.dispose();
+});
+test('native base64 decodes strictly', () => {
+  for (let length = 0; length < 12; length++) {
+    const bytes = Uint8Array.from({ length }, (_, i) => (i * 97 + 13) & 0xff);
+    const encoded = Buffer.from(bytes).toString('base64');
+    assert.deepEqual(decodeNativeBase64(encoded, 'backup'), bytes);
+  }
+  for (const invalid of [
+    null,
+    'AAE',
+    'AA=A',
+    'AAE=\n',
+    'A===',
+    'AAF=',
+    'AB==',
+    '-_==',
+  ]) {
+    assert.throws(
+      () => decodeNativeBase64(invalid, 'backup'),
+      (e) => e.code === 'INVALID_NATIVE_RESPONSE'
+    );
+  }
+});
 test('restoreBackupFromFile takes filePath and reports its own name', async () => {
   const valid = {
     filePath: '/backups/w.rgb',
@@ -2121,6 +2181,11 @@ test('rgb-lib rejects invalid schema filters and receive assignments before nati
     wallet.witnessReceive({ assignmentKind: 'NonFungible', amount: 1 }),
     /takes no amount/
   );
+  for (const assignmentKind of ['toString', '__proto__', 'constructor'])
+    await assert.rejects(
+      wallet.blindReceive({ assignmentKind, amount: 1 }),
+      /Unknown assignmentKind/
+    );
   assert.equal(seen.length, 0);
 });
 

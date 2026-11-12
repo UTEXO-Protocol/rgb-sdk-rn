@@ -4,10 +4,10 @@ import {
   restoreBackupFromFile,
   restoreFromBackup,
   type OnchainWalletApi,
-  type RgbLibKeys,
-  type RgbLibPublicKeys,
-  type RgbLibUnlockParams,
-  type RgbLibWalletParams,
+  type RgbLibRnKeys,
+  type RgbLibRnPublicKeys,
+  type RgbLibRnUnlockParams,
+  type RgbLibRnParams,
   type WalletProtocol,
   type WalletRestoreResponse,
   type WalletTransfer,
@@ -25,21 +25,21 @@ import type {
 
 // The engine implements the core contract and the extensions it declares.
 export async function engineContract(
-  params: RgbLibWalletParams,
-  keys: RgbLibKeys,
-  unlock: RgbLibUnlockParams
+  params: RgbLibRnParams,
+  keys: RgbLibRnKeys,
+  unlock: RgbLibRnUnlockParams
 ) {
   const wallet = new RgbLibRn(params, keys);
-  const shared: SharedWalletApi<RgbLibUnlockParams> = wallet;
+  const shared: SharedWalletApi<RgbLibRnUnlockParams> = wallet;
   const extensions: [
-    RestartableWalletApi<RgbLibUnlockParams>,
+    RestartableWalletApi<RgbLibRnUnlockParams>,
     FileBackupApi,
     WalletMaintenanceApi,
     BurnApi,
     ConsignmentApi,
     ConsignmentFileApi,
   ] = [wallet, wallet, wallet, wallet, wallet, wallet];
-  const onchain: OnchainWalletApi<RgbLibUnlockParams> = wallet;
+  const onchain: OnchainWalletApi<RgbLibRnUnlockParams> = wallet;
   const version: '1' = wallet.contractVersion;
   const protocol: 'RGB_L1' = wallet.protocol;
   const publicProtocol: WalletProtocol = protocol;
@@ -49,7 +49,7 @@ export async function engineContract(
   // A missing indexer and proxy use the network defaults.
   await wallet.unlock({});
   // @ts-expect-error The engine is not the legacy RLN-shaped contract.
-  const legacy: IUTEXOProtocol<RgbLibUnlockParams> = wallet;
+  const legacy: IUTEXOProtocol<RgbLibRnUnlockParams> = wallet;
   // @ts-expect-error Lightning belongs to the RLN engine.
   void wallet.createLightningInvoice({ amountSats: 1 });
   // @ts-expect-error RLN node identity is not an RGB Lib capability.
@@ -101,10 +101,10 @@ declare const SecureStore: {
   getItemAsync(key: string): Promise<string | null>;
 };
 export function keysForms(
-  params: RgbLibWalletParams,
-  publicKeys: RgbLibPublicKeys
+  params: RgbLibRnParams,
+  publicKeys: RgbLibRnPublicKeys
 ) {
-  const forms: RgbLibKeys[] = [
+  const forms: RgbLibRnKeys[] = [
     'mnemonic words',
     () => SecureStore.getItemAsync('mnemonic'),
     () => 'mnemonic words',
@@ -124,7 +124,7 @@ export function keysForms(
 }
 
 // Connection settings sit next to the wallet settings, like `goOnline(params)`.
-export function flatConstructorParams(keys: RgbLibKeys) {
+export function flatConstructorParams(keys: RgbLibRnKeys) {
   new RgbLibRn(
     {
       network: 'utexo',

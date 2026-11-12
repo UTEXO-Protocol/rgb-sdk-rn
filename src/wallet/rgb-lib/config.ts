@@ -8,7 +8,7 @@ export const RGB_LIB_REVISION = '5010eefa355beb9c42a4c1b69883f7651241a111';
 export const RGB_LIB_BRIDGE_VERSION = 5;
 
 /** Settings fixed for the wallet's lifetime. */
-export interface RgbLibWalletOptions {
+export interface RgbLibRnOptions {
   network: BitcoinNetwork;
   /** Dedicated to this profile; never point this at another wallet's directory (RLN included). */
   storageDirPath: string;
@@ -25,7 +25,7 @@ export interface RgbLibWalletOptions {
  * Stored only: construction makes no network call. On regtest, which has no
  * defaults, they make `goOnline()` optional.
  */
-export type RgbLibWalletParams = RgbLibWalletOptions & RgbLibUnlockParams;
+export type RgbLibRnParams = RgbLibRnOptions & RgbLibRnUnlockParams;
 
 const CONNECTION_KEYS = [
   'indexer',
@@ -37,9 +37,9 @@ const CONNECTION_KEYS = [
 ] as const;
 
 /** Splits constructor params; `connection` is undefined when none is set. */
-export function splitWalletParams(params: RgbLibWalletParams): {
-  options: RgbLibWalletOptions;
-  connection?: RgbLibUnlockParams;
+export function splitWalletParams(params: RgbLibRnParams): {
+  options: RgbLibRnOptions;
+  connection?: RgbLibRnUnlockParams;
 } {
   const options: Record<string, unknown> = { ...params };
   const connection: Record<string, unknown> = {};
@@ -48,14 +48,14 @@ export function splitWalletParams(params: RgbLibWalletParams): {
     delete options[key];
   }
   return {
-    options: options as unknown as RgbLibWalletOptions,
+    options: options as unknown as RgbLibRnOptions,
     connection: Object.keys(connection).length
-      ? (connection as RgbLibUnlockParams)
+      ? (connection as RgbLibRnUnlockParams)
       : undefined,
   };
 }
 
-export type RgbLibIndexer =
+export type RgbLibRnIndexer =
   | { type: 'electrum' | 'esplora'; url: string }
   | {
       type: 'bitcoind';
@@ -81,33 +81,33 @@ type RgbLibOnlineConfig = {
    * like `evmRpcUrls`. A chain without an entry uses
    * `DEFAULT_EVM_MINT_LOCK_BLOCKS`.
    */
-  evmMintLockBlocks?: Readonly<Record<string, RgbLibMintLockBlocks>>;
+  evmMintLockBlocks?: Readonly<Record<string, RgbLibRnMintLockBlocks>>;
   proxyAuthKeys?: Readonly<Record<string, string>>;
 };
 
 /** Mint lock bounds in blocks; `min` must not exceed `max`. */
-export interface RgbLibMintLockBlocks {
+export interface RgbLibRnMintLockBlocks {
   min: number;
   max: number;
 }
 
 /** Bounds used for an EVM chain that has no `evmMintLockBlocks` entry. */
-export const DEFAULT_EVM_MINT_LOCK_BLOCKS: Readonly<RgbLibMintLockBlocks> =
+export const DEFAULT_EVM_MINT_LOCK_BLOCKS: Readonly<RgbLibRnMintLockBlocks> =
   Object.freeze({ min: 1200, max: 28800 });
 
 /** Omit both `indexer` and `indexerUrl` to use `DEFAULT_INDEXER_URLS[network]`. */
-export type RgbLibUnlockParams = RgbLibOnlineConfig &
+export type RgbLibRnUnlockParams = RgbLibOnlineConfig &
   (
-    | { indexer: RgbLibIndexer; indexerUrl?: never }
+    | { indexer: RgbLibRnIndexer; indexerUrl?: never }
     | { indexerUrl?: string; indexer?: never }
   );
 
 export interface ResolvedRgbLibConfig {
-  indexer: RgbLibIndexer;
+  indexer: RgbLibRnIndexer;
   proxyEndpoint: string;
   evmRpcUrls: Readonly<Record<string, string>>;
   /** One entry per `evmRpcUrls` chain, defaults applied. */
-  evmMintLockBlocks: Readonly<Record<string, RgbLibMintLockBlocks>>;
+  evmMintLockBlocks: Readonly<Record<string, RgbLibRnMintLockBlocks>>;
   proxyAuthKeys: Readonly<Record<string, string>>;
 }
 
@@ -136,7 +136,7 @@ export function integer(
   return value;
 }
 
-export function validateWalletParams(params: RgbLibWalletParams) {
+export function validateWalletParams(params: RgbLibRnParams) {
   if (!NETWORKS.includes(params.network)) invalidConfig('Unsupported network');
   if (
     typeof params.storageDirPath !== 'string' ||
@@ -198,7 +198,7 @@ function proxyEndpoint(value: string) {
  * falls back to the same network defaults RGB_LN uses.
  */
 export function resolveRgbLibConfig(
-  params: RgbLibUnlockParams,
+  params: RgbLibRnUnlockParams,
   network?: string
 ): ResolvedRgbLibConfig {
   if (
@@ -252,7 +252,7 @@ export function resolveRgbLibConfig(
   if (!requestedProxy) invalidConfig('A proxy endpoint is required');
   const proxy = proxyEndpoint(requestedProxy);
   const evmRpcUrls: Record<string, string> = {};
-  const evmMintLockBlocks: Record<string, RgbLibMintLockBlocks> = {};
+  const evmMintLockBlocks: Record<string, RgbLibRnMintLockBlocks> = {};
   for (const [chainId, endpoint] of Object.entries(params.evmRpcUrls ?? {})) {
     if (
       !/^[1-9]\d{0,19}$/.test(chainId) ||

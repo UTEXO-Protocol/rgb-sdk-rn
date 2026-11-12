@@ -154,6 +154,14 @@ The mnemonic recovers bitcoin only. RGB assets also need the wallet's data (cont
 await wallet.exportBackupToFile({ filePath, password });
 ```
 
+To keep the backup yourself (your own storage or server), take it as bytes. It works offline:
+
+```ts
+const bytes = await wallet.exportBackup({ password }); // Uint8Array
+```
+
+Write the bytes to a file to restore them.
+
 To restore, unpack the backup into a new, empty directory before `init()`, then open the wallet there with the same mnemonic:
 
 ```ts
@@ -216,7 +224,7 @@ All methods are async except `getNetwork()`, `isDisposed()` and the `capabilitie
 | Method                 | Description                                                 |
 | ---------------------- | ----------------------------------------------------------- |
 | `getNetwork()`         | The configured network                                      |
-| `getNetworkInfo()`     | Network and current block height                            |
+| `getNetworkInfo()`     | Network, and block height when the native build reports it  |
 | `getWalletIdentity()`  | Stable wallet ID, protocol and network                      |
 | `checkIndexerUrl(url)` | Detects the indexer protocol behind a URL before you use it |
 
@@ -271,6 +279,7 @@ All methods are async except `getNetwork()`, `isDisposed()` and the `capabilitie
 | Method                              | Description                                                  |
 | ----------------------------------- | ------------------------------------------------------------ |
 | `exportBackupToFile(params)`        | Writes an encrypted backup file                              |
+| `exportBackup(params)`              | The same encrypted backup as bytes                           |
 | `restoreBackupFromFile(params)`     | Function export: unpacks a backup into an empty directory    |
 | `getBfaCapabilities()`              | Whether this build and wallet can burn and read consignments |
 | `burn(params)`                      | Burns RGB assets                                             |

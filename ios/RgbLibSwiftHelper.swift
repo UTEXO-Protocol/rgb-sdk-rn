@@ -257,6 +257,19 @@ public final class RgbLibSwiftHelper: NSObject {
     try fm.moveItem(at: dirs[0], to: lease.root.appendingPathComponent(fingerprint))
     try JSONSerialization.data(withJSONObject: profile).write(to: lease.root.appendingPathComponent(rgbProfileName), options: .atomic)
   }
+  /// rgb-lib writes backups only to a file: use a private temporary one and always delete it.
+  private static func exportBackup(_ s: RgbLibSession, password: String) throws -> String {
+    try s.save()
+    let fm = FileManager.default
+    let dir = fm.temporaryDirectory.appendingPathComponent("rgb-backup-\(UUID().uuidString)", isDirectory: true)
+    do { try fm.createDirectory(at: dir, withIntermediateDirectories: true) } catch {
+      throw RgbBridgeFailure(code: "NATIVE_ERROR", message: "Cannot create a temporary backup directory")
+    }
+    defer { try? fm.removeItem(at: dir) }
+    let file = dir.appendingPathComponent("wallet.backup")
+    try s.wallet!.backup(backupPath: file.path, password: password)
+    return try Data(contentsOf: file).base64EncodedString()
+  }
   private static func consignment(_ s: RgbLibSession, _ p: RgbParams) throws -> URL {
     let w = s.wallet!
     let paths = Set(try w.listTransfers(assetFilter: .id(assetId: p.string("assetId")), scope: .txid(txid: p.string("txid"))).compactMap { $0.consignmentPath })
@@ -400,6 +413,7 @@ public final class RgbLibSwiftHelper: NSObject {
     // This UniFFI release has no block-height method; the shared API makes it optional.
     case "getNetworkInfo": return ["network": s.profile["network"]!, "blockHeight": NSNull()]
     case "backup": try s.save(); try w.backup(backupPath: p.string("backupPath"), password: p.string("password")); return NSNull()
+    case "exportBackup": return try exportBackup(s, password: p.string("password"))
     case "getConsignmentPath": return try consignment(s, p).path
     case "getConsignment": return try Data(contentsOf: consignment(s, p)).base64EncodedString()
     default: throw rgbInvalid("Unknown native operation")

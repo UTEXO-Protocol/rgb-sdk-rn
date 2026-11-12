@@ -3,26 +3,26 @@
 // lives in @utexo/rgb-sdk.
 
 // Engine
-export { RgbLibRn } from './wallet/rgb-lib/rgb-lib-wallet';
+export { RgbLibRn } from './wallet/rgb-lib/rgb-lib-rn';
 export {
   restoreBackupFromFile,
   restoreFromBackup,
 } from './wallet/rgb-lib/restore';
 export type {
-  RgbLibWalletParams,
-  RgbLibWalletOptions,
-  RgbLibUnlockParams,
-  RgbLibIndexer,
-  RgbLibMintLockBlocks,
+  RgbLibRnParams,
+  RgbLibRnOptions,
+  RgbLibRnUnlockParams,
+  RgbLibRnIndexer,
+  RgbLibRnMintLockBlocks,
 } from './wallet/rgb-lib/config';
 export { DEFAULT_EVM_MINT_LOCK_BLOCKS } from './wallet/rgb-lib/config';
-export { CallbackRgbLibKeyProvider } from './wallet/rgb-lib/key-provider';
+export { CallbackRgbLibRnKeyProvider } from './wallet/rgb-lib/key-provider';
 export type {
-  IRgbLibKeyProvider,
-  RgbLibKeys,
-  RgbLibMnemonicReader,
-  RgbLibMnemonicResult,
-  RgbLibPublicKeys,
+  IRgbLibRnKeyProvider,
+  RgbLibRnKeys,
+  RgbLibRnMnemonicReader,
+  RgbLibRnMnemonicResult,
+  RgbLibRnPublicKeys,
 } from './wallet/rgb-lib/key-provider';
 export type {
   WalletProtocol,

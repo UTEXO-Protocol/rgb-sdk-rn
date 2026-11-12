@@ -329,6 +329,8 @@ export interface Spec extends TurboModule {
     handle: string
   ): Promise<{ network: string; blockHeight: number | null }>;
   backup(handle: string, backupPath: string, password: string): Promise<void>;
+  /** Encrypted backup as base64; native writes it to a temporary file and deletes it. */
+  exportBackup(handle: string, password: string): Promise<string>;
   restoreBackup(
     backupPath: string,
     password: string,

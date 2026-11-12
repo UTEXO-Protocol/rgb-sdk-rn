@@ -30,7 +30,7 @@ Use `.mjs` (ES modules) for Node scripts, runtime tests and ESLint config. `babe
 ## Architecture
 
 ```
-RgbLibRn (src/wallet/rgb-lib/rgb-lib-wallet.ts)
+RgbLibRn (src/wallet/rgb-lib/rgb-lib-rn.ts)
   └── RgbLibWalletBackend (backend.ts, SerialExecutor) → native.ts → NativeRgbLib ('RgbLib')
         ├── RgbLibModule.kt → RgbLibDispatcher → RgbLibSessionStore   (Android)
         └── RgbLib.mm → RgbLibDispatcher → RgbLibSwiftHelper          (iOS)

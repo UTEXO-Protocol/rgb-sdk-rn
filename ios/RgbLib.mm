@@ -175,6 +175,10 @@ RCT_EXPORT_MODULE(RgbLib)
   [self invoke:@"backup" params:@{@"handle": handle ?: [NSNull null], @"backupPath": backupPath ?: [NSNull null], @"password": password ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
+- (void)exportBackup:(NSString *)handle password:(NSString *)password resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"exportBackup" params:@{@"handle": handle ?: [NSNull null], @"password": password ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
 - (void)restoreBackup:(NSString *)backupPath password:(NSString *)password dataDir:(NSString *)dataDir resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   [self invoke:@"restoreBackup" params:@{@"backupPath": backupPath ?: [NSNull null], @"password": password ?: [NSNull null], @"dataDir": dataDir ?: [NSNull null]} resolve:resolve reject:reject];
 }

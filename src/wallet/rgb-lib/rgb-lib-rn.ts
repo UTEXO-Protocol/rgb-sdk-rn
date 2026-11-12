@@ -12,6 +12,7 @@ import type {
 import type {
   AddressRotationApi,
   AssetMetadataApi,
+  BackupExportApi,
   BurnApi,
   ConsignmentApi,
   ConsignmentFileApi,
@@ -25,19 +26,20 @@ import type {
   WalletMaintenanceApi as EngineMaintenanceApi,
 } from '@utexo/rgb-sdk-core';
 import { RgbLibWalletBackend } from './backend';
-import type { RgbLibUnlockParams, RgbLibWalletParams } from './config';
-import type { RgbLibKeys } from './key-provider';
+import type { RgbLibRnUnlockParams, RgbLibRnParams } from './config';
+import type { RgbLibRnKeys } from './key-provider';
 import { getRgbLibBinding } from './native';
 
 /** The RGB_L1 engine and this package's main entry point. The backend owns native sessions and serialization. */
 export class RgbLibRn
   implements
-    OnchainWalletApi<RgbLibUnlockParams>,
+    OnchainWalletApi<RgbLibRnUnlockParams>,
     WalletMaintenance,
     // The engine contract (core) and the extensions rgb-lib implements.
-    SharedWalletApi<RgbLibUnlockParams>,
-    RestartableWalletApi<RgbLibUnlockParams>,
+    SharedWalletApi<RgbLibRnUnlockParams>,
+    RestartableWalletApi<RgbLibRnUnlockParams>,
     FileBackupApi,
+    BackupExportApi,
     EngineMaintenanceApi,
     BurnApi,
     ConsignmentApi,
@@ -58,11 +60,11 @@ export class RgbLibRn
 
   readonly protocol = 'RGB_L1' as const;
   private readonly backend: RgbLibWalletBackend;
-  private readonly ports: OnchainWalletBackend<RgbLibUnlockParams>;
+  private readonly ports: OnchainWalletBackend<RgbLibRnUnlockParams>;
 
   constructor(
-    params: RgbLibWalletParams,
-    keys: RgbLibKeys,
+    params: RgbLibRnParams,
+    keys: RgbLibRnKeys,
     loadBinding: typeof getRgbLibBinding = getRgbLibBinding
   ) {
     this.backend = new RgbLibWalletBackend(params, keys, loadBinding);
@@ -91,7 +93,7 @@ export class RgbLibRn
    * constructor's connection settings, then the network defaults; explicit
    * fields override them.
    */
-  goOnline(params?: RgbLibUnlockParams) {
+  goOnline(params?: RgbLibRnUnlockParams) {
     return this.ports.lifecycle.goOnline(params);
   }
   /**
@@ -99,10 +101,10 @@ export class RgbLibRn
    * behavior, for code written against the shared contract. rgb-lib has no
    * separate unlock step.
    */
-  unlock(params?: RgbLibUnlockParams) {
+  unlock(params?: RgbLibRnUnlockParams) {
     return this.ports.lifecycle.unlock(params);
   }
-  reinit(params?: RgbLibUnlockParams) {
+  reinit(params?: RgbLibRnUnlockParams) {
     return this.ports.lifecycle.reinit(params);
   }
   shutdown() {
@@ -241,6 +243,10 @@ export class RgbLibRn
 
   exportBackupToFile(...args: Parameters<WalletBackup['exportBackupToFile']>) {
     return this.ports.backup.exportBackupToFile(...args);
+  }
+  /** The encrypted backup as bytes. Works offline. */
+  exportBackup(...args: Parameters<WalletBackup['exportBackup']>) {
+    return this.ports.backup.exportBackup(...args);
   }
   /** @deprecated Use `exportBackupToFile({ filePath, password })`. */
   createBackup(...args: Parameters<WalletBackup['createBackup']>) {

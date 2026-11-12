@@ -43,7 +43,10 @@ export function resolveReceiveAssignment(
   amount: number | undefined
 ): ReceiveAssignmentKind {
   const resolved = kind ?? (amount === undefined ? 'Any' : 'Fungible');
-  const rule = RECEIVE_KINDS[resolved];
+  // Own keys only: `toString` or `__proto__` must not pass as a kind.
+  const rule = Object.prototype.hasOwnProperty.call(RECEIVE_KINDS, resolved)
+    ? RECEIVE_KINDS[resolved]
+    : undefined;
   if (rule === undefined)
     throw new ValidationError(
       `Unknown assignmentKind: ${String(kind)}`,

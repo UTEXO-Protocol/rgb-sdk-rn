@@ -97,6 +97,8 @@ export interface WalletBackup {
     filePath: string;
     password: string;
   }): Promise<WalletBackupResponse>;
+  /** The encrypted backup archive as bytes; the app stores them where it wants. */
+  exportBackup(params: { password: string }): Promise<Uint8Array>;
   /** @deprecated Use `exportBackupToFile({ filePath, password })`. */
   createBackup(params: {
     backupPath: string;

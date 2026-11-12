@@ -181,6 +181,19 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       } finally { stage.deleteRecursively() }
     }
   }
+  /** rgb-lib writes backups only to a file: use a private temporary one and always delete it. */
+  private fun exportBackup(s: Session, password: String): String {
+    save(s)
+    val dir = File(System.getProperty("java.io.tmpdir"), "rgb-backup-${UUID.randomUUID()}")
+    if (!dir.mkdirs()) throw RgbLibBridgeError("NATIVE_ERROR", "Cannot create a temporary backup directory")
+    try {
+      val file = File(dir, "wallet.backup")
+      s.wallet.backup(file.path, password)
+      return Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+    } finally {
+      dir.deleteRecursively()
+    }
+  }
   private fun consignment(s: Session, p: JSONObject): File {
     val paths = s.wallet.listTransfers(AssetFilter.Id(p.getString("assetId")),TransferScope.Txid(p.getString("txid"))).mapNotNull { it.consignmentPath }.distinct()
     if (paths.size != 1) throw RgbLibBridgeError("CONSIGNMENT_NOT_FOUND","No unique consignment for this transfer")
@@ -299,6 +312,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       // This UniFFI release has no block-height method. Preserve the optional API field.
       "getNetworkInfo" -> mapOf("network" to s.profile.getString("network"),"blockHeight" to null)
       "backup" -> { save(s); w.backup(p.getString("backupPath"),p.getString("password")); null }
+      "exportBackup" -> exportBackup(s,p.getString("password"))
       "getConsignmentPath" -> consignment(s,p).path
       "getConsignment" -> Base64.encodeToString(consignment(s,p).readBytes(),Base64.NO_WRAP)
       else -> fail("Unknown native operation")

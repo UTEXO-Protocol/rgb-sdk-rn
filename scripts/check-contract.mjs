@@ -21,7 +21,7 @@
 import assert from 'node:assert/strict';
 import { assertEngineContract, isEngineError } from '@utexo/rgb-sdk-core';
 import { runEngineConformanceChecks } from '@utexo/rgb-sdk-core/conformance';
-import { RgbLibRn } from '../lib/module/wallet/rgb-lib/rgb-lib-wallet.js';
+import { RgbLibRn } from '../lib/module/wallet/rgb-lib/rgb-lib-rn.js';
 
 // ── Minimal describe/it/expect ───────────────────────────────────────────────
 
@@ -90,6 +90,7 @@ runEngineConformanceChecks({
   extensions: [
     'restartable',
     'fileBackup',
+    'backupExport',
     'maintenance',
     'burn',
     'consignment',

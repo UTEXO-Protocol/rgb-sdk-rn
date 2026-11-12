@@ -140,6 +140,14 @@ int main(void) {
     check([rejected(@{@"invoice":foreign[@"invoice"], @"amount":@"5"})[@"message"] isEqual:@"Invoice network does not match wallet"], "send accepted an invoice for another network");
     NSString *backup = [base stringByAppendingPathComponent:@"backup.rgb"];
     call(@"backup", @{@"handle":handle, @"backupPath":backup, @"password":@"smoke-test-password"});
+    // exportBackup returns the same encrypted backup as bytes (base64) and leaves no temporary file.
+    NSString *exported = call(@"exportBackup", @{@"handle":handle, @"password":@"smoke-test-password"});
+    NSData *exportedBytes = [[NSData alloc] initWithBase64EncodedString:exported options:0];
+    check(exportedBytes.length > 0, "exportBackup returned no bytes");
+    NSString *byteBackup = [base stringByAppendingPathComponent:@"byte-backup.rgb"];
+    [exportedBytes writeToFile:byteBackup atomically:YES];
+    NSArray *leftovers = [[NSFileManager.defaultManager contentsOfDirectoryAtPath:NSTemporaryDirectory() error:nil] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF BEGINSWITH 'rgb-backup-'"]];
+    check(leftovers.count == 0, "exportBackup left a temporary backup directory");
     call(@"closeWallet", @{@"handle":handle});
     handle = call(@"openWallet", params);
     check([identity isEqual:call(@"getWalletIdentity", @{@"handle":handle})], "Identity changed on reopen");
@@ -172,6 +180,13 @@ int main(void) {
     check([identity isEqual:call(@"getWalletIdentity", @{@"handle":handle})], "Restored identity changed");
     check([address isEqual:call(@"getAddress", @{@"handle":handle, @"rotate":@NO})], "Restored address changed");
     call(@"closeWallet", @{@"handle":handle});
+    NSString *byteRestored = [base stringByAppendingPathComponent:@"byte-restored"];
+    call(@"restoreBackup", @{@"dataDir":byteRestored, @"backupPath":byteBackup, @"password":@"smoke-test-password"});
+    params[@"dataDir"] = byteRestored;
+    handle = call(@"openWallet", params);
+    check([identity isEqual:call(@"getWalletIdentity", @{@"handle":handle})], "Identity changed after restoring exported bytes");
+    check([address isEqual:call(@"getAddress", @{@"handle":handle, @"rotate":@NO})], "Address changed after restoring exported bytes");
+    call(@"closeWallet", @{@"handle":handle});
 
     // Watch-only: public keys from the profile, no mnemonic.
     NSDictionary *profile = [NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:[restored stringByAppendingPathComponent:@"rgb-sdk-profile.json"]] options:0 error:nil];
@@ -198,7 +213,7 @@ int main(void) {
     none[@"accountXpubVanilla"] = NSNull.null;
     check([[RgbLibSwiftHelper execute:@"openWallet" params:none][@"error"][@"code"] isEqual:@"INVALID_CONFIG"], "A wallet opened without a mnemonic or public keys");
     [[NSFileManager defaultManager] removeItemAtPath:base error:nil];
-    puts("Direct UniFFI: foreign-storage refusal, rejected-keys cleanup, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore and watch-only open passed");
+    puts("Direct UniFFI: foreign-storage refusal, rejected-keys cleanup, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore (file and bytes) and watch-only open passed");
   }
   return 0;
 }

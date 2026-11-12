@@ -108,6 +108,11 @@ class RgbLibSessionStoreInstrumentationTest {
 
       val backup = root.resolve("backup.rgb").path
       call("backup", mapOf("backupPath" to backup, "password" to "smoke-test-password"))
+      // exportBackup returns the same encrypted backup as bytes (base64) and leaves no temporary file.
+      val byteBackup = root.resolve("byte-backup.rgb")
+      byteBackup.writeBytes(android.util.Base64.decode(call("exportBackup", mapOf("password" to "smoke-test-password")) as String, android.util.Base64.NO_WRAP))
+      assertTrue("exportBackup returned no bytes", byteBackup.length() > 0)
+      assertTrue("exportBackup left a temporary backup directory", File(System.getProperty("java.io.tmpdir")).listFiles().orEmpty().none { it.name.startsWith("rgb-backup-") })
       call("closeWallet"); active = null
       active = store.execute("openWallet", params) as String
       assertEquals(identity, call("getWalletIdentity"))
@@ -126,6 +131,12 @@ class RgbLibSessionStoreInstrumentationTest {
       assertEquals("RGB_LIB_WrongPassword", rgbLibCode { store.execute("restoreBackup", restore + ("password" to "wrong")) })
       store.execute("restoreBackup", restore)
       active = store.execute("openWallet", params + ("dataDir" to restore["dataDir"])) as String
+      assertEquals(identity, call("getWalletIdentity"))
+      assertEquals(address, call("getAddress", mapOf("rotate" to false)))
+      call("closeWallet"); active = null
+      val byteRestore = mapOf("dataDir" to root.resolve("byte-restored").path, "backupPath" to byteBackup.path, "password" to "smoke-test-password")
+      store.execute("restoreBackup", byteRestore)
+      active = store.execute("openWallet", params + ("dataDir" to byteRestore["dataDir"])) as String
       assertEquals(identity, call("getWalletIdentity"))
       assertEquals(address, call("getAddress", mapOf("rotate" to false)))
     } finally {

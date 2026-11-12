@@ -108,6 +108,8 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
 
   override fun backup(handle: String, backupPath: String, password: String, promise: Promise) = invoke("backup", mapOf("handle" to handle, "backupPath" to backupPath, "password" to password), promise)
 
+  override fun exportBackup(handle: String, password: String, promise: Promise) = invoke("exportBackup", mapOf("handle" to handle, "password" to password), promise)
+
   override fun restoreBackup(backupPath: String, password: String, dataDir: String, promise: Promise) = invoke("restoreBackup", mapOf("backupPath" to backupPath, "password" to password, "dataDir" to dataDir), promise)
   companion object { const val NAME = "RgbLib" }
 }

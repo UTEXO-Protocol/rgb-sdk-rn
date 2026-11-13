@@ -1,6 +1,6 @@
 {
   "name": "@utexo/rgb-sdk-rn",
-  "version": "1.0.0-beta.40",
+  "version": "1.0.0-beta.41",
   "description": "RGB_L1 wallet engine for React Native: native rgb-lib (iOS and Android) behind the @utexo/rgb-sdk-core SharedWalletApi contract",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",

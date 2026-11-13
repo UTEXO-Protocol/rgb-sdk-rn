@@ -1,6 +1,10 @@
-import { WalletBackendError } from '../wallet-errors';
+import { isEngineError } from '@utexo/rgb-sdk-core';
+import type { EngineError } from '@utexo/rgb-sdk-core';
+import { asCause, WalletBackendError, withOperation } from '../wallet-errors';
 import type { WalletBackendErrorCode } from '../wallet-errors';
-import type { Spec } from '../../binding/NativeRgbLib';
+import type { Spec } from '../../native/NativeRgbLib';
+
+export { NativeRejection } from '../wallet-errors';
 
 // Both bridges reject with these codes; see RgbLibSessionStore.kt and RgbLibSwiftHelper.swift.
 const BRIDGE_CODES: readonly WalletBackendErrorCode[] = [
@@ -36,11 +40,8 @@ export function rgbLibErrorCode(code: unknown): WalletBackendErrorCode {
 }
 
 /** Platform rejections never reach callers; only WalletBackendError does. */
-export function toBackendError(
-  error: unknown,
-  operation: string
-): WalletBackendError {
-  if (error instanceof WalletBackendError) return error;
+export function toBackendError(error: unknown, operation: string): EngineError {
+  if (isEngineError(error)) return error;
   const native = error as { code?: unknown; message?: unknown } | null;
   if (native?.code === 'RGB_LIB_WatchOnly') {
     return new WalletBackendError(
@@ -48,7 +49,7 @@ export function toBackendError(
       `${operation} needs the mnemonic; this RGB_L1 wallet was opened watch-only from public keys`,
       operation,
       'RGB_L1',
-      error instanceof Error ? error : undefined
+      asCause(error)
     );
   }
   return new WalletBackendError(
@@ -58,7 +59,52 @@ export function toBackendError(
       : 'RGB Lib operation failed',
     operation,
     'RGB_L1',
-    error instanceof Error ? error : undefined
+    asCause(error)
+  );
+}
+
+/**
+ * The error a public operation rejects with. Applied once, at the public
+ * boundary:
+ *   - a wallet backend error (any copy): see withOperation(), with RGB_L1;
+ *   - a validation error (core `ValidationError`, any copy) → `INVALID_PARAMS`;
+ *   - anything else is mapped like a native rejection.
+ * The original is never mutated.
+ */
+export function toPublicError(error: unknown, operation: string): EngineError {
+  if (isEngineError(error)) return withOperation(error, operation, 'RGB_L1');
+  const value = error as { code?: unknown; message?: unknown } | null;
+  if (value?.code === 'VALIDATION_ERROR' && typeof value.message === 'string') {
+    return new WalletBackendError(
+      'INVALID_PARAMS',
+      value.message,
+      operation,
+      'RGB_L1',
+      asCause(error)
+    );
+  }
+  return toBackendError(error, operation);
+}
+
+/**
+ * A synchronous throw while a public operation reads its arguments (before
+ * admission, so nothing has run). Errors that already carry a code go through
+ * toPublicError; anything else (a `TypeError` from a malformed argument, a
+ * throwing getter) is an `INVALID_PARAMS` with the original as cause.
+ */
+export function toArgumentError(
+  error: unknown,
+  operation: string
+): EngineError {
+  const value = error as { code?: unknown } | null;
+  if (isEngineError(error) || value?.code === 'VALIDATION_ERROR')
+    return toPublicError(error, operation);
+  return new WalletBackendError(
+    'INVALID_PARAMS',
+    `Invalid arguments for ${operation}`,
+    operation,
+    'RGB_L1',
+    asCause(error)
   );
 }
 

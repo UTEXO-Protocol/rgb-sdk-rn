@@ -1,15 +1,7 @@
 #import <Foundation/Foundation.h>
-// Built with RGB_SMOKE_WITH_RLN when package.json enables RLN: then both
-// native libraries are linked into one binary, as in an app.
-#ifdef RGB_SMOKE_WITH_RLN
-#import "RGBLightningNodeFFI.h"
-#endif
 
 @interface RgbLibSwiftHelper : NSObject
 + (NSDictionary *)execute:(NSString *)operation params:(NSDictionary *)params;
-@end
-@interface RlnStorageClaim : NSObject
-+ (nullable NSDictionary *)claimForTesting:(NSString *)path;
 @end
 
 static id call(NSString *operation, NSDictionary *params) {
@@ -26,15 +18,8 @@ static void check(BOOL value, const char *message) {
 }
 int main(void) {
   @autoreleasepool {
-#ifdef RGB_SMOKE_WITH_RLN
-    RustCallStatus status = {0};
-    RustBuffer health = uniffi_rgb_lightning_node_fn_func_uniffi_healthcheck(&status);
-    check(status.code == 0, "RLN healthcheck failed");
-    ffi_rgb_lightning_node_rustbuffer_free(health, &status);
-    check(status.code == 0, "RLN buffer cleanup failed");
-#endif
     NSDictionary *runtime = call(@"getRuntimeInfo", @{});
-    check([runtime[@"bridgeVersion"] isEqual:@4], "Wrong bridge version");
+    check([runtime[@"bridgeVersion"] isEqual:@5], "Wrong bridge version");
     // Read from the framework's copy of the release version.json.
     check([runtime[@"sourceRevision"] length] == 40 && [runtime[@"version"] length] > 0, "Missing artifact provenance");
 
@@ -69,7 +54,6 @@ int main(void) {
     check([address hasPrefix:@"bcrt1p"], "Wrong address type");
     NSDictionary *busy = [RgbLibSwiftHelper execute:@"openWallet" params:params];
     check([busy[@"error"][@"code"] isEqual:@"WALLET_STORAGE_IN_USE"], "Storage lease did not reject a second wallet");
-    check([[RlnStorageClaim claimForTesting:root][@"errorCode"] isEqual:@"WALLET_PROFILE_MISMATCH"], "RLN claimed an open RGB Lib wallet");
     check([call(@"listAssets", @{@"handle":handle, @"filterAssetSchemas":@[]}) count] == 0, "Unexpected assets");
     check([call(@"listAssets", @{@"handle":handle, @"filterAssetSchemas":@[@"Cfa", @"Uda"]}) count] == 0, "Schema filter returned assets");
     check([[RgbLibSwiftHelper execute:@"listAssets" params:@{@"handle":handle, @"filterAssetSchemas":@[@"Rgb20"]}][@"error"][@"code"] isEqual:@"INVALID_CONFIG"], "Unknown schema filter was accepted");
@@ -156,6 +140,14 @@ int main(void) {
     check([rejected(@{@"invoice":foreign[@"invoice"], @"amount":@"5"})[@"message"] isEqual:@"Invoice network does not match wallet"], "send accepted an invoice for another network");
     NSString *backup = [base stringByAppendingPathComponent:@"backup.rgb"];
     call(@"backup", @{@"handle":handle, @"backupPath":backup, @"password":@"smoke-test-password"});
+    // exportBackup returns the same encrypted backup as bytes (base64) and leaves no temporary file.
+    NSString *exported = call(@"exportBackup", @{@"handle":handle, @"password":@"smoke-test-password"});
+    NSData *exportedBytes = [[NSData alloc] initWithBase64EncodedString:exported options:0];
+    check(exportedBytes.length > 0, "exportBackup returned no bytes");
+    NSString *byteBackup = [base stringByAppendingPathComponent:@"byte-backup.rgb"];
+    [exportedBytes writeToFile:byteBackup atomically:YES];
+    NSArray *leftovers = [[NSFileManager.defaultManager contentsOfDirectoryAtPath:NSTemporaryDirectory() error:nil] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF BEGINSWITH 'rgb-backup-'"]];
+    check(leftovers.count == 0, "exportBackup left a temporary backup directory");
     call(@"closeWallet", @{@"handle":handle});
     handle = call(@"openWallet", params);
     check([identity isEqual:call(@"getWalletIdentity", @{@"handle":handle})], "Identity changed on reopen");
@@ -166,25 +158,18 @@ int main(void) {
     check([mismatch[@"error"][@"code"] isEqual:@"WALLET_PROFILE_MISMATCH"], "Profile mismatch was accepted");
     params[@"network"] = @"regtest";
 
-    // RLN and RGB Lib never share storage, in either direction.
+    // RGB Lib never opens or restores into another engine's storage. The RLN
+    // side of this check (RLN refusing RGB Lib storage) runs in the combined app.
     NSFileManager *fm = NSFileManager.defaultManager;
-    check([[RlnStorageClaim claimForTesting:root][@"errorCode"] isEqual:@"WALLET_PROFILE_MISMATCH"], "RLN claimed RGB Lib storage");
-    check(![fm fileExistsAtPath:[root stringByAppendingPathComponent:@".rln-sdk-profile"]], "RLN marked RGB Lib storage");
     NSString *rln = [base stringByAppendingPathComponent:@"rln"];
-    check([RlnStorageClaim claimForTesting:rln] == nil, "RLN could not claim a fresh directory");
-    check([fm fileExistsAtPath:[rln stringByAppendingPathComponent:@".rln-sdk-profile"]], "RLN marker was not created");
+    [fm createDirectoryAtPath:rln withIntermediateDirectories:YES attributes:nil error:nil];
+    [@"rln" writeToFile:[rln stringByAppendingPathComponent:@".rln-sdk-profile"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
     NSMutableDictionary *rlnParams = [params mutableCopy];
     rlnParams[@"dataDir"] = rln;
     NSDictionary *crossOpen = [RgbLibSwiftHelper execute:@"openWallet" params:rlnParams];
     check([crossOpen[@"error"][@"code"] isEqual:@"WALLET_STORAGE_NOT_EMPTY"], "RGB Lib opened RLN storage");
     NSDictionary *crossRestore = [RgbLibSwiftHelper execute:@"restoreBackup" params:@{@"dataDir":rln, @"backupPath":backup, @"password":@"smoke-test-password"}];
     check([crossRestore[@"error"][@"code"] isEqual:@"WALLET_STORAGE_NOT_EMPTY"], "RGB Lib restored into RLN storage");
-    NSString *legacy = [base stringByAppendingPathComponent:@"legacy-rln"];
-    [fm createDirectoryAtPath:legacy withIntermediateDirectories:YES attributes:nil error:nil];
-    NSString *legacyData = [legacy stringByAppendingPathComponent:@"rgb_lightning_node.db"];
-    [@"legacy" writeToFile:legacyData atomically:YES encoding:NSUTF8StringEncoding error:nil];
-    check([RlnStorageClaim claimForTesting:legacy] == nil, "Legacy RLN storage without a marker was rejected");
-    check([[NSString stringWithContentsOfFile:legacyData encoding:NSUTF8StringEncoding error:nil] isEqual:@"legacy"], "Legacy RLN data changed");
 
     NSString *restored = [base stringByAppendingPathComponent:@"restored"];
     NSDictionary *wrongPassword = [RgbLibSwiftHelper execute:@"restoreBackup" params:@{@"dataDir":restored, @"backupPath":backup, @"password":@"wrong"}];
@@ -194,6 +179,13 @@ int main(void) {
     handle = call(@"openWallet", params);
     check([identity isEqual:call(@"getWalletIdentity", @{@"handle":handle})], "Restored identity changed");
     check([address isEqual:call(@"getAddress", @{@"handle":handle, @"rotate":@NO})], "Restored address changed");
+    call(@"closeWallet", @{@"handle":handle});
+    NSString *byteRestored = [base stringByAppendingPathComponent:@"byte-restored"];
+    call(@"restoreBackup", @{@"dataDir":byteRestored, @"backupPath":byteBackup, @"password":@"smoke-test-password"});
+    params[@"dataDir"] = byteRestored;
+    handle = call(@"openWallet", params);
+    check([identity isEqual:call(@"getWalletIdentity", @{@"handle":handle})], "Identity changed after restoring exported bytes");
+    check([address isEqual:call(@"getAddress", @{@"handle":handle, @"rotate":@NO})], "Address changed after restoring exported bytes");
     call(@"closeWallet", @{@"handle":handle});
 
     // Watch-only: public keys from the profile, no mnemonic.
@@ -221,11 +213,7 @@ int main(void) {
     none[@"accountXpubVanilla"] = NSNull.null;
     check([[RgbLibSwiftHelper execute:@"openWallet" params:none][@"error"][@"code"] isEqual:@"INVALID_CONFIG"], "A wallet opened without a mnemonic or public keys");
     [[NSFileManager defaultManager] removeItemAtPath:base error:nil];
-#ifdef RGB_SMOKE_WITH_RLN
-    puts("Direct UniFFI: RLN coexistence and storage exclusion, rejected-keys cleanup, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore and watch-only open passed");
-#else
-    puts("Direct UniFFI (RLN disabled): RLN storage exclusion, rejected-keys cleanup, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore and watch-only open passed");
-#endif
+    puts("Direct UniFFI: foreign-storage refusal, rejected-keys cleanup, wallet lifecycle, storage lock, invoice/history, send invoice checks, encrypted backup/restore (file and bytes) and watch-only open passed");
   }
   return 0;
 }

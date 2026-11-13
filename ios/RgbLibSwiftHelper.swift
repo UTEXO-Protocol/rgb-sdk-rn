@@ -141,7 +141,7 @@ private final class RgbLibSession {
   }
 }
 
-/// Mirrors the RLN helper: all wallet operations call generated UniFFI methods.
+/// All wallet operations call generated UniFFI methods.
 /// The registry lock is held only for handle lookup and ownership changes; each
 /// session's lock serializes its own native calls, including slow indexer I/O.
 @objc(RgbLibSwiftHelper)
@@ -257,9 +257,22 @@ public final class RgbLibSwiftHelper: NSObject {
     try fm.moveItem(at: dirs[0], to: lease.root.appendingPathComponent(fingerprint))
     try JSONSerialization.data(withJSONObject: profile).write(to: lease.root.appendingPathComponent(rgbProfileName), options: .atomic)
   }
+  /// rgb-lib writes backups only to a file: use a private temporary one and always delete it.
+  private static func exportBackup(_ s: RgbLibSession, password: String) throws -> String {
+    try s.save()
+    let fm = FileManager.default
+    let dir = fm.temporaryDirectory.appendingPathComponent("rgb-backup-\(UUID().uuidString)", isDirectory: true)
+    do { try fm.createDirectory(at: dir, withIntermediateDirectories: true) } catch {
+      throw RgbBridgeFailure(code: "NATIVE_ERROR", message: "Cannot create a temporary backup directory")
+    }
+    defer { try? fm.removeItem(at: dir) }
+    let file = dir.appendingPathComponent("wallet.backup")
+    try s.wallet!.backup(backupPath: file.path, password: password)
+    return try Data(contentsOf: file).base64EncodedString()
+  }
   private static func consignment(_ s: RgbLibSession, _ p: RgbParams) throws -> URL {
     let w = s.wallet!
-    let paths = Set(try w.listTransfers(assetFilter: .id(assetId: p.string("assetId")), txid: p.string("txid")).compactMap { $0.consignmentPath })
+    let paths = Set(try w.listTransfers(assetFilter: .id(assetId: p.string("assetId")), scope: .txid(txid: p.string("txid"))).compactMap { $0.consignmentPath })
     guard paths.count == 1, let path = paths.first else { throw RgbBridgeFailure(code: "CONSIGNMENT_NOT_FOUND", message: "No unique consignment for this transfer") }
     let file = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
     let root = URL(fileURLWithPath: w.getWalletDir()).resolvingSymlinksInPath().standardizedFileURL.path
@@ -301,7 +314,7 @@ public final class RgbLibSwiftHelper: NSObject {
     switch operation {
     case "getRuntimeInfo":
       let artifact = rgbArtifactInfo()
-      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 4, "burn": true, "consignment": true, "bfa": true]
+      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 5, "burn": true, "consignment": true, "bfa": true]
     case "openWallet": return try open(p)
     case "restoreBackup": try restore(p); return NSNull()
     default: break
@@ -337,14 +350,16 @@ public final class RgbLibSwiftHelper: NSObject {
       default: throw rgbInvalid("Unsupported indexer")
       }
       let ids = try p.strings("evmChainIds"), urls = try p.strings("evmRpcUrls")
+      let minLocks = try p.strings("evmMinMintLockBlocks"), maxLocks = try p.strings("evmMaxMintLockBlocks")
       let endpoints = try p.strings("proxyEndpoints"), keys = try p.strings("proxyAuthKeys")
-      guard ids.count == urls.count, endpoints.count == keys.count else { throw rgbInvalid("Configuration arrays do not match") }
-      var evm: [UInt64: String] = [:]
-      for (id, url) in zip(ids, urls) {
-        guard let id = UInt64(id) else { throw rgbInvalid("Invalid chain ID") }; evm[id] = url
+      guard ids.count == urls.count, ids.count == minLocks.count, ids.count == maxLocks.count, endpoints.count == keys.count else { throw rgbInvalid("Configuration arrays do not match") }
+      var evm: [UInt64: RGBLib.EvmChain] = [:]
+      for i in ids.indices {
+        guard let id = UInt64(ids[i]), let minLock = UInt64(minLocks[i]), let maxLock = UInt64(maxLocks[i]) else { throw rgbInvalid("Invalid EVM chain") }
+        evm[id] = RGBLib.EvmChain(rpcUrl: urls[i], minMintLockBlocks: minLock, maxMintLockBlocks: maxLock)
       }
       let proxy = zip(endpoints, keys).reduce(into: [String: String]()) { $0[$1.0] = $1.1 }
-      s.online = try w.goOnline(onlineOptions: RGBLib.OnlineOptions(indexerConfig: indexer, skipConsistencyCheck: false, vanillaSyncLookback: 20, failedWitnessReceiveGraceSecs: 86400, proxyAuthKeys: proxy, evmRpcUrls: evm))
+      s.online = try w.goOnline(onlineOptions: RGBLib.OnlineOptions(indexerConfig: indexer, skipConsistencyCheck: false, vanillaSyncLookback: 20, failedWitnessReceiveGraceSecs: 86400, proxyAuthKeys: proxy, evmChains: evm))
       return NSNull()
     case "getAddress":
       if try p.bool("rotate") || !s.reuse || s.profile["cachedAddress"] as? String == nil {
@@ -360,7 +375,7 @@ public final class RgbLibSwiftHelper: NSObject {
     case "getAssetMetadata": return try rgbDto(w.getAssetMetadata(assetId: p.string("assetId")))
     case "listUnspents": return try w.listUnspents(online: s.online, settledOnly: false, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransactions": return try w.listTransactions(online: s.online, skipSync: p.bool("skipSync")).map { rgbDto($0) }
-    case "listTransfers": return try w.listTransfers(assetFilter: p.optional("assetId").map { .id(assetId: $0) } ?? .anyOrNone, txid: p.optional("txid")).map { rgbDto($0) }
+    case "listTransfers": return try w.listTransfers(assetFilter: p.optional("assetId").map { .id(assetId: $0) } ?? .anyOrNone, scope: p.optional("txid").map { .txid(txid: $0) } ?? .all).map { rgbDto($0) }
     case "createUtxos": return try w.createUtxos(online: s.requireOnline(), upTo: p.bool("upTo"), num: p.has("num") ? p.number("num", UInt8.self) : nil, size: p.has("size") ? p.number("size", UInt32.self) : nil, feeRate: p.amount("feeRate"), skipSync: p.bool("skipSync"))
     case "sendBtc": return try w.sendBtc(online: s.requireOnline(), address: p.string("address"), amount: p.amount("amount"), feeRate: p.amount("feeRate"), skipSync: p.bool("skipSync"))
     case "receive":
@@ -398,6 +413,7 @@ public final class RgbLibSwiftHelper: NSObject {
     // This UniFFI release has no block-height method; the shared API makes it optional.
     case "getNetworkInfo": return ["network": s.profile["network"]!, "blockHeight": NSNull()]
     case "backup": try s.save(); try w.backup(backupPath: p.string("backupPath"), password: p.string("password")); return NSNull()
+    case "exportBackup": return try exportBackup(s, password: p.string("password"))
     case "getConsignmentPath": return try consignment(s, p).path
     case "getConsignment": return try Data(contentsOf: consignment(s, p)).base64EncodedString()
     default: throw rgbInvalid("Unknown native operation")

@@ -1,21 +1,22 @@
 import { HDKey } from '@scure/bip32';
 import { WalletBackendError } from '../wallet-errors';
+import { NativeRejection } from './errors';
 
 type MaybePromise<T> = T | Promise<T>;
 
 /** What a mnemonic source may return; `null`, `undefined` or a blank string mean "unavailable". */
-export type RgbLibMnemonicResult = string | null | undefined;
+export type RgbLibRnMnemonicResult = string | null | undefined;
 
 /** Reads the mnemonic on each new native session, for example from SecureStore. */
-export type RgbLibMnemonicReader = () => MaybePromise<RgbLibMnemonicResult>;
+export type RgbLibRnMnemonicReader = () => MaybePromise<RgbLibRnMnemonicResult>;
 
 /** A service object that reads the mnemonic on each new native session. */
-export interface IRgbLibKeyProvider {
-  getMnemonic(): MaybePromise<RgbLibMnemonicResult>;
+export interface IRgbLibRnKeyProvider {
+  getMnemonic(): MaybePromise<RgbLibRnMnemonicResult>;
 }
 
 /** Account-level public keys, as returned by `generateKeys()` / `deriveKeysFromMnemonic()`. */
-export interface RgbLibPublicKeys {
+export interface RgbLibRnPublicKeys {
   accountXpubVanilla: string;
   accountXpubColored: string;
   masterFingerprint: string;
@@ -28,24 +29,24 @@ export interface RgbLibPublicKeys {
  * - `{ mnemonic }` or `{ getMnemonic }` plus public keys, which must match it;
  * - public keys only, which open the wallet watch-only (no signing).
  */
-export type RgbLibKeys =
+export type RgbLibRnKeys =
   | string
-  | RgbLibMnemonicReader
-  | IRgbLibKeyProvider
-  | (Partial<RgbLibPublicKeys> & { mnemonic: string; getMnemonic?: never })
-  | (Partial<RgbLibPublicKeys> & {
-      getMnemonic(): MaybePromise<RgbLibMnemonicResult>;
+  | RgbLibRnMnemonicReader
+  | IRgbLibRnKeyProvider
+  | (Partial<RgbLibRnPublicKeys> & { mnemonic: string; getMnemonic?: never })
+  | (Partial<RgbLibRnPublicKeys> & {
+      getMnemonic(): MaybePromise<RgbLibRnMnemonicResult>;
       mnemonic?: never;
     })
-  | (RgbLibPublicKeys & { mnemonic?: never; getMnemonic?: never });
+  | (RgbLibRnPublicKeys & { mnemonic?: never; getMnemonic?: never });
 
 /**
  * @deprecated Pass the function directly: `keys: () => readMnemonic()`.
  */
-export class CallbackRgbLibKeyProvider implements IRgbLibKeyProvider {
-  constructor(private readonly readMnemonic: RgbLibMnemonicReader) {}
+export class CallbackRgbLibRnKeyProvider implements IRgbLibRnKeyProvider {
+  constructor(private readonly readMnemonic: RgbLibRnMnemonicReader) {}
 
-  getMnemonic(): MaybePromise<RgbLibMnemonicResult> {
+  getMnemonic(): MaybePromise<RgbLibRnMnemonicResult> {
     return this.readMnemonic();
   }
 }
@@ -53,7 +54,7 @@ export class CallbackRgbLibKeyProvider implements IRgbLibKeyProvider {
 /** Keys after validation: a mnemonic source, public keys, or both. */
 export interface ResolvedRgbLibKeys {
   readonly readMnemonic?: () => MaybePromise<unknown>;
-  readonly publicKeys?: Readonly<RgbLibPublicKeys>;
+  readonly publicKeys?: Readonly<RgbLibRnPublicKeys>;
 }
 
 const PUBLIC_KEY_FIELDS = [
@@ -90,7 +91,7 @@ function isPublicExtendedKey(value: string, mainnet: boolean): boolean {
 function resolvePublicKeys(
   keys: Record<string, unknown>,
   network: string
-): RgbLibPublicKeys | undefined {
+): RgbLibRnPublicKeys | undefined {
   const present = PUBLIC_KEY_FIELDS.filter(
     (field) => keys[field] !== undefined
   );
@@ -170,7 +171,7 @@ export function resolveRgbLibKeys(
       invalidKeys('RGB_L1 keys.getMnemonic must be a function');
     }
     // Call through the object so service classes keep `this`.
-    const provider = object as unknown as IRgbLibKeyProvider;
+    const provider = object as unknown as IRgbLibRnKeyProvider;
     readMnemonic = () => provider.getMnemonic();
   }
   const publicKeys = resolvePublicKeys(object, network);
@@ -183,6 +184,12 @@ export function resolveRgbLibKeys(
     ...(readMnemonic ? { readMnemonic } : {}),
     ...(publicKeys ? { publicKeys: Object.freeze(publicKeys) } : {}),
   };
+}
+
+/** The key source's failure as a cause; a non-Error value is kept whole. */
+function keyCause(error: unknown): Error | undefined {
+  if (error === undefined || error instanceof Error) return error;
+  return new NativeRejection(error);
 }
 
 /**
@@ -202,7 +209,7 @@ export async function readRgbLibMnemonic(
       'Could not read the RGB_L1 mnemonic',
       operation,
       'RGB_L1',
-      error instanceof Error ? error : undefined
+      keyCause(error)
     );
   }
   if (value == null || (typeof value === 'string' && isBlank(value))) {

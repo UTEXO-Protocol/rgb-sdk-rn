@@ -1,9 +1,7 @@
 import type {
   Assignment as CoreAssignment,
   Balance,
-  DecodedLnInvoice,
   InvoiceRequest,
-  LightningNodeInfo,
   ListAssets as CoreListAssets,
   OnchainReceiveRequestModel,
   Transfer as CoreTransfer,
@@ -37,6 +35,8 @@ export interface AssetBfa {
   details?: string;
   precision: number;
   initialSupply: number;
+  /** Supply known to circulate, as read from the bridge contract. */
+  knownCirculatingSupply: number;
   timestamp: number;
   addedAt: number;
   balance: Balance & { offchainOutbound?: number; offchainInbound?: number };
@@ -59,21 +59,6 @@ export type Transfer = CoreTransfer &
     requestedAssignment?: TransferAssignment;
     assignments: TransferAssignment[];
   };
-
-/** `getNodeInfo()` result: core fields plus RLN node fields core does not declare. */
-export type LightningNodeDetails = LightningNodeInfo & {
-  eventualCloseFeesSat?: number;
-  pendingOutboundPaymentsSat?: number;
-  /** Account-level xpubs; public keys only. */
-  accountXpubVanilla?: string;
-  accountXpubColored?: string;
-};
-
-/** `decodeLnInvoice()` result: core fields plus the invoice CLTV delta. */
-export type DecodedLnInvoiceDetails = DecodedLnInvoice & {
-  /** Minimum final CLTV expiry delta, in blocks. */
-  minFinalCltvExpiryDelta?: number;
-};
 
 /** Asset schema names as both native engines report them. */
 export type AssetSchemaName = 'Nia' | 'Cfa' | 'Uda' | 'Ifa' | 'Bfa';
@@ -102,46 +87,23 @@ export interface ReadOptions {
   skipSync?: boolean;
 }
 
-export interface IssueAssetCfaParams {
-  name: string;
-  details?: string | null;
-  precision: number;
-  amounts: number[];
-  /** Local media file (path or `file://` URI) attached to the contract. */
-  filePath?: string | null;
-}
-export interface IssueAssetUdaParams {
-  ticker: string;
-  name: string;
-  details?: string | null;
-  precision: number;
-  /** Local media file for the token. */
-  mediaFilePath?: string | null;
-  /** Local attachment files. */
-  attachmentsFilePaths?: string[];
+// Issuance and metadata models live in core with the extensions that use them.
+export type {
+  AssetMetadata,
+  IssueAssetCfaParams,
+  IssueAssetUdaParams,
+} from '@utexo/rgb-sdk-core';
+
+/** `restoreBackupFromFile()` input. Both paths are absolute. */
+export interface RestoreBackupFromFileParams {
+  /** Archive written by RGB_L1 `exportBackupToFile()`. */
+  filePath: string;
+  password: string;
+  /** New, empty directory; pass it as `storageDirPath` to the wallet. */
+  dataDir: string;
 }
 
-/** Contract metadata; supplies are exact u64 decimal strings. */
-export interface AssetMetadata {
-  assetSchema: AssetSchemaName;
-  name: string;
-  precision: number;
-  ticker?: string;
-  details?: string;
-  /** **Unix seconds**. */
-  timestamp: number;
-  initialSupply: string;
-  maxSupply: string;
-  knownCirculatingSupply: string;
-  /** RGB_L1 only. */
-  rejectListUrl?: string;
-  /** RGB_L1 only: the contract an IFA/BFA asset was linked from. */
-  linkedFromContract?: string;
-  /** RGB_L1 only: the contract an IFA/BFA asset was linked to. */
-  linkedToContract?: string;
-}
-
-/** `restoreFromBackup()` input. Both paths are absolute. */
+/** @deprecated `restoreFromBackup()` input; use `RestoreBackupFromFileParams`. */
 export interface RestoreFromBackupParams {
   /** Archive written by RGB_L1 `createBackup()`. */
   backupFilePath: string;

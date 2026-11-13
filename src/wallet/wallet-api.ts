@@ -29,6 +29,7 @@ import type {
   Transfer,
 } from './types';
 import type { RefreshTransfersResult } from './refresh-types';
+import type { IndexerUrlInfo } from '@utexo/rgb-sdk-core';
 
 /** Public wallet mode, using the same vocabulary as WebRGB. */
 export type WalletProtocol = 'RGB_L1' | 'RGB_LN';
@@ -45,11 +46,15 @@ export interface WalletAssignment {
 }
 export type WalletTransfer = Omit<
   Transfer,
-  'kind' | 'assignments' | 'requestedAssignment'
+  'kind' | 'assignments' | 'requestedAssignment' | 'changeUtxo'
 > & {
   kind: TransferKind | 'Mint' | 'Link';
   assignments: WalletAssignment[];
   requestedAssignment?: WalletAssignment;
+  /** Every change output of the transfer; empty when it has none. */
+  changeUtxos: NonNullable<Transfer['changeUtxo']>[];
+  /** @deprecated A transfer can have several change outputs; use `changeUtxos`. This is its first element. */
+  changeUtxo?: Transfer['changeUtxo'];
 };
 export type WalletUnspent = Omit<Unspent, 'rgbAllocations'> & {
   rgbAllocations: {
@@ -76,15 +81,25 @@ export interface WalletHistory {
   listTransactions(
     options?: ReadOptions
   ): ReturnType<IRgbAssets['listTransactions']>;
+  /** A boolean second argument is the old `skipSync` form; still accepted. */
   listTransactionsByTxid(
     txid: string,
-    skipSync?: boolean
+    options?: ReadOptions | boolean
   ): ReturnType<IRgbAssets['listTransactions']>;
+  refresh(options?: ReadOptions): Promise<RefreshTransfersResult>;
   refreshWallet(): Promise<void>;
   refreshTransfers(skipSync?: boolean): Promise<RefreshTransfersResult>;
   syncWallet(): Promise<void>;
 }
 export interface WalletBackup {
+  /** Writes the encrypted backup archive to an absolute `filePath`. */
+  exportBackupToFile(params: {
+    filePath: string;
+    password: string;
+  }): Promise<WalletBackupResponse>;
+  /** The encrypted backup archive as bytes; the app stores them where it wants. */
+  exportBackup(params: { password: string }): Promise<Uint8Array>;
+  /** @deprecated Use `exportBackupToFile({ filePath, password })`. */
   createBackup(params: {
     backupPath: string;
     password: string;
@@ -107,7 +122,7 @@ export interface WalletBitcoin extends Omit<
   ): Promise<number>;
   rotateVanillaAddress(): Promise<string>;
   /** Detects the indexer protocol behind `url`. */
-  checkIndexerUrl(url: string): Promise<{ indexerProtocol: string }>;
+  checkIndexerUrl(url: string): Promise<IndexerUrlInfo>;
 }
 /** rgb-lib operations RLN has no equivalent for. Not part of the shared contract. */
 export interface WalletMaintenance {
@@ -152,6 +167,10 @@ export interface WalletNetwork {
   getWalletIdentity(): Promise<WalletIdentity>;
 }
 export interface WalletLifecycle<T> extends IWalletLifecycle<T> {
+  /** Without params: the constructor's connection settings, then the network defaults. */
+  goOnline(params?: T): Promise<void>;
+  /** The shared contract's name for `goOnline`; same call. */
+  unlock(params?: T): Promise<void>;
   initialize(): Promise<void>;
   reinit(params?: T): Promise<void>;
   shutdown(): Promise<void>;

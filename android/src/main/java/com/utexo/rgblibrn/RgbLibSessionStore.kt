@@ -225,7 +225,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     when(operation) {
       "getRuntimeInfo" -> {
         val artifact = runCatching { JSONObject(artifactInfo()!!) }.getOrNull()
-        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 5,"burn" to true,"consignment" to true,"bfa" to true)
+        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 6,"burn" to true,"consignment" to true,"bfa" to true)
       }
       "openWallet" -> return open(p)
       "restoreBackup" -> { restore(p); return null }
@@ -284,6 +284,10 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       "getAssetBalance" -> rgbDto(w.getAssetBalance(p.getString("assetId")))
       "listAssets" -> rgbDto(w.listAssets(strings(p,"filterAssetSchemas").map { schema(it) }))
       "getAssetMetadata" -> rgbDto(w.getAssetMetadata(p.getString("assetId")))
+      "getReceivedMint" -> {
+        if (p.getBoolean("refreshIncoming")) w.refresh(online(s),null,RefreshTransferStatus.entries.map { RefreshFilter(it,true) },false)
+        w.getReceivedMint(p.getString("recipientId"))?.let { rgbDto(it) }
+      }
       "listUnspents" -> w.listUnspents(s.online,false,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransactions" -> w.listTransactions(s.online,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransfers" -> w.listTransfers(optional(p,"assetId")?.let { AssetFilter.Id(it) } ?: AssetFilter.AnyOrNone,optional(p,"txid")?.let { TransferScope.Txid(it) } ?: TransferScope.All).map { rgbDto(it) }

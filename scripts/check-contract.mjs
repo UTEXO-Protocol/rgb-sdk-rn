@@ -97,6 +97,7 @@ runEngineConformanceChecks({
     'consignmentFile',
     'indexerCheck',
     'assetMetadata',
+    'receivedMint',
     'fileIssuance',
     'txidLookup',
     'addressRotation',

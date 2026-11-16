@@ -314,7 +314,7 @@ public final class RgbLibSwiftHelper: NSObject {
     switch operation {
     case "getRuntimeInfo":
       let artifact = rgbArtifactInfo()
-      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 5, "burn": true, "consignment": true, "bfa": true]
+      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 6, "burn": true, "consignment": true, "bfa": true]
     case "openWallet": return try open(p)
     case "restoreBackup": try restore(p); return NSNull()
     default: break
@@ -373,6 +373,12 @@ public final class RgbLibSwiftHelper: NSObject {
     case "getAssetBalance": return try rgbDto(w.getAssetBalance(assetId: p.string("assetId")))
     case "listAssets": return try rgbDto(w.listAssets(filterAssetSchemas: p.strings("filterAssetSchemas").map(rgbSchema)))
     case "getAssetMetadata": return try rgbDto(w.getAssetMetadata(assetId: p.string("assetId")))
+    case "getReceivedMint":
+      if try p.bool("refreshIncoming") {
+        let incoming: [RGBLib.RefreshFilter] = [.waitingCounterparty, .waitingSafeHeight, .waitingBroadcast, .waitingConfirmations].map { RGBLib.RefreshFilter(status: $0, incoming: true) }
+        _ = try w.refresh(online: s.requireOnline(), assetId: nil, filter: incoming, skipSync: false)
+      }
+      return try w.getReceivedMint(recipientId: p.string("recipientId")).map { rgbDto($0) as Any } ?? NSNull()
     case "listUnspents": return try w.listUnspents(online: s.online, settledOnly: false, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransactions": return try w.listTransactions(online: s.online, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransfers": return try w.listTransfers(assetFilter: p.optional("assetId").map { .id(assetId: $0) } ?? .anyOrNone, scope: p.optional("txid").map { .txid(txid: $0) } ?? .all).map { rgbDto($0) }

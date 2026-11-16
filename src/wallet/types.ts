@@ -91,6 +91,8 @@ export type {
   AssetMetadata,
   IssueAssetCfaParams,
   IssueAssetUdaParams,
+  ReceivedMint,
+  ReceivedMintOptions,
 } from '@utexo/rgb-sdk-core';
 
 /** `restoreBackupFromFile()` input. Both paths are absolute. */

@@ -4,6 +4,8 @@
 
 __added__
 
+- `getReceivedMint(recipientId, options?)` (core's `ReceivedMintApi`) returns the checked BFA mint paying a recipient ID (`opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; u64 values as decimal strings) or `undefined`. It is offline; `{ refreshIncoming: true }` first refreshes pending incoming transfers only (with `RefreshFilter { incoming: true }`), so no send or burn is progressed. Receiving a mint needs the chain's `evmRpcUrls` entry. The native bridge version is now 6: rebuild the app.
+
 - `exportBackup({ password })` returns the encrypted backup as a `Uint8Array` (core's `BackupExportApi`), so the `UTEXOWallet` facade forwards it. It works offline; a missing or empty password is `INVALID_CONFIG`. Native writes the backup to a private temporary file and always deletes it. The bytes restore through `restoreBackupFromFile()` once written to a file. Rebuild the app.
 
 __changed__

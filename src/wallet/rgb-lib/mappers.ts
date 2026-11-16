@@ -8,10 +8,12 @@ import type {
   TransferStatus,
   TransactionType,
   BitcoinNetwork,
+  ReceivedMint,
 } from '@utexo/rgb-sdk-core';
 import type {
   NativeAsset,
   NativeAssetMetadata,
+  NativeReceivedMint,
   NativeAssignment,
   NativeBalance,
   NativeInvoice,
@@ -272,6 +274,19 @@ export function uda(value: NativeAsset): AssetUDA {
           media: value.token.media ?? undefined,
         }
       : undefined,
+  };
+}
+export function receivedMint(
+  value: NativeReceivedMint | null
+): ReceivedMint | undefined {
+  if (value === null) return undefined;
+  return {
+    opid: value.opid,
+    lockId: value.lockId,
+    amount: u64(value.amount, 'amount'),
+    beforeBlock: u64(value.beforeBlock, 'beforeBlock'),
+    evmChainId: u64(value.evmChainId, 'evmChainId'),
+    bridgeContract: value.bridgeContract,
   };
 }
 export function assetMetadata(value: NativeAssetMetadata): AssetMetadata {

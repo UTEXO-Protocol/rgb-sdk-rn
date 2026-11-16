@@ -75,6 +75,10 @@ RCT_EXPORT_MODULE(RgbLib)
   [self invoke:@"getAssetMetadata" params:@{@"handle": handle ?: [NSNull null], @"assetId": assetId ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
+- (void)getReceivedMint:(NSString *)handle recipientId:(NSString *)recipientId refreshIncoming:(BOOL)refreshIncoming resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"getReceivedMint" params:@{@"handle": handle ?: [NSNull null], @"recipientId": recipientId ?: [NSNull null], @"refreshIncoming": @(refreshIncoming)} resolve:resolve reject:reject];
+}
+
 - (void)listUnspents:(NSString *)handle skipSync:(BOOL)skipSync resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   [self invoke:@"listUnspents" params:@{@"handle": handle ?: [NSNull null], @"skipSync": @(skipSync)} resolve:resolve reject:reject];
 }

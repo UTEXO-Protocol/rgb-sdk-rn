@@ -124,6 +124,14 @@ export type NativeRuntimeInfo = {
   consignment: boolean;
   bfa: boolean;
 };
+export type NativeReceivedMint = {
+  opid: string;
+  lockId: string;
+  amount: string;
+  beforeBlock: string;
+  evmChainId: string;
+  bridgeContract: string;
+};
 export type NativeAssetMetadata = {
   assetSchema: string;
   initialSupply: string;
@@ -192,6 +200,12 @@ export interface Spec extends TurboModule {
     handle: string,
     assetId: string
   ): Promise<NativeAssetMetadata>;
+  /** `refreshIncoming` first refreshes pending incoming transfers only (online). */
+  getReceivedMint(
+    handle: string,
+    recipientId: string,
+    refreshIncoming: boolean
+  ): Promise<NativeReceivedMint | null>;
   listUnspents(handle: string, skipSync: boolean): Promise<NativeUnspent[]>;
   listTransactions(
     handle: string,

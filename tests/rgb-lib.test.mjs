@@ -2964,3 +2964,39 @@ test('a failed shutdown keeps WALLET_STOPPING until a retry succeeds, then reope
   assert.equal(await wallet.getAddress(), 'address');
   await wallet.dispose();
 });
+
+test('rgb-lib getReceivedMint maps the checked mint and refreshes incoming only on request', async () => {
+  const seen = [];
+  const mint = {
+    opid: 'a'.repeat(64),
+    lockId: 'b'.repeat(64),
+    amount: '18446744073709551615',
+    beforeBlock: '9007199254740993',
+    evmChainId: '9007199254740993',
+    bridgeContract: `0x${'c'.repeat(40)}`,
+  };
+  let result = mint;
+  const { wallet } = publicWalletFixture({
+    getReceivedMint: async (...args) => {
+      seen.push(args.slice(1));
+      return result;
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+
+  assert.deepEqual(await wallet.getReceivedMint('bcrt:utxob:rid'), mint);
+  result = null;
+  assert.equal(
+    await wallet.getReceivedMint('bcrt:utxob:rid', { refreshIncoming: true }),
+    undefined
+  );
+  assert.deepEqual(seen, [
+    ['bcrt:utxob:rid', false],
+    ['bcrt:utxob:rid', true],
+  ]);
+  await assert.rejects(wallet.getReceivedMint(''), /recipientId/);
+  result = { ...mint, amount: '18446744073709551616' };
+  await assert.rejects(wallet.getReceivedMint('bcrt:utxob:rid'), /u64/);
+  assert.equal(seen.length, 3);
+});

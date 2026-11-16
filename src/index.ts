@@ -244,6 +244,8 @@ export type {
   IssueAssetCfaParams,
   IssueAssetUdaParams,
   AssetMetadata,
+  ReceivedMint,
+  ReceivedMintOptions,
   RestoreBackupFromFileParams,
   RestoreFromBackupParams,
   WalletRestoreResponse,

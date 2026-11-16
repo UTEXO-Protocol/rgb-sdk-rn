@@ -58,6 +58,8 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
 
   override fun getAssetMetadata(handle: String, assetId: String, promise: Promise) = invoke("getAssetMetadata", mapOf("handle" to handle, "assetId" to assetId), promise)
 
+  override fun getReceivedMint(handle: String, recipientId: String, refreshIncoming: Boolean, promise: Promise) = invoke("getReceivedMint", mapOf("handle" to handle, "recipientId" to recipientId, "refreshIncoming" to refreshIncoming), promise)
+
   override fun listUnspents(handle: String, skipSync: Boolean, promise: Promise) = invoke("listUnspents", mapOf("handle" to handle, "skipSync" to skipSync), promise)
 
   override fun listTransactions(handle: String, skipSync: Boolean, promise: Promise) = invoke("listTransactions", mapOf("handle" to handle, "skipSync" to skipSync), promise)

@@ -20,6 +20,7 @@ import type {
   FileBackupApi,
   FileIssuanceApi,
   IndexerCheckApi,
+  ReceivedMintApi,
   RestartableWalletApi,
   SharedWalletApi,
   TxidLookupApi,
@@ -46,6 +47,7 @@ export class RgbLibRn
     ConsignmentFileApi,
     IndexerCheckApi,
     AssetMetadataApi,
+    ReceivedMintApi,
     FileIssuanceApi,
     TxidLookupApi,
     AddressRotationApi
@@ -263,5 +265,14 @@ export class RgbLibRn
   }
   getConsignmentPath(...args: Parameters<WalletBfa['getConsignmentPath']>) {
     return this.ports.bfa.getConsignmentPath(...args);
+  }
+  /**
+   * The checked BFA mint paying `recipientId`, or `undefined`. Offline unless
+   * `refreshIncoming` is set, which first refreshes pending incoming transfers
+   * only (no send or burn is progressed). Receiving a mint needs the EVM RPC
+   * endpoint of its chain in the online options.
+   */
+  getReceivedMint(...args: Parameters<WalletBfa['getReceivedMint']>) {
+    return this.ports.bfa.getReceivedMint(...args);
   }
 }

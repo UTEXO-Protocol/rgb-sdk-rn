@@ -1328,5 +1328,27 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           validateConsignmentLookup(assetId, txid);
           return native.getConsignmentPath(handle, assetId, txid);
         }),
+      getReceivedMint: (recipientId, options) => {
+        const refreshIncoming = options?.refreshIncoming === true;
+        return this.run(
+          'getReceivedMint',
+          refreshIncoming,
+          async (native, handle) => {
+            if (
+              typeof recipientId !== 'string' ||
+              recipientId.length === 0 ||
+              recipientId.length > 1024
+            ) {
+              throw new ValidationError(
+                'recipientId must be a non-empty string',
+                'recipientId'
+              );
+            }
+            return map.receivedMint(
+              await native.getReceivedMint(handle, recipientId, refreshIncoming)
+            );
+          }
+        );
+      },
     });
 }

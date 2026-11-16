@@ -19,6 +19,8 @@ import type {
   AssetSchemaName,
   BfaCapabilities,
   BurnParams,
+  ReceivedMint,
+  ReceivedMintOptions,
   BurnResult,
   IssueAssetCfaParams,
   IssueAssetUdaParams,
@@ -110,6 +112,10 @@ export interface WalletBfa {
   burn(params: BurnParams): Promise<BurnResult>;
   getConsignment(assetId: string, txid: string): Promise<string>;
   getConsignmentPath(assetId: string, txid: string): Promise<string>;
+  getReceivedMint(
+    recipientId: string,
+    options?: ReceivedMintOptions
+  ): Promise<ReceivedMint | undefined>;
 }
 export interface WalletBitcoin extends Omit<
   IBitcoinWallet,

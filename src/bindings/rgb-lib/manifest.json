@@ -1,13 +1,13 @@
 {
-  "version": "0.3.0-beta.7-upstream-dev-bfa.6-bfa",
-  "sourceTag": "v0.3.0-beta.7-upstream-dev-bfa.6",
-  "sourceRevision": "5010eefa355beb9c42a4c1b69883f7651241a111",
+  "version": "0.3.0-beta.7-upstream-dev-bfa.8-bfa",
+  "sourceTag": "v0.3.0-beta.7-upstream-dev-bfa.8",
+  "sourceRevision": "cafe66e49d58038a69dd05f8065e3fe96a9d1601",
   "uniffiVersion": "0.32.2",
   "bridgeVersion": 5,
   "swiftModule": "RGBLib",
   "ios": {
-    "url": "https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/download/0.3.0-beta.7-upstream-dev-bfa.6-bfa/rgb-lib-bfa-swift-0.3.0-beta.7-upstream-dev-bfa.6-bfa.zip",
-    "sha256": "63394ca1c6bffd4a5147c961432aa962a04dda7aa06ea362e2616622a0cc313b",
+    "url": "https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/download/0.3.0-beta.7-upstream-dev-bfa.8-bfa/rgb-lib-bfa-swift-0.3.0-beta.7-upstream-dev-bfa.8-bfa.zip",
+    "sha256": "b5f29be68c07ddc79ecfe5cc3ce8fbc505576c74b47833000256a7b2042b997a",
     "minIosVersion": "16.0"
   }
 }

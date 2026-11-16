@@ -317,10 +317,6 @@ export function assets(values: NativeAsset[]): ListAssets {
         result.bfa.push({
           ...base,
           ticker: required(value.ticker, 'ticker'),
-          initialSupply: safeAmount(
-            required(value.initialSupply, 'initialSupply'),
-            'initialSupply'
-          ),
           knownCirculatingSupply: safeAmount(
             required(value.knownCirculatingSupply, 'knownCirculatingSupply'),
             'knownCirculatingSupply'

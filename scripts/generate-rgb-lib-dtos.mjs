@@ -122,7 +122,6 @@ for (const [name, fields] of Object.entries({
   },
   AssetBfa: {
     ticker: 'string',
-    initialSupply: 'decimal',
     knownCirculatingSupply: 'decimal',
     rejectListUrl: 'string?',
   },

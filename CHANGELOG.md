@@ -6,7 +6,7 @@ Needs `@utexo/rgb-sdk-core` with `ReceivedMintApi` (1.0.0-beta.11).
 
 __added__
 
-- `getReceivedMint(recipientId, options?)` (core's `ReceivedMintApi`) returns the checked BFA mint paying a recipient ID (`opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; u64 values as decimal strings) or `undefined`. It is offline; `{ refreshIncoming: true }` first refreshes pending incoming transfers only (with `RefreshFilter { incoming: true }`), so no send or burn is progressed. Receiving a mint needs the chain's `evmRpcUrls` entry. The native bridge version is now 6: rebuild the app.
+- `getReceivedMint(recipientId, options?)` (core's `ReceivedMintApi`) returns the checked BFA mint paying a recipient ID (`opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; u64 values as decimal strings) or `undefined`. It is offline; `{ refreshIncoming: true }` first refreshes pending incoming transfers only (with `RefreshFilter { incoming: true }`), so no send or burn is progressed; a refresh failure reported for that receive rejects instead of reading as no mint. Receiving a mint needs the chain's `evmRpcUrls` entry. The native bridge version is now 6: rebuild the app.
 
 __changed__
 

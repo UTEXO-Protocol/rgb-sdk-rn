@@ -374,11 +374,16 @@ public final class RgbLibSwiftHelper: NSObject {
     case "listAssets": return try rgbDto(w.listAssets(filterAssetSchemas: p.strings("filterAssetSchemas").map(rgbSchema)))
     case "getAssetMetadata": return try rgbDto(w.getAssetMetadata(assetId: p.string("assetId")))
     case "getReceivedMint":
+      let recipientId = try p.string("recipientId")
       if try p.bool("refreshIncoming") {
         let incoming: [RGBLib.RefreshFilter] = [.waitingCounterparty, .waitingSafeHeight, .waitingBroadcast, .waitingConfirmations].map { RGBLib.RefreshFilter(status: $0, incoming: true) }
-        _ = try w.refresh(online: s.requireOnline(), assetId: nil, filter: incoming, skipSync: false)
+        let refreshed = try w.refresh(online: s.requireOnline(), assetId: nil, filter: incoming, skipSync: false)
+        // Refresh reports a per-transfer failure in its result, not as an error: a failed check
+        // of this receive must reject rather than read as a pending mint.
+        let batches = try w.listTransfers(assetFilter: .anyOrNone, scope: .all).filter { $0.recipientId == recipientId }.map { $0.batchTransferIdx }
+        if let failure = batches.lazy.compactMap({ refreshed[$0]?.failure }).first { throw failure }
       }
-      return try w.getReceivedMint(recipientId: p.string("recipientId")).map { rgbDto($0) as Any } ?? NSNull()
+      return try w.getReceivedMint(recipientId: recipientId).map { rgbDto($0) as Any } ?? NSNull()
     case "listUnspents": return try w.listUnspents(online: s.online, settledOnly: false, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransactions": return try w.listTransactions(online: s.online, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransfers": return try w.listTransfers(assetFilter: p.optional("assetId").map { .id(assetId: $0) } ?? .anyOrNone, scope: p.optional("txid").map { .txid(txid: $0) } ?? .all).map { rgbDto($0) }

@@ -285,8 +285,15 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       "listAssets" -> rgbDto(w.listAssets(strings(p,"filterAssetSchemas").map { schema(it) }))
       "getAssetMetadata" -> rgbDto(w.getAssetMetadata(p.getString("assetId")))
       "getReceivedMint" -> {
-        if (p.getBoolean("refreshIncoming")) w.refresh(online(s),null,RefreshTransferStatus.entries.map { RefreshFilter(it,true) },false)
-        w.getReceivedMint(p.getString("recipientId"))?.let { rgbDto(it) }
+        val recipientId = p.getString("recipientId")
+        if (p.getBoolean("refreshIncoming")) {
+          val refreshed = w.refresh(online(s),null,RefreshTransferStatus.entries.map { RefreshFilter(it,true) },false)
+          // Refresh reports a per-transfer failure in its result, not as an error: a failed check
+          // of this receive must reject rather than read as a pending mint.
+          w.listTransfers(AssetFilter.AnyOrNone,TransferScope.All).filter { it.recipientId == recipientId }
+            .firstNotNullOfOrNull { refreshed[it.batchTransferIdx]?.failure }?.let { throw it }
+        }
+        w.getReceivedMint(recipientId)?.let { rgbDto(it) }
       }
       "listUnspents" -> w.listUnspents(s.online,false,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransactions" -> w.listTransactions(s.online,p.getBoolean("skipSync")).map { rgbDto(it) }

@@ -276,15 +276,18 @@ All methods are async except `getNetwork()`, `isDisposed()` and the `capabilitie
 
 **Backup and BFA**
 
-| Method                              | Description                                                  |
-| ----------------------------------- | ------------------------------------------------------------ |
-| `exportBackupToFile(params)`        | Writes an encrypted backup file                              |
-| `exportBackup(params)`              | The same encrypted backup as bytes                           |
-| `restoreBackupFromFile(params)`     | Function export: unpacks a backup into an empty directory    |
-| `getBfaCapabilities()`              | Whether this build and wallet can burn and read consignments |
-| `burn(params)`                      | Burns RGB assets                                             |
-| `getConsignment(assetId, txid)`     | A transfer's consignment as a string                         |
-| `getConsignmentPath(assetId, txid)` | A transfer's consignment as a local file                     |
+| Method                                   | Description                                                  |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| `exportBackupToFile(params)`             | Writes an encrypted backup file                              |
+| `exportBackup(params)`                   | The same encrypted backup as bytes                           |
+| `restoreBackupFromFile(params)`          | Function export: unpacks a backup into an empty directory    |
+| `getBfaCapabilities()`                   | Whether this build and wallet can burn and read consignments |
+| `burn(params)`                           | Burns RGB assets                                             |
+| `getConsignment(assetId, txid)`          | A transfer's consignment as a string                         |
+| `getConsignmentPath(assetId, txid)`      | A transfer's consignment as a local file                     |
+| `getReceivedMint(recipientId, options?)` | The checked BFA mint for a recipient ID, or `undefined`      |
+
+`getReceivedMint` returns the terms the EVM lock of a received BFA mint has to match (`opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; integers as decimal strings). Pass `{ refreshIncoming: true }` to refresh pending incoming transfers first.
 
 Aliases kept for the shared contract and older code: `initialize` (`init`), `unlock` (`goOnline`), `dispose` (`destroy`), `refreshWallet` (`refresh` without a result), `refreshTransfers(skipSync?)` (`refresh`) and `listOnchainTransfers` (`listTransfers`).
 

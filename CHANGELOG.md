@@ -1,10 +1,23 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.42 (unreleased)
+
+Needs `@utexo/rgb-sdk-core` with `ReceivedMintApi` (1.0.0-beta.11).
 
 __added__
 
 - `getReceivedMint(recipientId, options?)` (core's `ReceivedMintApi`) returns the checked BFA mint paying a recipient ID (`opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; u64 values as decimal strings) or `undefined`. It is offline; `{ refreshIncoming: true }` first refreshes pending incoming transfers only (with `RefreshFilter { incoming: true }`), so no send or burn is progressed. Receiving a mint needs the chain's `evmRpcUrls` entry. The native bridge version is now 6: rebuild the app.
+
+__changed__
+
+- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.6` (`5010eef`) to `v0.3.0-beta.7-upstream-dev-bfa.8` (`cafe66e`): iOS from the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.8-bfa), Android from `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.8-bfa`. Rebuild the app (`pod install` on iOS).
+  - BFA assets from `listAssets()` no longer report `initialSupply` (rgb-lib removed it); use `knownCirculatingSupply`.
+  - Wallets open with `allowRecklessSchemas: false`, so IFA and BFA stay refused on mainnet (`RGB_LIB_CannotUseSchemaOnMainnet`), as before. IFA issuance passes `skipContractChecks: false`.
+  - Error variants: `TransferExpired` no longer exists; `InvalidLinkedContract` and `UnknownLinkedContract` are new.
+
+## 1.0.0-beta.41
+
+__added__
 
 - `exportBackup({ password })` returns the encrypted backup as a `Uint8Array` (core's `BackupExportApi`), so the `UTEXOWallet` facade forwards it. It works offline; a missing or empty password is `INVALID_CONFIG`. Native writes the backup to a private temporary file and always deletes it. The bytes restore through `restoreBackupFromFile()` once written to a file. Rebuild the app.
 
@@ -13,10 +26,6 @@ __changed__
 - The engine and its types use the `RgbLibRn` prefix, to match `RgbLibWeb*` in `@utexo/rgb-sdk-web`: `RgbLibWallet` → `RgbLibRn`, `RgbLibWalletParams` → `RgbLibRnParams`, `RgbLibUnlockParams` → `RgbLibRnUnlockParams`, `RgbLibIndexer` → `RgbLibRnIndexer`, `RgbLibKeys` → `RgbLibRnKeys`, `RgbLibMnemonicReader` → `RgbLibRnMnemonicReader`, `RgbLibMnemonicResult` → `RgbLibRnMnemonicResult`, `RgbLibPublicKeys` → `RgbLibRnPublicKeys`, `IRgbLibKeyProvider` → `IRgbLibRnKeyProvider`, `CallbackRgbLibKeyProvider` → `CallbackRgbLibRnKeyProvider`. The old names are removed.
 - Backup names follow one rule across engines (every name says `Backup`): `exportBackupToFile({ filePath, password })` replaces `createBackup({ backupPath, password })`, and `restoreBackupFromFile({ filePath, password, dataDir })` replaces `restoreFromBackup({ backupFilePath, password, dataDir })`. The old names still work with their old parameters and are deprecated; errors name the method that was called. `FileBackupApi` in core now has `exportBackupToFile`, so the `UTEXOWallet` facade forwards that name. A backup restores only on the engine that made it.
 - rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.5` (`0a9d352`) to `v0.3.0-beta.7-upstream-dev-bfa.6` (`5010eef`): iOS from the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.6-bfa), Android from `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.6-bfa`. Rebuild the app (`pod install` on iOS).
-- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.6` (`5010eef`) to `v0.3.0-beta.7-upstream-dev-bfa.8` (`cafe66e`): iOS from the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.8-bfa), Android from `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.8-bfa`. Rebuild the app (`pod install` on iOS).
-  - BFA assets from `listAssets()` no longer report `initialSupply` (rgb-lib removed it); use `knownCirculatingSupply`.
-  - Wallets open with `allowRecklessSchemas: false`, so IFA and BFA stay refused on mainnet (`RGB_LIB_CannotUseSchemaOnMainnet`), as before. IFA issuance passes `skipContractChecks: false`.
-  - Error variants: `TransferExpired` no longer exists; `InvalidLinkedContract` and `UnknownLinkedContract` are new.
 - `evmMintLockBlocks` in `RgbLibRnUnlockParams` and the constructor sets the mint lock window the wallet accepts for each `evmRpcUrls` chain, in blocks of that chain. It is optional: a chain without an entry uses `DEFAULT_EVM_MINT_LOCK_BLOCKS` (`{ min: 1200, max: 28800 }`), so existing `evmRpcUrls` configs keep working.
   ```ts
   evmRpcUrls: { '42161': 'https://arb1.arbitrum.io/rpc' },

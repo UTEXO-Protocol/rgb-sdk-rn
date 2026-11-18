@@ -17,6 +17,7 @@ import type {
   NativeAssignment,
   NativeBalance,
   NativeInvoice,
+  NativeBurnBegin,
   NativeOperation,
   NativeReceive,
   NativeTransaction,
@@ -380,6 +381,24 @@ export function operation(value: NativeOperation) {
     );
   }
   return { txid: value.txid, batchTransferIdx: value.batchTransferIdx };
+}
+/** A prepared burn; rgb-lib names its batch whenever it is not a dry run. */
+export function burnBegin(value: NativeBurnBegin) {
+  const batchTransferIdx = value?.batchTransferIdx;
+  if (
+    typeof value?.psbt !== 'string' ||
+    typeof batchTransferIdx !== 'number' ||
+    !Number.isSafeInteger(batchTransferIdx) ||
+    batchTransferIdx < 0
+  ) {
+    throw new WalletBackendError(
+      'INVALID_NATIVE_RESPONSE',
+      'Invalid burn begin result',
+      undefined,
+      'RGB_L1'
+    );
+  }
+  return { psbt: value.psbt, batchTransferIdx };
 }
 export function receive(value: NativeReceive) {
   return {

@@ -39,6 +39,15 @@ export function rgbLibErrorCode(code: unknown): WalletBackendErrorCode {
     : 'NATIVE_ERROR';
 }
 
+/**
+ * rgb-lib refused to end a transfer that is no longer waiting for its end
+ * step. The variant name survives on the cause of the mapped error.
+ */
+export function isCannotEndTransfer(error: unknown): boolean {
+  const cause = (error as { cause?: { code?: unknown } } | null)?.cause;
+  return cause?.code === 'RGB_LIB_CannotEndTransfer';
+}
+
 /** Platform rejections never reach callers; only WalletBackendError does. */
 export function toBackendError(error: unknown, operation: string): EngineError {
   if (isEngineError(error)) return error;

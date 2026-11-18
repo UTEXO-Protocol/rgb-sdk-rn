@@ -3,6 +3,8 @@ import type {
   AssetUDA,
   AssignmentType,
   BtcBalance,
+  EstimateFeeResult,
+  IBeginEndFlows,
   IBitcoinWallet,
   IRgbAssets,
   IOnchainTransfers,
@@ -116,6 +118,27 @@ export interface WalletBfa {
     recipientId: string,
     options?: ReceivedMintOptions
   ): Promise<ReceivedMint | undefined>;
+}
+/** What `burnBegin` shows before approval, and what recovery needs. */
+export interface BurnBeginResult extends EstimateFeeResult {
+  /** The unsigned PSBT (base64) to show and sign. */
+  psbt: string;
+  txid: string;
+  /** For `failTransfers` if the burn is not approved. */
+  batchTransferIdx: number;
+}
+/**
+ * Prepare, approve and submit as separate steps. Store the signed PSBT before
+ * calling an end step: after an interruption, call it again with the same
+ * PSBT and it resolves with the result if the operation was already
+ * submitted. To abandon a begun operation, call
+ * `failTransfers({ batchTransferIdx })`.
+ */
+export interface RgbLibRnBeginEndFlows extends IBeginEndFlows {
+  /** Prepares a burn and reserves its inputs; nothing is signed or sent. */
+  burnBegin(params: BurnParams): Promise<BurnBeginResult>;
+  /** Broadcasts a burn signed after `burnBegin`. */
+  burnEnd(params: { signedPsbt: string }): Promise<BurnResult>;
 }
 export interface WalletBitcoin extends Omit<
   IBitcoinWallet,

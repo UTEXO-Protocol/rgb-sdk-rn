@@ -88,6 +88,28 @@ class RgbLibModule(context: ReactApplicationContext) : NativeRgbLibSpec(context)
 
   override fun burn(handle: String, assetId: String, amount: String, burnReason: String?, feeRate: String, minConfirmations: Double, promise: Promise) = invoke("burn", mapOf("handle" to handle, "assetId" to assetId, "amount" to amount, "burnReason" to burnReason, "feeRate" to feeRate, "minConfirmations" to minConfirmations), promise)
 
+  override fun createUtxosBegin(handle: String, upTo: Boolean, num: Double?, size: Double?, feeRate: String, skipSync: Boolean, promise: Promise) = invoke("createUtxosBegin", mapOf("handle" to handle, "upTo" to upTo, "num" to num, "size" to size, "feeRate" to feeRate, "skipSync" to skipSync), promise)
+
+  override fun createUtxosEnd(handle: String, signedPsbt: String, promise: Promise) = invoke("createUtxosEnd", mapOf("handle" to handle, "signedPsbt" to signedPsbt), promise)
+
+  override fun sendBtcBegin(handle: String, address: String, amount: String, feeRate: String, skipSync: Boolean, promise: Promise) = invoke("sendBtcBegin", mapOf("handle" to handle, "address" to address, "amount" to amount, "feeRate" to feeRate, "skipSync" to skipSync), promise)
+
+  override fun sendBtcEnd(handle: String, signedPsbt: String, promise: Promise) = invoke("sendBtcEnd", mapOf("handle" to handle, "signedPsbt" to signedPsbt), promise)
+
+  override fun sendBegin(handle: String, invoice: String, assetId: String?, amount: String?, witnessAmountSat: String?, witnessBlinding: String?, donation: Boolean, feeRate: String, minConfirmations: Double, senderTransportEndpoint: String, promise: Promise) = invoke("sendBegin", mapOf("handle" to handle, "invoice" to invoice, "assetId" to assetId, "amount" to amount, "witnessAmountSat" to witnessAmountSat, "witnessBlinding" to witnessBlinding, "donation" to donation, "feeRate" to feeRate, "minConfirmations" to minConfirmations, "senderTransportEndpoint" to senderTransportEndpoint), promise)
+
+  override fun sendEnd(handle: String, signedPsbt: String, promise: Promise) = invoke("sendEnd", mapOf("handle" to handle, "signedPsbt" to signedPsbt), promise)
+
+  override fun inflateBegin(handle: String, assetId: String, amounts: ReadableArray, feeRate: String, minConfirmations: Double, promise: Promise) = invoke("inflateBegin", mapOf("handle" to handle, "assetId" to assetId, "amounts" to amounts.toArrayList(), "feeRate" to feeRate, "minConfirmations" to minConfirmations), promise)
+
+  override fun inflateEnd(handle: String, signedPsbt: String, promise: Promise) = invoke("inflateEnd", mapOf("handle" to handle, "signedPsbt" to signedPsbt), promise)
+
+  override fun burnBegin(handle: String, assetId: String, amount: String, burnReason: String?, feeRate: String, minConfirmations: Double, promise: Promise) = invoke("burnBegin", mapOf("handle" to handle, "assetId" to assetId, "amount" to amount, "burnReason" to burnReason, "feeRate" to feeRate, "minConfirmations" to minConfirmations), promise)
+
+  override fun burnEnd(handle: String, signedPsbt: String, promise: Promise) = invoke("burnEnd", mapOf("handle" to handle, "signedPsbt" to signedPsbt), promise)
+
+  override fun signPsbt(handle: String, psbt: String, promise: Promise) = invoke("signPsbt", mapOf("handle" to handle, "psbt" to psbt), promise)
+
   override fun getConsignment(handle: String, assetId: String, txid: String, promise: Promise) = invoke("getConsignment", mapOf("handle" to handle, "assetId" to assetId, "txid" to txid), promise)
 
   override fun getConsignmentPath(handle: String, assetId: String, txid: String, promise: Promise) = invoke("getConsignmentPath", mapOf("handle" to handle, "assetId" to assetId, "txid" to txid), promise)

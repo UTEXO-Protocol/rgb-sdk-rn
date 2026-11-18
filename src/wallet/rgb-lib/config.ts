@@ -5,7 +5,7 @@ import { WalletBackendError } from '../wallet-errors';
 /** Release of the Swift and Kotlin bindings, as written in their `version.json`. */
 export const RGB_LIB_VERSION = '0.3.0-beta.7-upstream-dev-bfa.8-bfa';
 export const RGB_LIB_REVISION = 'cafe66e49d58038a69dd05f8065e3fe96a9d1601';
-export const RGB_LIB_BRIDGE_VERSION = 6;
+export const RGB_LIB_BRIDGE_VERSION = 7;
 
 /** Settings fixed for the wallet's lifetime. */
 export interface RgbLibRnOptions {

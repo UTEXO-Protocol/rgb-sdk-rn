@@ -1,6 +1,7 @@
 import type {
   OnchainWalletApi,
   OnchainWalletBackend,
+  RgbLibRnBeginEndFlows,
   WalletBitcoin,
   WalletRgb,
   WalletHistory,
@@ -20,6 +21,7 @@ import type {
   FileBackupApi,
   FileIssuanceApi,
   IndexerCheckApi,
+  IPsbtSigning,
   ReceivedMintApi,
   RestartableWalletApi,
   SharedWalletApi,
@@ -57,8 +59,10 @@ export class RgbLibRn
    * from core: a newer core copy must not make this engine claim more.
    */
   readonly contractVersion = '1' as const;
-  readonly psbt = undefined;
-  readonly beginEnd = undefined;
+  /** Signing and fee reading; absent on a watch-only wallet, which cannot sign. */
+  readonly psbt: IPsbtSigning | undefined;
+  /** Prepare, approve and submit as separate steps. */
+  readonly beginEnd: RgbLibRnBeginEndFlows;
 
   readonly protocol = 'RGB_L1' as const;
   private readonly backend: RgbLibWalletBackend;
@@ -71,6 +75,10 @@ export class RgbLibRn
   ) {
     this.backend = new RgbLibWalletBackend(params, keys, loadBinding);
     this.ports = this.backend;
+    this.psbt = this.backend.canSignTransactions
+      ? this.backend.psbt
+      : undefined;
+    this.beginEnd = this.backend.beginEnd;
   }
 
   get capabilities(): EngineCapabilities {

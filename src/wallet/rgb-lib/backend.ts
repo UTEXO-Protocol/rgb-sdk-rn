@@ -1,13 +1,30 @@
 import { isEngineError } from '@utexo/rgb-sdk-core';
 import { decodeNativeBase64 } from './base64';
-import type { Network, RefreshTransfersResult } from '@utexo/rgb-sdk-core';
-import type { ReceiveParams } from '../types';
+import type {
+  CreateUtxosBeginRequestModel,
+  EstimateFeeResult,
+  InflateAssetIfaRequestModel,
+  IPsbtSigning,
+  Network,
+  OnchainSendRequestModel,
+  RefreshTransfersResult,
+  SendBtcBeginRequestModel,
+} from '@utexo/rgb-sdk-core';
+import type { BurnParams, ReceiveParams } from '../types';
 import { getRgbLibBinding, assertRuntime } from './native';
-import type { NativeRuntimeInfo, Spec } from '../../native/NativeRgbLib';
+import type {
+  NativeOperation,
+  NativeRuntimeInfo,
+  Spec,
+} from '../../native/NativeRgbLib';
 import { toNativeNetwork } from '../../native/network-name';
 import { readRgbLibMnemonic, resolveRgbLibKeys } from './key-provider';
 import type { ResolvedRgbLibKeys, RgbLibRnKeys } from './key-provider';
-import type { OnchainWalletBackend, WalletIdentity } from '../wallet-api';
+import type {
+  OnchainWalletBackend,
+  RgbLibRnBeginEndFlows,
+  WalletIdentity,
+} from '../wallet-api';
 import { CleanupFailure, WalletBackendError } from '../wallet-errors';
 import {
   ValidationError,
@@ -36,7 +53,13 @@ import type {
 } from './config';
 import { feeRate, issuanceAmounts, u64 } from './amounts';
 import * as map from './mappers';
-import { guardNative, toArgumentError, toPublicError } from './errors';
+import {
+  guardNative,
+  isCannotEndTransfer,
+  toArgumentError,
+  toPublicError,
+} from './errors';
+import { psbtTxid, summarizePsbt } from './psbt';
 
 /** A handle already removed by native needs no further close call. */
 async function closeHandle(native: Spec, handle: string): Promise<void> {
@@ -99,6 +122,113 @@ async function refreshed(
       ])
     ),
   };
+}
+
+const createUtxosInput = (params: CreateUtxosBeginRequestModel) => ({
+  num: params.num === undefined ? null : integer(params.num, 'num', 1, 255),
+  size:
+    params.size === undefined
+      ? null
+      : integer(params.size, 'size', 1, 0xffffffff),
+  feeRate: feeRate(params.feeRate),
+});
+
+const sendBtcInput = (params: SendBtcBeginRequestModel) => ({
+  amount: u64(params.amount, 'amount', true),
+  feeRate: feeRate(params.feeRate),
+});
+
+const inflateInput = (params: InflateAssetIfaRequestModel) => ({
+  amounts: params.inflationAmounts.map((n) => u64(n, 'inflationAmount', true)),
+  feeRate: feeRate(params.feeRate),
+  minConfirmations: integer(
+    params.minConfirmations ?? 1,
+    'minConfirmations',
+    1,
+    255
+  ),
+});
+
+function sendInput(operation: string, params: OnchainSendRequestModel) {
+  // rgb-lib-bfa send always syncs, so skipSync: true cannot be
+  // honored; it is refused instead of ignored (decision 5).
+  if (params.skipSync === true)
+    throw new WalletBackendError(
+      'UNSUPPORTED_CAPABILITY',
+      `${operation} always syncs on RGB_L1; skipSync: true is not supported`,
+      operation,
+      'RGB_L1'
+    );
+  return {
+    amount:
+      params.amount === undefined ? null : u64(params.amount, 'amount', true),
+    witnessAmount: params.witnessData
+      ? u64(params.witnessData.amountSat, 'witness amount', true)
+      : null,
+    blinding:
+      params.witnessData?.blinding === undefined
+        ? null
+        : u64(params.witnessData.blinding, 'blinding'),
+    feeRate: feeRate(params.feeRate),
+    minConfirmations: integer(
+      params.minConfirmations ?? 1,
+      'minConfirmations',
+      1,
+      255
+    ),
+  };
+}
+
+/**
+ * The signed PSBT of an end step. rgb-lib's end steps take no sync flag, so
+ * skipSync: true cannot be honored; it is refused instead of ignored.
+ */
+function endInput(
+  operation: string,
+  params: { signedPsbt: string; skipSync?: boolean }
+) {
+  if (params.skipSync === true)
+    throw new WalletBackendError(
+      'UNSUPPORTED_CAPABILITY',
+      `${operation} takes no sync option on RGB_L1; skipSync: true is not supported`,
+      operation,
+      'RGB_L1'
+    );
+  return { signedPsbt: params.signedPsbt, txid: psbtTxid(params.signedPsbt) };
+}
+
+/** A transfer that left `Initiated` for good: its TX is out. */
+const SUBMITTED: ReadonlySet<string> = new Set([
+  'WaitingBroadcast',
+  'WaitingConfirmations',
+  'Settled',
+]);
+
+/**
+ * Ends an operation so the same signed PSBT can be submitted again after an
+ * interruption. rgb-lib refuses to end a transfer that already moved on; if
+ * the history shows this very operation as submitted, that is its result.
+ * Runs inside the queue, so it calls native directly.
+ */
+async function endOnce(
+  native: Spec,
+  handle: string,
+  { signedPsbt, txid }: { signedPsbt: string; txid: string },
+  kind: 'Send' | 'Burn' | 'Inflation',
+  end: (signedPsbt: string) => Promise<NativeOperation>
+) {
+  try {
+    return map.operation(await end(signedPsbt));
+  } catch (error) {
+    if (!isCannotEndTransfer(error)) throw error;
+    const submitted = (await native.listTransfers(handle, null, txid))
+      .map(map.transfer)
+      .find(
+        (t) => t.txid === txid && t.kind === kind && SUBMITTED.has(t.status)
+      );
+    if (!submitted) throw error;
+    return { txid, batchTransferIdx: submitted.batchTransferIdx };
+  }
 }
 
 export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockParams> {
@@ -762,17 +892,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           params,
           {
             signs: true,
-            prepare: (params) => ({
-              num:
-                params.num === undefined
-                  ? null
-                  : integer(params.num, 'num', 1, 255),
-              size:
-                params.size === undefined
-                  ? null
-                  : integer(params.size, 'size', 1, 0xffffffff),
-              feeRate: feeRate(params.feeRate),
-            }),
+            prepare: createUtxosInput,
           },
           (native, handle, params, v) =>
             native.createUtxos(
@@ -791,10 +911,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           params,
           {
             signs: true,
-            prepare: (params) => ({
-              amount: u64(params.amount, 'amount', true),
-              feeRate: feeRate(params.feeRate),
-            }),
+            prepare: sendBtcInput,
           },
           (native, handle, params, v) =>
             native.sendBtc(
@@ -995,18 +1112,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           params,
           {
             signs: true,
-            prepare: (params) => ({
-              amounts: params.inflationAmounts.map((n) =>
-                u64(n, 'inflationAmount', true)
-              ),
-              feeRate: feeRate(params.feeRate),
-              minConfirmations: integer(
-                params.minConfirmations ?? 1,
-                'minConfirmations',
-                1,
-                255
-              ),
-            }),
+            prepare: inflateInput,
           },
           async (native, handle, params, v) =>
             map.operation(
@@ -1034,37 +1140,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           params,
           {
             signs: true,
-            prepare: (params) => {
-              // rgb-lib-bfa send always syncs, so skipSync: true cannot be
-              // honored; it is refused instead of ignored (decision 5).
-              if (params.skipSync === true)
-                throw new WalletBackendError(
-                  'UNSUPPORTED_CAPABILITY',
-                  'onchainSend always syncs on RGB_L1; skipSync: true is not supported',
-                  'onchainSend',
-                  'RGB_L1'
-                );
-              return {
-                amount:
-                  params.amount === undefined
-                    ? null
-                    : u64(params.amount, 'amount', true),
-                witnessAmount: params.witnessData
-                  ? u64(params.witnessData.amountSat, 'witness amount', true)
-                  : null,
-                blinding:
-                  params.witnessData?.blinding === undefined
-                    ? null
-                    : u64(params.witnessData.blinding, 'blinding'),
-                feeRate: feeRate(params.feeRate),
-                minConfirmations: integer(
-                  params.minConfirmations ?? 1,
-                  'minConfirmations',
-                  1,
-                  255
-                ),
-              };
-            },
+            prepare: (params) => sendInput('onchainSend', params),
           },
           (native, handle, params, v) =>
             native.send(
@@ -1265,6 +1341,192 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
         ),
     });
 
+  private burnInput(operation: string, params: BurnParams): void {
+    validateBurnParams(params);
+    if (this.runtime && !this.runtime.burn)
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        'This native build does not support burn',
+        operation,
+        'RGB_L1'
+      );
+  }
+
+  /** The runtime is known only after init(); checked again in the queue. */
+  private assertBurnRuntime(): void {
+    if (!this.runtime?.burn)
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        'This native build does not support burn',
+        undefined,
+        'RGB_L1'
+      );
+  }
+
+  /**
+   * Prepare, approve and submit as separate steps. Begin and end do not sign,
+   * so a watch-only wallet can run them around an external signer.
+   */
+  readonly beginEnd: RgbLibRnBeginEndFlows = this.guarded({
+    createUtxosBegin: (params) =>
+      this.checked(
+        'createUtxosBegin',
+        true,
+        params,
+        { prepare: createUtxosInput },
+        (native, handle, params, v) =>
+          native.createUtxosBegin(
+            handle,
+            params.upTo ?? true,
+            v.num,
+            v.size,
+            v.feeRate,
+            skipSyncOf((params as { skipSync?: boolean }).skipSync)
+          )
+      ),
+    createUtxosEnd: (params) =>
+      this.checked(
+        'createUtxosEnd',
+        true,
+        params,
+        { prepare: (params) => endInput('createUtxosEnd', params) },
+        (native, handle, _params, v) =>
+          native.createUtxosEnd(handle, v.signedPsbt)
+      ),
+    sendBtcBegin: (params) =>
+      this.checked(
+        'sendBtcBegin',
+        true,
+        params,
+        { prepare: sendBtcInput },
+        (native, handle, params, v) =>
+          native.sendBtcBegin(
+            handle,
+            params.address,
+            v.amount,
+            v.feeRate,
+            skipSyncOf(params.skipSync)
+          )
+      ),
+    sendBtcEnd: (params) =>
+      this.checked(
+        'sendBtcEnd',
+        true,
+        params,
+        { prepare: (params) => endInput('sendBtcEnd', params) },
+        (native, handle, _params, v) => native.sendBtcEnd(handle, v.signedPsbt)
+      ),
+    onchainSendBegin: (params) =>
+      this.checked(
+        'onchainSendBegin',
+        true,
+        params,
+        { prepare: (params) => sendInput('onchainSendBegin', params) },
+        (native, handle, params, v) =>
+          native.sendBegin(
+            handle,
+            params.invoice,
+            params.assetId ?? null,
+            v.amount,
+            v.witnessAmount,
+            v.blinding,
+            params.donation ?? false,
+            v.feeRate,
+            v.minConfirmations,
+            this.online!.proxyEndpoint
+          )
+      ),
+    onchainSendEnd: (params) =>
+      this.checked(
+        'onchainSendEnd',
+        true,
+        params,
+        { prepare: (params) => endInput('onchainSendEnd', params) },
+        (native, handle, _params, v) =>
+          endOnce(native, handle, v, 'Send', (signed) =>
+            native.sendEnd(handle, signed)
+          )
+      ),
+    inflateBegin: (params) =>
+      this.checked(
+        'inflateBegin',
+        true,
+        params,
+        { prepare: inflateInput },
+        (native, handle, params, v) =>
+          native.inflateBegin(
+            handle,
+            params.assetId,
+            v.amounts,
+            v.feeRate,
+            v.minConfirmations
+          )
+      ),
+    inflateEnd: (params) =>
+      this.checked(
+        'inflateEnd',
+        true,
+        params,
+        { prepare: (params) => endInput('inflateEnd', params) },
+        (native, handle, _params, v) =>
+          endOnce(native, handle, v, 'Inflation', (signed) =>
+            native.inflateEnd(handle, signed)
+          )
+      ),
+    burnBegin: (params) =>
+      this.checked(
+        'burnBegin',
+        true,
+        params,
+        { prepare: (params) => this.burnInput('burnBegin', params) },
+        async (native, handle, params) => {
+          this.assertBurnRuntime();
+          const begun = map.burnBegin(
+            await native.burnBegin(
+              handle,
+              params.assetId,
+              params.amount,
+              params.burnRecipient ?? null,
+              feeRate(params.feeRate),
+              params.minConfirmations
+            )
+          );
+          return { ...begun, ...summarizePsbt(begun.psbt) };
+        }
+      ),
+    burnEnd: (params) =>
+      this.checked(
+        'burnEnd',
+        true,
+        params,
+        { prepare: (params) => endInput('burnEnd', params) },
+        (native, handle, _params, v) =>
+          endOnce(native, handle, v, 'Burn', (signed) =>
+            native.burnEnd(handle, signed)
+          )
+      ),
+  });
+
+  readonly psbt: IPsbtSigning = this.guarded({
+    signPsbt: (psbt, mnemonic) => {
+      if (mnemonic !== undefined)
+        throw new ValidationError(
+          'signPsbt signs with the keys of this wallet and takes no mnemonic',
+          'mnemonic'
+        );
+      if (this.watchOnly) throw this.watchOnlyError('signPsbt');
+      summarizePsbt(psbt);
+      return this.run('signPsbt', false, (native, handle) =>
+        native.signPsbt(handle, psbt)
+      );
+    },
+    estimateFee: (psbt) => {
+      const { fee, vbytes, feeRate: rate } = summarizePsbt(psbt);
+      const estimate: EstimateFeeResult = { fee, vbytes, feeRate: rate };
+      return Promise.resolve(estimate);
+    },
+  });
+
   readonly bfa: OnchainWalletBackend<RgbLibRnUnlockParams>['bfa'] =
     this.guarded({
       getBfaCapabilities: async () => ({
@@ -1288,26 +1550,10 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           params,
           {
             signs: true,
-            prepare: (params) => {
-              validateBurnParams(params);
-              if (this.runtime && !this.runtime.burn)
-                throw new WalletBackendError(
-                  'UNSUPPORTED_CAPABILITY',
-                  'This native build does not support burn',
-                  'burn',
-                  'RGB_L1'
-                );
-            },
+            prepare: (params) => this.burnInput('burn', params),
           },
           async (native, handle, params) => {
-            // The runtime is known only after init(); checked again here.
-            if (!this.runtime?.burn)
-              throw new WalletBackendError(
-                'UNSUPPORTED_CAPABILITY',
-                'This native build does not support burn',
-                undefined,
-                'RGB_L1'
-              );
+            this.assertBurnRuntime();
             return native.burn(
               handle,
               params.assetId,

@@ -98,6 +98,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@noble/hashes": "2.0.1",
     "@scure/bip32": "^2.0.1"
   },
   "react-native-builder-bob": {

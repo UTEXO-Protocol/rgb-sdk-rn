@@ -3,7 +3,7 @@
   "sourceTag": "v0.3.0-beta.7-upstream-dev-bfa.8",
   "sourceRevision": "cafe66e49d58038a69dd05f8065e3fe96a9d1601",
   "uniffiVersion": "0.32.2",
-  "bridgeVersion": 6,
+  "bridgeVersion": 7,
   "swiftModule": "RGBLib",
   "ios": {
     "url": "https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/download/0.3.0-beta.7-upstream-dev-bfa.8-bfa/rgb-lib-bfa-swift-0.3.0-beta.7-upstream-dev-bfa.8-bfa.zip",

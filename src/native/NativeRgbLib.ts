@@ -7,6 +7,10 @@ export type NativeBalance = {
   spendable: string;
 };
 export type NativeAssignment = { type: string; amount: string | null };
+export type NativeBurnBegin = {
+  psbt: string;
+  batchTransferIdx: number | null;
+};
 export type NativeOutpoint = { txid: string; vout: number };
 export type NativeMedia = {
   filePath: string;
@@ -305,6 +309,54 @@ export interface Spec extends TurboModule {
     feeRate: string,
     minConfirmations: number
   ): Promise<NativeOperation>;
+  createUtxosBegin(
+    handle: string,
+    upTo: boolean,
+    num: number | null,
+    size: number | null,
+    feeRate: string,
+    skipSync: boolean
+  ): Promise<string>;
+  createUtxosEnd(handle: string, signedPsbt: string): Promise<number>;
+  sendBtcBegin(
+    handle: string,
+    address: string,
+    amount: string,
+    feeRate: string,
+    skipSync: boolean
+  ): Promise<string>;
+  sendBtcEnd(handle: string, signedPsbt: string): Promise<string>;
+  sendBegin(
+    handle: string,
+    invoice: string,
+    assetId: string | null,
+    amount: string | null,
+    witnessAmountSat: string | null,
+    witnessBlinding: string | null,
+    donation: boolean,
+    feeRate: string,
+    minConfirmations: number,
+    senderTransportEndpoint: string
+  ): Promise<string>;
+  sendEnd(handle: string, signedPsbt: string): Promise<NativeOperation>;
+  inflateBegin(
+    handle: string,
+    assetId: string,
+    amounts: string[],
+    feeRate: string,
+    minConfirmations: number
+  ): Promise<string>;
+  inflateEnd(handle: string, signedPsbt: string): Promise<NativeOperation>;
+  burnBegin(
+    handle: string,
+    assetId: string,
+    amount: string,
+    burnReason: string | null,
+    feeRate: string,
+    minConfirmations: number
+  ): Promise<NativeBurnBegin>;
+  burnEnd(handle: string, signedPsbt: string): Promise<NativeOperation>;
+  signPsbt(handle: string, psbt: string): Promise<string>;
   getConsignment(
     handle: string,
     assetId: string,

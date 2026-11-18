@@ -289,6 +289,21 @@ All methods are async except `getNetwork()`, `isDisposed()` and the `capabilitie
 
 `getReceivedMint` returns the terms the EVM lock of a received BFA mint has to match (`assetId`, read from the consignment rgb-lib checked, `opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; integers as decimal strings). Pass `{ refreshIncoming: true }` to refresh pending incoming transfers first.
 
+**Prepare, approve and submit**
+
+`burn()`, `onchainSend()` and the other one-step methods sign and submit in one call. `wallet.beginEnd` splits them, so an app can show the exact transaction and fee first:
+
+```ts
+const begun = await wallet.beginEnd.burnBegin(params);
+// Show begun.fee, begun.vbytes and begun.txid. If declined:
+// await wallet.failTransfers({ batchTransferIdx: begun.batchTransferIdx });
+const signedPsbt = await wallet.psbt!.signPsbt(begun.psbt);
+// Store signedPsbt durably, then submit.
+const result = await wallet.beginEnd.burnEnd({ signedPsbt });
+```
+
+After an interruption, call `burnEnd`, `onchainSendEnd` or `inflateEnd` again with the same signed PSBT: it resolves with the result if the operation was already submitted. `wallet.psbt` is `undefined` on a watch-only wallet, which signs elsewhere and can still use `beginEnd`.
+
 Aliases kept for the shared contract and older code: `initialize` (`init`), `unlock` (`goOnline`), `dispose` (`destroy`), `refreshWallet` (`refresh` without a result), `refreshTransfers(skipSync?)` (`refresh`) and `listOnchainTransfers` (`listTransfers`).
 
 ## Error handling

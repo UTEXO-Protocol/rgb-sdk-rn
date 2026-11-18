@@ -277,9 +277,10 @@ export function uda(value: NativeAsset): AssetUDA {
   };
 }
 export function receivedMint(
-  value: NativeReceivedMint | null
+  // The iOS bridge resolves a native null as undefined.
+  value: NativeReceivedMint | null | undefined
 ): ReceivedMint | undefined {
-  if (value === null) return undefined;
+  if (value === null || value === undefined) return undefined;
   return {
     assetId: value.assetId,
     opid: value.opid,

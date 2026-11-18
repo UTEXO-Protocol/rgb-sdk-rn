@@ -2992,12 +2992,15 @@ test('rgb-lib getReceivedMint maps the checked mint and refreshes incoming only 
     await wallet.getReceivedMint('bcrt:utxob:rid', { refreshIncoming: true }),
     undefined
   );
+  result = undefined;
+  assert.equal(await wallet.getReceivedMint('bcrt:utxob:rid'), undefined);
   assert.deepEqual(seen, [
     ['bcrt:utxob:rid', false],
     ['bcrt:utxob:rid', true],
+    ['bcrt:utxob:rid', false],
   ]);
   await assert.rejects(wallet.getReceivedMint(''), /recipientId/);
   result = { ...mint, amount: '18446744073709551616' };
   await assert.rejects(wallet.getReceivedMint('bcrt:utxob:rid'), /u64/);
-  assert.equal(seen.length, 3);
+  assert.equal(seen.length, 4);
 });

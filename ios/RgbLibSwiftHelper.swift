@@ -272,7 +272,9 @@ public final class RgbLibSwiftHelper: NSObject {
   }
   private static func consignment(_ s: RgbLibSession, _ p: RgbParams) throws -> URL {
     let w = s.wallet!
-    let paths = Set(try w.listTransfers(assetFilter: .id(assetId: p.string("assetId")), scope: .txid(txid: p.string("txid"))).compactMap { $0.consignmentPath })
+    return try walletConsignment(w, Set(try w.listTransfers(assetFilter: .id(assetId: p.string("assetId")), scope: .txid(txid: p.string("txid"))).compactMap { $0.consignmentPath }))
+  }
+  private static func walletConsignment(_ w: RGBLib.Wallet, _ paths: Set<String>) throws -> URL {
     guard paths.count == 1, let path = paths.first else { throw RgbBridgeFailure(code: "CONSIGNMENT_NOT_FOUND", message: "No unique consignment for this transfer") }
     let file = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
     let root = URL(fileURLWithPath: w.getWalletDir()).resolvingSymlinksInPath().standardizedFileURL.path
@@ -280,6 +282,16 @@ public final class RgbLibSwiftHelper: NSObject {
       throw RgbBridgeFailure(code: "INVALID_CONSIGNMENT_PATH", message: "Consignment is outside wallet storage")
     }
     return file
+  }
+  /// The asset of the consignment rgb-lib checked for this mint. rgb-lib's ReceivedMint does not
+  /// carry it, and links an any-asset receive to its asset only once the lock is found. The opid
+  /// ties the file read here to the checked mint; inspecting it does not validate it again.
+  private static func receivedMintAssetId(_ w: RGBLib.Wallet, _ recipientId: String, _ opid: String) throws -> String {
+    let file = try walletConsignment(w, Set(try w.listTransfers(assetFilter: .anyOrNone, scope: .all).filter { $0.recipientId == recipientId }.compactMap { $0.consignmentPath }))
+    let inspection = try RGBLib.inspectConsignment(consignmentPath: file.path, bundleFilter: .terminals)
+    let carriesMint = inspection.witnesses.contains { $0.operations.contains { $0.assetId == inspection.assetId && $0.transitions.contains { $0.opid == opid } } }
+    guard carriesMint else { throw RgbBridgeFailure(code: "CONSIGNMENT_NOT_FOUND", message: "No consignment carries this received mint") }
+    return inspection.assetId
   }
   private static func send(_ s: RgbLibSession, _ p: RgbParams) throws -> Any {
     let invoice = try RGBLib.Invoice(invoiceString: p.string("invoice")).invoiceData()
@@ -383,7 +395,10 @@ public final class RgbLibSwiftHelper: NSObject {
         let batches = try w.listTransfers(assetFilter: .anyOrNone, scope: .all).filter { $0.recipientId == recipientId }.map { $0.batchTransferIdx }
         if let failure = batches.lazy.compactMap({ refreshed[$0]?.failure }).first { throw failure }
       }
-      return try w.getReceivedMint(recipientId: recipientId).map { rgbDto($0) as Any } ?? NSNull()
+      guard let mint = try w.getReceivedMint(recipientId: recipientId) else { return NSNull() }
+      var received = rgbDto(mint)
+      received["assetId"] = try receivedMintAssetId(w, recipientId, mint.opid)
+      return received
     case "listUnspents": return try w.listUnspents(online: s.online, settledOnly: false, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransactions": return try w.listTransactions(online: s.online, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransfers": return try w.listTransfers(assetFilter: p.optional("assetId").map { .id(assetId: $0) } ?? .anyOrNone, scope: p.optional("txid").map { .txid(txid: $0) } ?? .all).map { rgbDto($0) }

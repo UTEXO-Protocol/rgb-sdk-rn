@@ -2968,6 +2968,7 @@ test('a failed shutdown keeps WALLET_STOPPING until a retry succeeds, then reope
 test('rgb-lib getReceivedMint maps the checked mint and refreshes incoming only on request', async () => {
   const seen = [];
   const mint = {
+    assetId: 'rgb:bfa',
     opid: 'a'.repeat(64),
     lockId: 'b'.repeat(64),
     amount: '18446744073709551615',

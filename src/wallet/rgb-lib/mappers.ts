@@ -281,6 +281,7 @@ export function receivedMint(
 ): ReceivedMint | undefined {
   if (value === null) return undefined;
   return {
+    assetId: value.assetId,
     opid: value.opid,
     lockId: value.lockId,
     amount: u64(value.amount, 'amount'),

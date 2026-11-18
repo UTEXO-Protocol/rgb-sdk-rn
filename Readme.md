@@ -287,7 +287,7 @@ All methods are async except `getNetwork()`, `isDisposed()` and the `capabilitie
 | `getConsignmentPath(assetId, txid)`      | A transfer's consignment as a local file                     |
 | `getReceivedMint(recipientId, options?)` | The checked BFA mint for a recipient ID, or `undefined`      |
 
-`getReceivedMint` returns the terms the EVM lock of a received BFA mint has to match (`opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; integers as decimal strings). Pass `{ refreshIncoming: true }` to refresh pending incoming transfers first.
+`getReceivedMint` returns the terms the EVM lock of a received BFA mint has to match (`assetId`, read from the consignment rgb-lib checked, `opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; integers as decimal strings). Pass `{ refreshIncoming: true }` to refresh pending incoming transfers first.
 
 Aliases kept for the shared contract and older code: `initialize` (`init`), `unlock` (`goOnline`), `dispose` (`destroy`), `refreshWallet` (`refresh` without a result), `refreshTransfers(skipSync?)` (`refresh`) and `listOnchainTransfers` (`listTransfers`).
 

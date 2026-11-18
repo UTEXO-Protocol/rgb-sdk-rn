@@ -125,6 +125,8 @@ export type NativeRuntimeInfo = {
   bfa: boolean;
 };
 export type NativeReceivedMint = {
+  /** Read by the bridge from the consignment rgb-lib checked for this mint. */
+  assetId: string;
   opid: string;
   lockId: string;
   amount: string;

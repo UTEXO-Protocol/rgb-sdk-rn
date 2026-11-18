@@ -195,12 +195,26 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     }
   }
   private fun consignment(s: Session, p: JSONObject): File {
-    val paths = s.wallet.listTransfers(AssetFilter.Id(p.getString("assetId")),TransferScope.Txid(p.getString("txid"))).mapNotNull { it.consignmentPath }.distinct()
+    return walletConsignment(s.wallet,s.wallet.listTransfers(AssetFilter.Id(p.getString("assetId")),TransferScope.Txid(p.getString("txid"))).mapNotNull { it.consignmentPath }.distinct())
+  }
+  private fun walletConsignment(w: Wallet,paths: List<String>): File {
     if (paths.size != 1) throw RgbLibBridgeError("CONSIGNMENT_NOT_FOUND","No unique consignment for this transfer")
     val file = File(paths.single()).canonicalFile
-    if (!file.isFile || !file.path.startsWith(File(s.wallet.getWalletDir()).canonicalPath + File.separator))
+    if (!file.isFile || !file.path.startsWith(File(w.getWalletDir()).canonicalPath + File.separator))
       throw RgbLibBridgeError("INVALID_CONSIGNMENT_PATH","Consignment is outside wallet storage")
     return file
+  }
+  /**
+   * The asset of the consignment rgb-lib checked for this mint. rgb-lib's ReceivedMint does not
+   * carry it, and links an any-asset receive to its asset only once the lock is found. The opid
+   * ties the file read here to the checked mint; inspecting it does not validate it again.
+   */
+  private fun receivedMintAssetId(w: Wallet,recipientId: String,opid: String): String {
+    val file = walletConsignment(w,w.listTransfers(AssetFilter.AnyOrNone,TransferScope.All).filter { it.recipientId == recipientId }.mapNotNull { it.consignmentPath }.distinct())
+    val inspection = inspectConsignment(file.path,BundleFilter.Terminals)
+    val carriesMint = inspection.witnesses.any { witness -> witness.operations.any { operation -> operation.assetId == inspection.assetId && operation.transitions.any { it.opid == opid } } }
+    if (!carriesMint) throw RgbLibBridgeError("CONSIGNMENT_NOT_FOUND","No consignment carries this received mint")
+    return inspection.assetId
   }
   private fun send(s: Session,p: JSONObject): Any {
     val invoice = Invoice(p.getString("invoice")).use { it.invoiceData() }
@@ -293,7 +307,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
           w.listTransfers(AssetFilter.AnyOrNone,TransferScope.All).filter { it.recipientId == recipientId }
             .firstNotNullOfOrNull { refreshed[it.batchTransferIdx]?.failure }?.let { throw it }
         }
-        w.getReceivedMint(recipientId)?.let { rgbDto(it) }
+        w.getReceivedMint(recipientId)?.let { rgbDto(it) + ("assetId" to receivedMintAssetId(w,recipientId,it.opid)) }
       }
       "listUnspents" -> w.listUnspents(s.online,false,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransactions" -> w.listTransactions(s.online,p.getBoolean("skipSync")).map { rgbDto(it) }

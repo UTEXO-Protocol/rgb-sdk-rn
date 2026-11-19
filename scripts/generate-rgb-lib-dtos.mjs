@@ -87,6 +87,14 @@ const records = {
     linkedFromContract: 'string?',
     linkedToContract: 'string?',
   },
+  ReceivedMint: {
+    opid: 'string',
+    lockId: 'string',
+    amount: 'decimal',
+    beforeBlock: 'decimal',
+    evmChainId: 'decimal',
+    bridgeContract: 'string',
+  },
   InvoiceData: {
     recipientId: 'string',
     assetSchema: 'enum?',
@@ -122,7 +130,6 @@ for (const [name, fields] of Object.entries({
   },
   AssetBfa: {
     ticker: 'string',
-    initialSupply: 'decimal',
     knownCirculatingSupply: 'decimal',
     rejectListUrl: 'string?',
   },

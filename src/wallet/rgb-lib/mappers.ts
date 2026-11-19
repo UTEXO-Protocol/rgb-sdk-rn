@@ -8,13 +8,16 @@ import type {
   TransferStatus,
   TransactionType,
   BitcoinNetwork,
+  ReceivedMint,
 } from '@utexo/rgb-sdk-core';
 import type {
   NativeAsset,
   NativeAssetMetadata,
+  NativeReceivedMint,
   NativeAssignment,
   NativeBalance,
   NativeInvoice,
+  NativeBurnBegin,
   NativeOperation,
   NativeReceive,
   NativeTransaction,
@@ -274,6 +277,21 @@ export function uda(value: NativeAsset): AssetUDA {
       : undefined,
   };
 }
+export function receivedMint(
+  // The iOS bridge resolves a native null as undefined.
+  value: NativeReceivedMint | null | undefined
+): ReceivedMint | undefined {
+  if (value === null || value === undefined) return undefined;
+  return {
+    assetId: value.assetId,
+    opid: value.opid,
+    lockId: value.lockId,
+    amount: u64(value.amount, 'amount'),
+    beforeBlock: u64(value.beforeBlock, 'beforeBlock'),
+    evmChainId: u64(value.evmChainId, 'evmChainId'),
+    bridgeContract: value.bridgeContract,
+  };
+}
 export function assetMetadata(value: NativeAssetMetadata): AssetMetadata {
   return {
     assetSchema: known(
@@ -317,10 +335,6 @@ export function assets(values: NativeAsset[]): ListAssets {
         result.bfa.push({
           ...base,
           ticker: required(value.ticker, 'ticker'),
-          initialSupply: safeAmount(
-            required(value.initialSupply, 'initialSupply'),
-            'initialSupply'
-          ),
           knownCirculatingSupply: safeAmount(
             required(value.knownCirculatingSupply, 'knownCirculatingSupply'),
             'knownCirculatingSupply'
@@ -367,6 +381,24 @@ export function operation(value: NativeOperation) {
     );
   }
   return { txid: value.txid, batchTransferIdx: value.batchTransferIdx };
+}
+/** A prepared burn; rgb-lib names its batch whenever it is not a dry run. */
+export function burnBegin(value: NativeBurnBegin) {
+  const batchTransferIdx = value?.batchTransferIdx;
+  if (
+    typeof value?.psbt !== 'string' ||
+    typeof batchTransferIdx !== 'number' ||
+    !Number.isSafeInteger(batchTransferIdx) ||
+    batchTransferIdx < 0
+  ) {
+    throw new WalletBackendError(
+      'INVALID_NATIVE_RESPONSE',
+      'Invalid burn begin result',
+      undefined,
+      'RGB_L1'
+    );
+  }
+  return { psbt: value.psbt, batchTransferIdx };
 }
 export function receive(value: NativeReceive) {
   return {

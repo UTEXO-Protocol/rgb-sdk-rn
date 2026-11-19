@@ -180,6 +180,17 @@ func rgbDto(_ v: RGBLib.Metadata) -> [String: Any] {
   ]
   return result
 }
+func rgbDto(_ v: RGBLib.ReceivedMint) -> [String: Any] {
+  var result: [String: Any] = [
+    "opid": v.opid,
+    "lockId": v.lockId,
+    "amount": String(v.amount),
+    "beforeBlock": String(v.beforeBlock),
+    "evmChainId": String(v.evmChainId),
+    "bridgeContract": v.bridgeContract,
+  ]
+  return result
+}
 func rgbDto(_ v: RGBLib.InvoiceData) -> [String: Any] {
   var result: [String: Any] = [
     "recipientId": v.recipientId,
@@ -291,12 +302,12 @@ func rgbDto(_ v: RGBLib.AssetBfa) -> [String: Any] {
     "balance": rgbDto(v.balance),
     "media": v.media.map { rgbDto($0) as Any } ?? NSNull(),
     "ticker": v.ticker,
-    "initialSupply": String(v.initialSupply),
     "knownCirculatingSupply": String(v.knownCirculatingSupply),
     "rejectListUrl": v.rejectListUrl.map { $0 as Any } ?? NSNull(),
   ]
   result["schema"] = "Bfa"
   result["issuedSupply"] = NSNull()
+  result["initialSupply"] = NSNull()
   result["maxSupply"] = NSNull()
   result["token"] = NSNull()
   return result

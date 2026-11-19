@@ -1,6 +1,7 @@
 import type {
   OnchainWalletApi,
   OnchainWalletBackend,
+  RgbLibRnBeginEndFlows,
   WalletBitcoin,
   WalletRgb,
   WalletHistory,
@@ -20,6 +21,8 @@ import type {
   FileBackupApi,
   FileIssuanceApi,
   IndexerCheckApi,
+  IPsbtSigning,
+  ReceivedMintApi,
   RestartableWalletApi,
   SharedWalletApi,
   TxidLookupApi,
@@ -46,6 +49,7 @@ export class RgbLibRn
     ConsignmentFileApi,
     IndexerCheckApi,
     AssetMetadataApi,
+    ReceivedMintApi,
     FileIssuanceApi,
     TxidLookupApi,
     AddressRotationApi
@@ -55,8 +59,10 @@ export class RgbLibRn
    * from core: a newer core copy must not make this engine claim more.
    */
   readonly contractVersion = '1' as const;
-  readonly psbt = undefined;
-  readonly beginEnd = undefined;
+  /** Signing and fee reading; absent on a watch-only wallet, which cannot sign. */
+  readonly psbt: IPsbtSigning | undefined;
+  /** Prepare, approve and submit as separate steps. */
+  readonly beginEnd: RgbLibRnBeginEndFlows;
 
   readonly protocol = 'RGB_L1' as const;
   private readonly backend: RgbLibWalletBackend;
@@ -69,6 +75,10 @@ export class RgbLibRn
   ) {
     this.backend = new RgbLibWalletBackend(params, keys, loadBinding);
     this.ports = this.backend;
+    this.psbt = this.backend.canSignTransactions
+      ? this.backend.psbt
+      : undefined;
+    this.beginEnd = this.backend.beginEnd;
   }
 
   get capabilities(): EngineCapabilities {
@@ -263,5 +273,14 @@ export class RgbLibRn
   }
   getConsignmentPath(...args: Parameters<WalletBfa['getConsignmentPath']>) {
     return this.ports.bfa.getConsignmentPath(...args);
+  }
+  /**
+   * The checked BFA mint paying `recipientId`, or `undefined`. Offline unless
+   * `refreshIncoming` is set, which first refreshes pending incoming transfers
+   * only (no send or burn is progressed). Receiving a mint needs the EVM RPC
+   * endpoint of its chain in the online options.
+   */
+  getReceivedMint(...args: Parameters<WalletBfa['getReceivedMint']>) {
+    return this.ports.bfa.getReceivedMint(...args);
   }
 }

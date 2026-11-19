@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import { SDKError } from '@utexo/rgb-sdk-core';
 import { WalletBackendError } from '../lib/module/wallet/wallet-errors.js';
 import { RgbLibRn } from '../lib/module/wallet/rgb-lib/rgb-lib-rn.js';
@@ -2963,4 +2964,442 @@ test('a failed shutdown keeps WALLET_STOPPING until a retry succeeds, then reope
   await wallet.reinit();
   assert.equal(await wallet.getAddress(), 'address');
   await wallet.dispose();
+});
+
+test('rgb-lib getReceivedMint maps the checked mint and refreshes incoming only on request', async () => {
+  const seen = [];
+  const mint = {
+    assetId: 'rgb:bfa',
+    opid: 'a'.repeat(64),
+    lockId: 'b'.repeat(64),
+    amount: '18446744073709551615',
+    beforeBlock: '9007199254740993',
+    evmChainId: '9007199254740993',
+    bridgeContract: `0x${'c'.repeat(40)}`,
+  };
+  let result = mint;
+  const { wallet } = publicWalletFixture({
+    getReceivedMint: async (...args) => {
+      seen.push(args.slice(1));
+      return result;
+    },
+  });
+  await wallet.init();
+  await wallet.unlock(config);
+
+  assert.deepEqual(await wallet.getReceivedMint('bcrt:utxob:rid'), mint);
+  result = null;
+  assert.equal(
+    await wallet.getReceivedMint('bcrt:utxob:rid', { refreshIncoming: true }),
+    undefined
+  );
+  result = undefined;
+  assert.equal(await wallet.getReceivedMint('bcrt:utxob:rid'), undefined);
+  assert.deepEqual(seen, [
+    ['bcrt:utxob:rid', false],
+    ['bcrt:utxob:rid', true],
+    ['bcrt:utxob:rid', false],
+  ]);
+  await assert.rejects(wallet.getReceivedMint(''), /recipientId/);
+  result = { ...mint, amount: '18446744073709551616' };
+  await assert.rejects(wallet.getReceivedMint('bcrt:utxob:rid'), /u64/);
+  assert.equal(seen.length, 4);
+});
+
+// ── prepare, approve, submit ────────────────────────────────────────────────
+
+/** A PSBT with one input of `inputSat` paying to `script`, one output of `outputSat`. */
+function buildPsbt({ inputSat = 10_000n, outputSat = 9_000n, script } = {}) {
+  const u64le = (n) => {
+    const out = Buffer.alloc(8);
+    out.writeBigUInt64LE(n);
+    return out;
+  };
+  const taproot = Buffer.concat([
+    Buffer.from([0x51, 0x20]),
+    Buffer.alloc(32, 7),
+  ]);
+  const spk = script ?? taproot;
+  const outScript = Buffer.concat([Buffer.from([spk.length]), spk]);
+  const tx = Buffer.concat([
+    Buffer.from([2, 0, 0, 0, 1]),
+    Buffer.alloc(36, 9),
+    Buffer.from([0, 0xff, 0xff, 0xff, 0xff, 1]),
+    u64le(outputSat),
+    outScript,
+    Buffer.alloc(4),
+  ]);
+  const utxo = Buffer.concat([u64le(inputSat), outScript]);
+  const psbt = Buffer.concat([
+    Buffer.from([0x70, 0x73, 0x62, 0x74, 0xff, 1, 0]),
+    tx.length < 0xfd
+      ? Buffer.from([tx.length])
+      : Buffer.from([0xfd, tx.length & 0xff, tx.length >> 8]),
+    tx,
+    Buffer.from([0, 1, 1, utxo.length]),
+    utxo,
+    Buffer.from([0, 0]),
+  ]).toString('base64');
+  const hash = (data) => createHash('sha256').update(data).digest();
+  return {
+    psbt,
+    txid: hash(hash(tx)).reverse().toString('hex'),
+    size: tx.length,
+  };
+}
+const BUILT = buildPsbt();
+const nativeTransfer = (overrides = {}) => ({
+  idx: 1,
+  batchTransferIdx: 21,
+  createdAt: '1',
+  updatedAt: '2',
+  status: 'WaitingConfirmations',
+  requestedAssignment: null,
+  assignments: [],
+  kind: 'Burn',
+  txid: BUILT.txid,
+  recipientId: null,
+  receiveUtxo: null,
+  changeUtxos: [],
+  expiration: null,
+  transportEndpoints: [],
+  invoiceString: null,
+  consignmentPath: null,
+  ...overrides,
+});
+const cannotEnd = () =>
+  Object.assign(new Error('Transfer cannot be ended'), {
+    code: 'RGB_LIB_CannotEndTransfer',
+  });
+
+async function beginEndWallet(overrides = {}) {
+  const f = fixture({
+    async burnBegin(...args) {
+      f.calls.push(['burnBegin', ...args]);
+      return { psbt: BUILT.psbt, batchTransferIdx: 21 };
+    },
+    async burnEnd(...args) {
+      f.calls.push(['burnEnd', ...args]);
+      return { txid: BUILT.txid, batchTransferIdx: 21, entropy: '1' };
+    },
+    async listTransfers() {
+      return [nativeTransfer()];
+    },
+    ...overrides,
+  });
+  await f.wallet.init();
+  await f.wallet.goOnline(config);
+  return f;
+}
+
+test('both carriers are present on a signing wallet; a watch-only wallet can only prepare and submit', async () => {
+  const { wallet, native } = fixture();
+  assert.deepEqual(
+    {
+      psbt: wallet.capabilities.psbtSigning,
+      flows: wallet.capabilities.beginEndFlows,
+    },
+    { psbt: true, flows: true }
+  );
+  const watchOnly = new RgbLibRn(params, PUBLIC_KEYS, () => native);
+  assert.equal(watchOnly.psbt, undefined);
+  assert.equal(watchOnly.capabilities.psbtSigning, false);
+  assert.equal(watchOnly.capabilities.beginEndFlows, true);
+  assert.equal(typeof watchOnly.beginEnd.burnBegin, 'function');
+});
+
+test('burnBegin returns the PSBT, txid, exact fee and batch; the atomic burn stays separate', async () => {
+  const { wallet, calls } = await beginEndWallet();
+  const begun = await wallet.beginEnd.burnBegin(burnParams);
+  const vbytes = Math.ceil((BUILT.size * 4 + 2 + 66) / 4);
+  assert.deepEqual(begun, {
+    psbt: BUILT.psbt,
+    batchTransferIdx: 21,
+    txid: BUILT.txid,
+    fee: 1000,
+    vbytes,
+    feeRate: 1000 / vbytes,
+  });
+  assert.deepEqual(
+    calls.find((c) => c[0] === 'burnBegin'),
+    [
+      'burnBegin',
+      'handle-1',
+      assetId,
+      burnParams.amount,
+      burnParams.burnRecipient,
+      '3',
+      1,
+    ]
+  );
+  assert.ok(!calls.some((c) => c[0] === 'burn'));
+  await wallet.burn(burnParams);
+  assert.ok(calls.some((c) => c[0] === 'burn'));
+  await wallet.dispose();
+});
+
+test('burnBegin refuses a native result without a batch', async () => {
+  const { wallet } = await beginEndWallet({
+    async burnBegin() {
+      return { psbt: BUILT.psbt, batchTransferIdx: null };
+    },
+  });
+  await assert.rejects(
+    wallet.beginEnd.burnBegin(burnParams),
+    code('INVALID_NATIVE_RESPONSE')
+  );
+  await wallet.dispose();
+});
+
+test('burnEnd keeps the native entropy internal', async () => {
+  const { wallet } = await beginEndWallet();
+  assert.deepEqual(await wallet.beginEnd.burnEnd({ signedPsbt: BUILT.psbt }), {
+    txid: BUILT.txid,
+    batchTransferIdx: 21,
+  });
+  await wallet.dispose();
+});
+
+for (const status of ['WaitingBroadcast', 'WaitingConfirmations', 'Settled']) {
+  test(`a repeated end resolves when history shows the same burn as ${status}`, async () => {
+    const { wallet } = await beginEndWallet({
+      async burnEnd() {
+        throw cannotEnd();
+      },
+      async listTransfers(handle, assetFilter, txid) {
+        assert.deepEqual(
+          [handle, assetFilter, txid],
+          ['handle-1', null, BUILT.txid]
+        );
+        return [nativeTransfer({ status })];
+      },
+    });
+    assert.deepEqual(
+      await wallet.beginEnd.burnEnd({ signedPsbt: BUILT.psbt }),
+      {
+        txid: BUILT.txid,
+        batchTransferIdx: 21,
+      }
+    );
+    await wallet.dispose();
+  });
+}
+
+for (const [name, transfer] of [
+  ['failed', { status: 'Failed' }],
+  ['still initiated', { status: 'Initiated' }],
+  ['of another kind', { kind: 'Send' }],
+  ['of another txid', { txid: 'c'.repeat(64) }],
+]) {
+  test(`a repeated end keeps the error when the transfer is ${name}`, async () => {
+    const failure = cannotEnd();
+    const { wallet } = await beginEndWallet({
+      async burnEnd() {
+        throw failure;
+      },
+      async listTransfers() {
+        return [nativeTransfer(transfer)];
+      },
+    });
+    await assert.rejects(
+      wallet.beginEnd.burnEnd({ signedPsbt: BUILT.psbt }),
+      (error) => error.cause === failure && error.operation === 'burnEnd'
+    );
+    await wallet.dispose();
+  });
+}
+
+test('only CannotEndTransfer looks at the history', async () => {
+  let listed = 0;
+  const { wallet } = await beginEndWallet({
+    async burnEnd() {
+      throw Object.assign(new Error('offline'), { code: 'RGB_LIB_Network' });
+    },
+    async listTransfers() {
+      listed += 1;
+      return [nativeTransfer()];
+    },
+  });
+  await assert.rejects(
+    wallet.beginEnd.burnEnd({ signedPsbt: BUILT.psbt }),
+    /offline/
+  );
+  assert.equal(listed, 0);
+  await wallet.dispose();
+});
+
+test('send and inflate recover under their own transfer kinds', async () => {
+  const { wallet } = await beginEndWallet({
+    async sendEnd() {
+      throw cannotEnd();
+    },
+    async inflateEnd() {
+      throw cannotEnd();
+    },
+    async listTransfers() {
+      return [
+        nativeTransfer({ kind: 'Send', batchTransferIdx: 5 }),
+        nativeTransfer({ kind: 'Inflation', batchTransferIdx: 6 }),
+      ];
+    },
+  });
+  const signed = { signedPsbt: BUILT.psbt };
+  assert.equal(
+    (await wallet.beginEnd.onchainSendEnd(signed)).batchTransferIdx,
+    5
+  );
+  assert.equal((await wallet.beginEnd.inflateEnd(signed)).batchTransferIdx, 6);
+  await wallet.dispose();
+});
+
+test('begin steps send their positional arguments and never a dry run', async () => {
+  const seen = {};
+  const record = (name, result) =>
+    async function (...args) {
+      seen[name] = args;
+      return result;
+    };
+  const { wallet } = await beginEndWallet({
+    createUtxosBegin: record('createUtxosBegin', 'p1'),
+    createUtxosEnd: record('createUtxosEnd', 4),
+    sendBtcBegin: record('sendBtcBegin', 'p2'),
+    sendBtcEnd: record('sendBtcEnd', 'txid'),
+    sendBegin: record('sendBegin', 'p3'),
+    inflateBegin: record('inflateBegin', 'p4'),
+  });
+  const flows = wallet.beginEnd;
+  assert.equal(
+    await flows.createUtxosBegin({
+      upTo: false,
+      num: 2,
+      size: 1000,
+      feeRate: 3,
+    }),
+    'p1'
+  );
+  assert.deepEqual(seen.createUtxosBegin, [
+    'handle-1',
+    false,
+    2,
+    1000,
+    '3',
+    false,
+  ]);
+  assert.equal(await flows.createUtxosEnd({ signedPsbt: BUILT.psbt }), 4);
+  assert.deepEqual(seen.createUtxosEnd, ['handle-1', BUILT.psbt]);
+  assert.equal(
+    await flows.sendBtcBegin({
+      address: 'addr',
+      amount: 7,
+      feeRate: 2,
+      skipSync: true,
+    }),
+    'p2'
+  );
+  assert.deepEqual(seen.sendBtcBegin, ['handle-1', 'addr', '7', '2', true]);
+  assert.equal(await flows.sendBtcEnd({ signedPsbt: BUILT.psbt }), 'txid');
+  assert.equal(
+    await flows.onchainSendBegin({
+      invoice: 'inv',
+      assetId,
+      amount: 9,
+      feeRate: 2,
+    }),
+    'p3'
+  );
+  assert.deepEqual(seen.sendBegin, [
+    'handle-1',
+    'inv',
+    assetId,
+    '9',
+    null,
+    null,
+    false,
+    '2',
+    1,
+    'rpc://localhost:3001/json-rpc',
+  ]);
+  assert.equal(
+    await flows.inflateBegin({ assetId, inflationAmounts: [5], feeRate: 2 }),
+    'p4'
+  );
+  assert.deepEqual(seen.inflateBegin, ['handle-1', assetId, ['5'], '2', 1]);
+  await wallet.dispose();
+});
+
+test('skipSync: true is refused where rgb-lib cannot honor it, before native', async () => {
+  const { wallet, calls } = await beginEndWallet();
+  const before = calls.length;
+  const signed = { signedPsbt: BUILT.psbt, skipSync: true };
+  for (const call of [
+    () => wallet.beginEnd.createUtxosEnd(signed),
+    () => wallet.beginEnd.sendBtcEnd(signed),
+    () => wallet.beginEnd.onchainSendEnd(signed),
+    () => wallet.beginEnd.onchainSendBegin({ invoice: 'inv', skipSync: true }),
+  ])
+    await assert.rejects(call(), code('UNSUPPORTED_CAPABILITY'));
+  assert.equal(calls.length, before);
+  await wallet.dispose();
+});
+
+test('a malformed signed PSBT is refused before any end step reaches native', async () => {
+  const { wallet, calls } = await beginEndWallet();
+  for (const signedPsbt of [undefined, '', 'not base64!', 'AAAA'])
+    await assert.rejects(
+      wallet.beginEnd.burnEnd({ signedPsbt }),
+      code('INVALID_PARAMS')
+    );
+  assert.ok(!calls.some((c) => c[0] === 'burnEnd'));
+  await wallet.dispose();
+});
+
+test('signPsbt signs with the wallet keys and never echoes a mnemonic argument', async () => {
+  const secret = 'abandon abandon abandon';
+  const seen = [];
+  const { wallet } = await beginEndWallet({
+    async signPsbt(...args) {
+      seen.push(args);
+      return BUILT.psbt;
+    },
+  });
+  assert.equal(await wallet.psbt.signPsbt(BUILT.psbt), BUILT.psbt);
+  assert.deepEqual(seen, [['handle-1', BUILT.psbt]]);
+  await assert.rejects(wallet.psbt.signPsbt(BUILT.psbt, secret), (error) => {
+    assert.equal(error.code, 'INVALID_PARAMS');
+    assert.ok(!error.message.includes(secret));
+    return true;
+  });
+  await assert.rejects(wallet.psbt.signPsbt('AAAA'), code('INVALID_PARAMS'));
+  assert.equal(seen.length, 1);
+  await wallet.dispose();
+});
+
+test('estimateFee reads Taproot and P2WPKH inputs and refuses others', async () => {
+  const { wallet } = fixture();
+  const taproot = await wallet.psbt.estimateFee(BUILT.psbt);
+  assert.equal(taproot.fee, 1000);
+  const p2wpkh = buildPsbt({
+    script: Buffer.concat([Buffer.from([0x00, 0x14]), Buffer.alloc(20, 3)]),
+  });
+  assert.deepEqual(await wallet.psbt.estimateFee(p2wpkh.psbt), {
+    fee: 1000,
+    vbytes: Math.ceil((p2wpkh.size * 4 + 2 + 108) / 4),
+    feeRate: 1000 / Math.ceil((p2wpkh.size * 4 + 2 + 108) / 4),
+  });
+  const p2sh = buildPsbt({
+    script: Buffer.concat([
+      Buffer.from([0xa9, 0x14]),
+      Buffer.alloc(20),
+      Buffer.from([0x87]),
+    ]),
+  });
+  await assert.rejects(wallet.psbt.estimateFee(p2sh.psbt), (error) => {
+    assert.equal(error.code, 'INVALID_PARAMS');
+    assert.equal(error.operation, 'estimateFee');
+    return true;
+  });
+  await assert.rejects(
+    wallet.psbt.estimateFee(buildPsbt({ outputSat: 20_000n }).psbt),
+    /outputs exceed/
+  );
 });

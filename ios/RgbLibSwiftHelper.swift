@@ -214,7 +214,7 @@ public final class RgbLibSwiftHelper: NSObject {
     let session: RgbLibSession
     do {
       let wallet = try RGBLib.Wallet(
-        walletData: RGBLib.WalletData(dataDir: lease.root.path, bitcoinNetwork: rgbNetworkFromName(net), databaseType: .sqlite, maxAllocationsPerUtxo: max, supportedSchemas: [.nia, .uda, .cfa, .ifa, .bfa]),
+        walletData: RGBLib.WalletData(dataDir: lease.root.path, bitcoinNetwork: rgbNetworkFromName(net), databaseType: .sqlite, maxAllocationsPerUtxo: max, supportedSchemas: [.nia, .uda, .cfa, .ifa, .bfa], allowRecklessSchemas: false),
         keys: RGBLib.SinglesigKeys(accountXpubVanilla: keys.vanilla, accountXpubColored: keys.colored, vanillaKeychain: nil, masterFingerprint: keys.fingerprint, mnemonic: mnemonic, witnessVersion: witness)
       )
       session = RgbLibSession(wallet: wallet, lease: lease, profile: profile, reuse: try p.bool("reuseAddresses"))
@@ -272,7 +272,9 @@ public final class RgbLibSwiftHelper: NSObject {
   }
   private static func consignment(_ s: RgbLibSession, _ p: RgbParams) throws -> URL {
     let w = s.wallet!
-    let paths = Set(try w.listTransfers(assetFilter: .id(assetId: p.string("assetId")), scope: .txid(txid: p.string("txid"))).compactMap { $0.consignmentPath })
+    return try walletConsignment(w, Set(try w.listTransfers(assetFilter: .id(assetId: p.string("assetId")), scope: .txid(txid: p.string("txid"))).compactMap { $0.consignmentPath }))
+  }
+  private static func walletConsignment(_ w: RGBLib.Wallet, _ paths: Set<String>) throws -> URL {
     guard paths.count == 1, let path = paths.first else { throw RgbBridgeFailure(code: "CONSIGNMENT_NOT_FOUND", message: "No unique consignment for this transfer") }
     let file = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
     let root = URL(fileURLWithPath: w.getWalletDir()).resolvingSymlinksInPath().standardizedFileURL.path
@@ -281,7 +283,18 @@ public final class RgbLibSwiftHelper: NSObject {
     }
     return file
   }
-  private static func send(_ s: RgbLibSession, _ p: RgbParams) throws -> Any {
+  /// The asset of the consignment rgb-lib checked for this mint. rgb-lib's ReceivedMint does not
+  /// carry it, and links an any-asset receive to its asset only once the lock is found. The opid
+  /// ties the file read here to the checked mint; inspecting it does not validate it again.
+  private static func receivedMintAssetId(_ w: RGBLib.Wallet, _ recipientId: String, _ opid: String) throws -> String {
+    let file = try walletConsignment(w, Set(try w.listTransfers(assetFilter: .anyOrNone, scope: .all).filter { $0.recipientId == recipientId }.compactMap { $0.consignmentPath }))
+    let inspection = try RGBLib.inspectConsignment(consignmentPath: file.path, bundleFilter: .terminals)
+    let carriesMint = inspection.witnesses.contains { $0.operations.contains { $0.assetId == inspection.assetId && $0.transitions.contains { $0.opid == opid } } }
+    guard carriesMint else { throw RgbBridgeFailure(code: "CONSIGNMENT_NOT_FOUND", message: "No consignment carries this received mint") }
+    return inspection.assetId
+  }
+  /// The checks of a send and what rgb-lib needs for it; shared by `send` and `sendBegin`.
+  private static func sendRequest(_ s: RgbLibSession, _ p: RgbParams) throws -> (recipients: [String: [RGBLib.Recipient]], expiry: UInt64) {
     let invoice = try RGBLib.Invoice(invoiceString: p.string("invoice")).invoiceData()
     guard invoice.network == (try rgbNetworkFromName(s.profile["network"] as! String)) else { throw rgbInvalid("Invoice network does not match wallet") }
     let supplied = p.optional("assetId")
@@ -308,13 +321,21 @@ public final class RgbLibSwiftHelper: NSObject {
     }
     let witness = try p.has("witnessAmountSat") ? RGBLib.WitnessData(amountSat: p.amount("witnessAmountSat"), blinding: p.has("witnessBlinding") ? p.amount("witnessBlinding") : nil) : nil
     let recipient = RGBLib.Recipient(recipientId: invoice.recipientId, witnessData: witness, assignment: assignment, transportEndpoints: invoice.transportEndpoints, publicKey: invoice.publicKey, encryption: invoice.encryption, expirationTimestamp: invoice.expirationTimestamp)
-    return try rgbDto(s.wallet!.send(online: s.requireOnline(), recipientMap: [asset: [recipient]], donation: p.bool("donation"), feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self), expirationTimestamp: expiry, senderTransportEndpoint: p.string("senderTransportEndpoint")))
+    return ([asset: [recipient]], expiry)
+  }
+  private static func send(_ s: RgbLibSession, _ p: RgbParams) throws -> Any {
+    let request = try sendRequest(s, p)
+    return try rgbDto(s.wallet!.send(online: s.requireOnline(), recipientMap: request.recipients, donation: p.bool("donation"), feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self), expirationTimestamp: request.expiry, senderTransportEndpoint: p.string("senderTransportEndpoint")))
+  }
+  private static func sendBegin(_ s: RgbLibSession, _ p: RgbParams) throws -> Any {
+    let request = try sendRequest(s, p)
+    return try s.wallet!.sendBegin(online: s.requireOnline(), recipientMap: request.recipients, donation: p.bool("donation"), feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self), expirationTimestamp: request.expiry, senderTransportEndpoint: p.string("senderTransportEndpoint"), dryRun: false).psbt
   }
   private static func call(_ operation: String, _ p: RgbParams) throws -> Any {
     switch operation {
     case "getRuntimeInfo":
       let artifact = rgbArtifactInfo()
-      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 5, "burn": true, "consignment": true, "bfa": true]
+      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 7, "burn": true, "consignment": true, "bfa": true]
     case "openWallet": return try open(p)
     case "restoreBackup": try restore(p); return NSNull()
     default: break
@@ -373,6 +394,20 @@ public final class RgbLibSwiftHelper: NSObject {
     case "getAssetBalance": return try rgbDto(w.getAssetBalance(assetId: p.string("assetId")))
     case "listAssets": return try rgbDto(w.listAssets(filterAssetSchemas: p.strings("filterAssetSchemas").map(rgbSchema)))
     case "getAssetMetadata": return try rgbDto(w.getAssetMetadata(assetId: p.string("assetId")))
+    case "getReceivedMint":
+      let recipientId = try p.string("recipientId")
+      if try p.bool("refreshIncoming") {
+        let incoming: [RGBLib.RefreshFilter] = [.waitingCounterparty, .waitingSafeHeight, .waitingBroadcast, .waitingConfirmations].map { RGBLib.RefreshFilter(status: $0, incoming: true) }
+        let refreshed = try w.refresh(online: s.requireOnline(), assetId: nil, filter: incoming, skipSync: false)
+        // Refresh reports a per-transfer failure in its result, not as an error: a failed check
+        // of this receive must reject rather than read as a pending mint.
+        let batches = try w.listTransfers(assetFilter: .anyOrNone, scope: .all).filter { $0.recipientId == recipientId }.map { $0.batchTransferIdx }
+        if let failure = batches.lazy.compactMap({ refreshed[$0]?.failure }).first { throw failure }
+      }
+      guard let mint = try w.getReceivedMint(recipientId: recipientId) else { return NSNull() }
+      var received = rgbDto(mint)
+      received["assetId"] = try receivedMintAssetId(w, recipientId, mint.opid)
+      return received
     case "listUnspents": return try w.listUnspents(online: s.online, settledOnly: false, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransactions": return try w.listTransactions(online: s.online, skipSync: p.bool("skipSync")).map { rgbDto($0) }
     case "listTransfers": return try w.listTransfers(assetFilter: p.optional("assetId").map { .id(assetId: $0) } ?? .anyOrNone, scope: p.optional("txid").map { .txid(txid: $0) } ?? .all).map { rgbDto($0) }
@@ -389,9 +424,22 @@ public final class RgbLibSwiftHelper: NSObject {
     case "issueAssetNia": return try rgbDto(w.issueAssetNia(ticker: p.string("ticker"), name: p.string("name"), precision: p.number("precision", UInt8.self), amounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }))
     case "issueAssetCfa": return try rgbDto(w.issueAssetCfa(name: p.string("name"), details: p.optional("details"), precision: p.number("precision", UInt8.self), amounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, filePath: p.optional("filePath")))
     case "issueAssetUda": return try rgbDto(w.issueAssetUda(ticker: p.string("ticker"), name: p.string("name"), details: p.optional("details"), precision: p.number("precision", UInt8.self), mediaFilePath: p.optional("mediaFilePath"), attachmentsFilePaths: p.strings("attachmentsFilePaths")))
-    case "issueAssetIfa": return try rgbDto(w.issueAssetIfa(ticker: p.string("ticker"), name: p.string("name"), precision: p.number("precision", UInt8.self), amounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, inflationAmounts: p.strings("inflationAmounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, rejectListUrl: p.optional("rejectListUrl"), linkRight: false, linkedFromContract: nil))
+    case "issueAssetIfa": return try rgbDto(w.issueAssetIfa(ticker: p.string("ticker"), name: p.string("name"), precision: p.number("precision", UInt8.self), amounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, inflationAmounts: p.strings("inflationAmounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, rejectListUrl: p.optional("rejectListUrl"), linkRight: false, linkedFromContract: nil, skipContractChecks: false))
     case "inflate": return try rgbDto(w.inflate(online: s.requireOnline(), assetId: p.string("assetId"), inflationAmounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self)))
     case "burn": return try rgbDto(w.burn(online: s.requireOnline(), assetId: p.string("assetId"), amount: p.amount("amount"), burnReason: p.optional("burnReason"), feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self)))
+    case "createUtxosBegin": return try w.createUtxosBegin(online: s.requireOnline(), upTo: p.bool("upTo"), num: p.has("num") ? p.number("num", UInt8.self) : nil, size: p.has("size") ? p.number("size", UInt32.self) : nil, feeRate: p.amount("feeRate"), skipSync: p.bool("skipSync"), dryRun: false)
+    case "createUtxosEnd": return try w.createUtxosEnd(online: s.requireOnline(), signedPsbt: p.string("signedPsbt"))
+    case "sendBtcBegin": return try w.sendBtcBegin(online: s.requireOnline(), address: p.string("address"), amount: p.amount("amount"), feeRate: p.amount("feeRate"), skipSync: p.bool("skipSync"), dryRun: false)
+    case "sendBtcEnd": return try w.sendBtcEnd(online: s.requireOnline(), signedPsbt: p.string("signedPsbt"))
+    case "sendBegin": return try sendBegin(s, p)
+    case "sendEnd": return try rgbDto(w.sendEnd(online: s.requireOnline(), signedPsbt: p.string("signedPsbt")))
+    case "inflateBegin": return try w.inflateBegin(online: s.requireOnline(), assetId: p.string("assetId"), inflationAmounts: p.strings("amounts").map { guard let n = UInt64($0) else { throw rgbInvalid("Invalid amount") }; return n }, feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self), dryRun: false).psbt
+    case "inflateEnd": return try rgbDto(w.inflateEnd(online: s.requireOnline(), signedPsbt: p.string("signedPsbt")))
+    case "burnBegin":
+      let begun = try w.burnBegin(online: s.requireOnline(), assetId: p.string("assetId"), amount: p.amount("amount"), burnReason: p.optional("burnReason"), feeRate: p.amount("feeRate"), minConfirmations: p.number("minConfirmations", UInt8.self), dryRun: false)
+      return ["psbt": begun.psbt, "batchTransferIdx": begun.batchTransferIdx.map { NSNumber(value: $0) as Any } ?? NSNull()]
+    case "burnEnd": return try rgbDto(w.burnEnd(online: s.requireOnline(), signedPsbt: p.string("signedPsbt")))
+    case "signPsbt": return try w.signPsbt(unsignedPsbt: p.string("psbt"))
     case "failTransfers": return try w.failTransfers(online: s.requireOnline(), batchTransferIdx: p.has("batchTransferIdx") ? p.number("batchTransferIdx", Int32.self) : nil, noAssetOnly: p.bool("noAssetOnly"), skipSync: p.bool("skipSync"))
     case "refresh": return try w.refresh(online: s.requireOnline(), assetId: nil, filter: [], skipSync: p.bool("skipSync")).map { id, r -> [String: Any] in
       ["batchTransferIdx": NSNumber(value: id), "updatedStatus": r.updatedStatus.map { rgbEnum($0) as Any } ?? NSNull(), "failure": r.failure.map { ["name": rgbLibErrorCode($0), "message": String(describing: $0)] as Any } ?? NSNull()]

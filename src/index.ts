@@ -32,6 +32,8 @@ export type {
   WalletAssignment,
   WalletInvoiceData,
   WalletUnspent,
+  BurnBeginResult,
+  RgbLibRnBeginEndFlows,
 } from './wallet/wallet-api';
 export { WalletBackendError } from './wallet/wallet-errors';
 export type { WalletBackendErrorCode } from './wallet/wallet-errors';
@@ -244,6 +246,8 @@ export type {
   IssueAssetCfaParams,
   IssueAssetUdaParams,
   AssetMetadata,
+  ReceivedMint,
+  ReceivedMintOptions,
   RestoreBackupFromFileParams,
   RestoreFromBackupParams,
   WalletRestoreResponse,

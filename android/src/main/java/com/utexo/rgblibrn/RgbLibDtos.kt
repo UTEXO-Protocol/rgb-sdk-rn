@@ -168,6 +168,17 @@ internal fun rgbDto(v: Metadata): Map<String, Any?> {
   )
   return result
 }
+internal fun rgbDto(v: ReceivedMint): Map<String, Any?> {
+  val result = mutableMapOf<String, Any?>(
+    "opid" to v.opid,
+    "lockId" to v.lockId,
+    "amount" to v.amount.toString(),
+    "beforeBlock" to v.beforeBlock.toString(),
+    "evmChainId" to v.evmChainId.toString(),
+    "bridgeContract" to v.bridgeContract,
+  )
+  return result
+}
 internal fun rgbDto(v: InvoiceData): Map<String, Any?> {
   val result = mutableMapOf<String, Any?>(
     "recipientId" to v.recipientId,
@@ -279,12 +290,12 @@ internal fun rgbDto(v: AssetBfa): Map<String, Any?> {
     "balance" to rgbDto(v.balance),
     "media" to v.media?.let { rgbDto(it) },
     "ticker" to v.ticker,
-    "initialSupply" to v.initialSupply.toString(),
     "knownCirculatingSupply" to v.knownCirculatingSupply.toString(),
     "rejectListUrl" to v.rejectListUrl?.let { it },
   )
   result["schema"] = "Bfa"
   result["issuedSupply"] = null
+  result["initialSupply"] = null
   result["maxSupply"] = null
   result["token"] = null
   return result

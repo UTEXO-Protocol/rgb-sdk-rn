@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.42 (unreleased)
+
+Needs `@utexo/rgb-sdk-core` with `ReceivedMintApi` (1.0.0-beta.11).
+
+__added__
+
+- `getReceivedMint(recipientId, options?)` (core's `ReceivedMintApi`) returns the checked BFA mint paying a recipient ID (`assetId`, read from the consignment rgb-lib checked for this mint, `opid`, `lockId`, `amount`, `beforeBlock`, `evmChainId`, `bridgeContract`; u64 values as decimal strings) or `undefined`. It is offline; `{ refreshIncoming: true }` first refreshes pending incoming transfers only (with `RefreshFilter { incoming: true }`), so no send or burn is progressed; a refresh failure reported for that receive rejects instead of reading as no mint. Receiving a mint needs the chain's `evmRpcUrls` entry.
+- `beginEnd` (core's `IBeginEndFlows`) prepares, approves and submits as separate steps: `createUtxosBegin/End`, `sendBtcBegin/End`, `onchainSendBegin/End`, `inflateBegin/End`, plus `burnBegin/End`. `burn()` and the other one-step methods stay as they are. `burnBegin` returns the unsigned `psbt`, `txid`, exact `fee`, `vbytes`, `feeRate` and the `batchTransferIdx` to pass to `failTransfers` if the burn is declined. Store the signed PSBT before an end step: calling `onchainSendEnd`, `inflateEnd` or `burnEnd` again with the same PSBT resolves with the result if that operation was already submitted. `skipSync: true` on an end step is `UNSUPPORTED_CAPABILITY`, since rgb-lib's end steps take no sync option.
+- `psbt` (core's `IPsbtSigning`) signs with the wallet's keys (`signPsbt`) and reads the fee of a PSBT (`estimateFee`). It is `undefined` on a watch-only wallet. For SegWit v0 inputs `vbytes` is an upper bound.
+- The native bridge version is now 7: rebuild the app.
+
+__changed__
+
+- rgb-lib is updated from `v0.3.0-beta.7-upstream-dev-bfa.6` (`5010eef`) to `v0.3.0-beta.7-upstream-dev-bfa.8` (`cafe66e`): iOS from the [rgb-lib-swift release](https://github.com/UTEXO-Protocol/rgb-lib-swift/releases/tag/0.3.0-beta.7-upstream-dev-bfa.8-bfa), Android from `com.utexo:rgb-lib-bfa-android:0.3.0-beta.7-upstream-dev-bfa.8-bfa`. Rebuild the app (`pod install` on iOS).
+  - BFA assets from `listAssets()` no longer report `initialSupply` (rgb-lib removed it); use `knownCirculatingSupply`.
+  - Wallets open with `allowRecklessSchemas: false`, so IFA and BFA stay refused on mainnet (`RGB_LIB_CannotUseSchemaOnMainnet`), as before. IFA issuance passes `skipContractChecks: false`.
+  - Error variants: `TransferExpired` no longer exists; `InvalidLinkedContract` and `UnknownLinkedContract` are new.
+
+## 1.0.0-beta.41
 
 __added__
 

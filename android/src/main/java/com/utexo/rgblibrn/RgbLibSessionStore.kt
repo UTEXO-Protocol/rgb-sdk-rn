@@ -144,7 +144,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
         created = true
       }
       wallet = Wallet(
-        WalletData(lease.root.path, network(net), DatabaseType.SQLITE, max, AssetSchema.entries.toList()),
+        WalletData(lease.root.path, network(net), DatabaseType.SQLITE, max, AssetSchema.entries.toList(), false),
         SinglesigKeys(keys.first, keys.second, null, keys.third, mnemonic, witness)
       )
       val session = Session(wallet, lease, profile, p.getBoolean("reuseAddresses"))
@@ -195,14 +195,29 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     }
   }
   private fun consignment(s: Session, p: JSONObject): File {
-    val paths = s.wallet.listTransfers(AssetFilter.Id(p.getString("assetId")),TransferScope.Txid(p.getString("txid"))).mapNotNull { it.consignmentPath }.distinct()
+    return walletConsignment(s.wallet,s.wallet.listTransfers(AssetFilter.Id(p.getString("assetId")),TransferScope.Txid(p.getString("txid"))).mapNotNull { it.consignmentPath }.distinct())
+  }
+  private fun walletConsignment(w: Wallet,paths: List<String>): File {
     if (paths.size != 1) throw RgbLibBridgeError("CONSIGNMENT_NOT_FOUND","No unique consignment for this transfer")
     val file = File(paths.single()).canonicalFile
-    if (!file.isFile || !file.path.startsWith(File(s.wallet.getWalletDir()).canonicalPath + File.separator))
+    if (!file.isFile || !file.path.startsWith(File(w.getWalletDir()).canonicalPath + File.separator))
       throw RgbLibBridgeError("INVALID_CONSIGNMENT_PATH","Consignment is outside wallet storage")
     return file
   }
-  private fun send(s: Session,p: JSONObject): Any {
+  /**
+   * The asset of the consignment rgb-lib checked for this mint. rgb-lib's ReceivedMint does not
+   * carry it, and links an any-asset receive to its asset only once the lock is found. The opid
+   * ties the file read here to the checked mint; inspecting it does not validate it again.
+   */
+  private fun receivedMintAssetId(w: Wallet,recipientId: String,opid: String): String {
+    val file = walletConsignment(w,w.listTransfers(AssetFilter.AnyOrNone,TransferScope.All).filter { it.recipientId == recipientId }.mapNotNull { it.consignmentPath }.distinct())
+    val inspection = inspectConsignment(file.path,BundleFilter.Terminals)
+    val carriesMint = inspection.witnesses.any { witness -> witness.operations.any { operation -> operation.assetId == inspection.assetId && operation.transitions.any { it.opid == opid } } }
+    if (!carriesMint) throw RgbLibBridgeError("CONSIGNMENT_NOT_FOUND","No consignment carries this received mint")
+    return inspection.assetId
+  }
+  /** The checks of a send and what rgb-lib needs for it; shared by `send` and `sendBegin`. */
+  private fun sendRequest(s: Session,p: JSONObject): Pair<Map<String,List<Recipient>>,ULong> {
     val invoice = Invoice(p.getString("invoice")).use { it.invoiceData() }
     if (invoice.network != network(s.profile.getString("network"))) fail("Invoice network does not match wallet")
     val supplied = optional(p,"assetId")
@@ -218,14 +233,22 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     val expiry = invoice.expirationTimestamp?.let { if (it <= now + 600UL) fail("Invoice expires too soon"); it - 600UL } ?: (now+3600UL)
     val witness = if (p.isNull("witnessAmountSat")) null else WitnessData(amount(p,"witnessAmountSat"),if(p.isNull("witnessBlinding")) null else amount(p,"witnessBlinding"))
     val recipient = Recipient(invoice.recipientId,witness,assignment,invoice.transportEndpoints,invoice.publicKey,invoice.encryption,invoice.expirationTimestamp)
-    return rgbDto(s.wallet.send(online(s),mapOf(asset to listOf(recipient)),p.getBoolean("donation"),amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte(),expiry,p.getString("senderTransportEndpoint")))
+    return mapOf(asset to listOf(recipient)) to expiry
+  }
+  private fun send(s: Session,p: JSONObject): Any {
+    val (recipients,expiry) = sendRequest(s,p)
+    return rgbDto(s.wallet.send(online(s),recipients,p.getBoolean("donation"),amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte(),expiry,p.getString("senderTransportEndpoint")))
+  }
+  private fun sendBegin(s: Session,p: JSONObject): String {
+    val (recipients,expiry) = sendRequest(s,p)
+    return s.wallet.sendBegin(online(s),recipients,p.getBoolean("donation"),amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte(),expiry,p.getString("senderTransportEndpoint"),false).psbt
   }
   fun execute(operation: String, params: Map<String, Any?>): Any? {
     val p = JSONObject(params)
     when(operation) {
       "getRuntimeInfo" -> {
         val artifact = runCatching { JSONObject(artifactInfo()!!) }.getOrNull()
-        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 5,"burn" to true,"consignment" to true,"bfa" to true)
+        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 7,"burn" to true,"consignment" to true,"bfa" to true)
       }
       "openWallet" -> return open(p)
       "restoreBackup" -> { restore(p); return null }
@@ -284,6 +307,17 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       "getAssetBalance" -> rgbDto(w.getAssetBalance(p.getString("assetId")))
       "listAssets" -> rgbDto(w.listAssets(strings(p,"filterAssetSchemas").map { schema(it) }))
       "getAssetMetadata" -> rgbDto(w.getAssetMetadata(p.getString("assetId")))
+      "getReceivedMint" -> {
+        val recipientId = p.getString("recipientId")
+        if (p.getBoolean("refreshIncoming")) {
+          val refreshed = w.refresh(online(s),null,RefreshTransferStatus.entries.map { RefreshFilter(it,true) },false)
+          // Refresh reports a per-transfer failure in its result, not as an error: a failed check
+          // of this receive must reject rather than read as a pending mint.
+          w.listTransfers(AssetFilter.AnyOrNone,TransferScope.All).filter { it.recipientId == recipientId }
+            .firstNotNullOfOrNull { refreshed[it.batchTransferIdx]?.failure }?.let { throw it }
+        }
+        w.getReceivedMint(recipientId)?.let { rgbDto(it) + ("assetId" to receivedMintAssetId(w,recipientId,it.opid)) }
+      }
       "listUnspents" -> w.listUnspents(s.online,false,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransactions" -> w.listTransactions(s.online,p.getBoolean("skipSync")).map { rgbDto(it) }
       "listTransfers" -> w.listTransfers(optional(p,"assetId")?.let { AssetFilter.Id(it) } ?: AssetFilter.AnyOrNone,optional(p,"txid")?.let { TransferScope.Txid(it) } ?: TransferScope.All).map { rgbDto(it) }
@@ -299,9 +333,23 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       "issueAssetNia" -> rgbDto(w.issueAssetNia(p.getString("ticker"),p.getString("name"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() }))
       "issueAssetCfa" -> rgbDto(w.issueAssetCfa(p.getString("name"),optional(p,"details"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() },optional(p,"filePath")))
       "issueAssetUda" -> rgbDto(w.issueAssetUda(p.getString("ticker"),p.getString("name"),optional(p,"details"),number(p,"precision",18).toUByte(),optional(p,"mediaFilePath"),strings(p,"attachmentsFilePaths")))
-      "issueAssetIfa" -> rgbDto(w.issueAssetIfa(p.getString("ticker"),p.getString("name"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() },strings(p,"inflationAmounts").map { it.toULong() },optional(p,"rejectListUrl"),false,null))
+      "issueAssetIfa" -> rgbDto(w.issueAssetIfa(p.getString("ticker"),p.getString("name"),number(p,"precision",18).toUByte(),strings(p,"amounts").map { it.toULong() },strings(p,"inflationAmounts").map { it.toULong() },optional(p,"rejectListUrl"),false,null,false))
       "inflate" -> rgbDto(w.inflate(online(s),p.getString("assetId"),strings(p,"amounts").map { it.toULong() },amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte()))
       "burn" -> rgbDto(w.burn(online(s),p.getString("assetId"),amount(p,"amount"),optional(p,"burnReason"),amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte()))
+      "createUtxosBegin" -> w.createUtxosBegin(online(s),p.getBoolean("upTo"),if(p.isNull("num")) null else number(p,"num",255).toUByte(),if(p.isNull("size")) null else number(p,"size",0xffffffffL).toUInt(),amount(p,"feeRate"),p.getBoolean("skipSync"),false)
+      "createUtxosEnd" -> w.createUtxosEnd(online(s),p.getString("signedPsbt")).toDouble()
+      "sendBtcBegin" -> w.sendBtcBegin(online(s),p.getString("address"),amount(p,"amount"),amount(p,"feeRate"),p.getBoolean("skipSync"),false)
+      "sendBtcEnd" -> w.sendBtcEnd(online(s),p.getString("signedPsbt"))
+      "sendBegin" -> sendBegin(s,p)
+      "sendEnd" -> rgbDto(w.sendEnd(online(s),p.getString("signedPsbt")))
+      "inflateBegin" -> w.inflateBegin(online(s),p.getString("assetId"),strings(p,"amounts").map { it.toULong() },amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte(),false).psbt
+      "inflateEnd" -> rgbDto(w.inflateEnd(online(s),p.getString("signedPsbt")))
+      "burnBegin" -> {
+        val begun = w.burnBegin(online(s),p.getString("assetId"),amount(p,"amount"),optional(p,"burnReason"),amount(p,"feeRate"),number(p,"minConfirmations",255).toUByte(),false)
+        mapOf("psbt" to begun.psbt,"batchTransferIdx" to begun.batchTransferIdx?.toDouble())
+      }
+      "burnEnd" -> rgbDto(w.burnEnd(online(s),p.getString("signedPsbt")))
+      "signPsbt" -> w.signPsbt(p.getString("psbt"))
       "failTransfers" -> w.failTransfers(online(s),if(p.isNull("batchTransferIdx")) null else number(p,"batchTransferIdx",Int.MAX_VALUE.toLong()).toInt(),p.getBoolean("noAssetOnly"),p.getBoolean("skipSync"))
       "refresh" -> w.refresh(online(s),null,emptyList(),p.getBoolean("skipSync")).map { (id,r) -> mapOf("batchTransferIdx" to id.toDouble(),"updatedStatus" to r.updatedStatus?.let { rgbEnum(it) },"failure" to r.failure?.let { mapOf("name" to rgbLibErrorCode(it),"message" to (it.message ?: "RGB Lib operation failed")) }) }
       "deleteTransfers" -> w.deleteTransfers(if(p.isNull("batchTransferIdx")) null else number(p,"batchTransferIdx",Int.MAX_VALUE.toLong()).toInt(),p.getBoolean("noAssetOnly"))

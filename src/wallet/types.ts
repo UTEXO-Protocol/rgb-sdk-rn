@@ -34,7 +34,6 @@ export interface AssetBfa {
   name: string;
   details?: string;
   precision: number;
-  initialSupply: number;
   /** Supply known to circulate, as read from the bridge contract. */
   knownCirculatingSupply: number;
   timestamp: number;
@@ -92,6 +91,8 @@ export type {
   AssetMetadata,
   IssueAssetCfaParams,
   IssueAssetUdaParams,
+  ReceivedMint,
+  ReceivedMintOptions,
 } from '@utexo/rgb-sdk-core';
 
 /** `restoreBackupFromFile()` input. Both paths are absolute. */

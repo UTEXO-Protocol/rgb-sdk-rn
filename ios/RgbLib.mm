@@ -75,6 +75,10 @@ RCT_EXPORT_MODULE(RgbLib)
   [self invoke:@"getAssetMetadata" params:@{@"handle": handle ?: [NSNull null], @"assetId": assetId ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
+- (void)getReceivedMint:(NSString *)handle recipientId:(NSString *)recipientId refreshIncoming:(BOOL)refreshIncoming resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"getReceivedMint" params:@{@"handle": handle ?: [NSNull null], @"recipientId": recipientId ?: [NSNull null], @"refreshIncoming": @(refreshIncoming)} resolve:resolve reject:reject];
+}
+
 - (void)listUnspents:(NSString *)handle skipSync:(BOOL)skipSync resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   [self invoke:@"listUnspents" params:@{@"handle": handle ?: [NSNull null], @"skipSync": @(skipSync)} resolve:resolve reject:reject];
 }
@@ -129,6 +133,50 @@ RCT_EXPORT_MODULE(RgbLib)
 
 - (void)burn:(NSString *)handle assetId:(NSString *)assetId amount:(NSString *)amount burnReason:(NSString *)burnReason feeRate:(NSString *)feeRate minConfirmations:(double)minConfirmations resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
   [self invoke:@"burn" params:@{@"handle": handle ?: [NSNull null], @"assetId": assetId ?: [NSNull null], @"amount": amount ?: [NSNull null], @"burnReason": burnReason ?: [NSNull null], @"feeRate": feeRate ?: [NSNull null], @"minConfirmations": @(minConfirmations)} resolve:resolve reject:reject];
+}
+
+- (void)createUtxosBegin:(NSString *)handle upTo:(BOOL)upTo num:(NSNumber *)num size:(NSNumber *)size feeRate:(NSString *)feeRate skipSync:(BOOL)skipSync resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"createUtxosBegin" params:@{@"handle": handle ?: [NSNull null], @"upTo": @(upTo), @"num": num ?: [NSNull null], @"size": size ?: [NSNull null], @"feeRate": feeRate ?: [NSNull null], @"skipSync": @(skipSync)} resolve:resolve reject:reject];
+}
+
+- (void)createUtxosEnd:(NSString *)handle signedPsbt:(NSString *)signedPsbt resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"createUtxosEnd" params:@{@"handle": handle ?: [NSNull null], @"signedPsbt": signedPsbt ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)sendBtcBegin:(NSString *)handle address:(NSString *)address amount:(NSString *)amount feeRate:(NSString *)feeRate skipSync:(BOOL)skipSync resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"sendBtcBegin" params:@{@"handle": handle ?: [NSNull null], @"address": address ?: [NSNull null], @"amount": amount ?: [NSNull null], @"feeRate": feeRate ?: [NSNull null], @"skipSync": @(skipSync)} resolve:resolve reject:reject];
+}
+
+- (void)sendBtcEnd:(NSString *)handle signedPsbt:(NSString *)signedPsbt resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"sendBtcEnd" params:@{@"handle": handle ?: [NSNull null], @"signedPsbt": signedPsbt ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)sendBegin:(NSString *)handle invoice:(NSString *)invoice assetId:(NSString *)assetId amount:(NSString *)amount witnessAmountSat:(NSString *)witnessAmountSat witnessBlinding:(NSString *)witnessBlinding donation:(BOOL)donation feeRate:(NSString *)feeRate minConfirmations:(double)minConfirmations senderTransportEndpoint:(NSString *)senderTransportEndpoint resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"sendBegin" params:@{@"handle": handle ?: [NSNull null], @"invoice": invoice ?: [NSNull null], @"assetId": assetId ?: [NSNull null], @"amount": amount ?: [NSNull null], @"witnessAmountSat": witnessAmountSat ?: [NSNull null], @"witnessBlinding": witnessBlinding ?: [NSNull null], @"donation": @(donation), @"feeRate": feeRate ?: [NSNull null], @"minConfirmations": @(minConfirmations), @"senderTransportEndpoint": senderTransportEndpoint ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)sendEnd:(NSString *)handle signedPsbt:(NSString *)signedPsbt resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"sendEnd" params:@{@"handle": handle ?: [NSNull null], @"signedPsbt": signedPsbt ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)inflateBegin:(NSString *)handle assetId:(NSString *)assetId amounts:(NSArray *)amounts feeRate:(NSString *)feeRate minConfirmations:(double)minConfirmations resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"inflateBegin" params:@{@"handle": handle ?: [NSNull null], @"assetId": assetId ?: [NSNull null], @"amounts": amounts ?: [NSNull null], @"feeRate": feeRate ?: [NSNull null], @"minConfirmations": @(minConfirmations)} resolve:resolve reject:reject];
+}
+
+- (void)inflateEnd:(NSString *)handle signedPsbt:(NSString *)signedPsbt resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"inflateEnd" params:@{@"handle": handle ?: [NSNull null], @"signedPsbt": signedPsbt ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)burnBegin:(NSString *)handle assetId:(NSString *)assetId amount:(NSString *)amount burnReason:(NSString *)burnReason feeRate:(NSString *)feeRate minConfirmations:(double)minConfirmations resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"burnBegin" params:@{@"handle": handle ?: [NSNull null], @"assetId": assetId ?: [NSNull null], @"amount": amount ?: [NSNull null], @"burnReason": burnReason ?: [NSNull null], @"feeRate": feeRate ?: [NSNull null], @"minConfirmations": @(minConfirmations)} resolve:resolve reject:reject];
+}
+
+- (void)burnEnd:(NSString *)handle signedPsbt:(NSString *)signedPsbt resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"burnEnd" params:@{@"handle": handle ?: [NSNull null], @"signedPsbt": signedPsbt ?: [NSNull null]} resolve:resolve reject:reject];
+}
+
+- (void)signPsbt:(NSString *)handle psbt:(NSString *)psbt resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {
+  [self invoke:@"signPsbt" params:@{@"handle": handle ?: [NSNull null], @"psbt": psbt ?: [NSNull null]} resolve:resolve reject:reject];
 }
 
 - (void)getConsignment:(NSString *)handle assetId:(NSString *)assetId txid:(NSString *)txid resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject {

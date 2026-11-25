@@ -19,7 +19,7 @@ static void check(BOOL value, const char *message) {
 int main(void) {
   @autoreleasepool {
     NSDictionary *runtime = call(@"getRuntimeInfo", @{});
-    check([runtime[@"bridgeVersion"] isEqual:@7], "Wrong bridge version");
+    check([runtime[@"bridgeVersion"] isEqual:@8], "Wrong bridge version");
     // Read from the framework's copy of the release version.json.
     check([runtime[@"sourceRevision"] length] == 40 && [runtime[@"version"] length] > 0, "Missing artifact provenance");
 
@@ -32,7 +32,7 @@ int main(void) {
     NSDictionary *badKeys = [RgbLibSwiftHelper execute:@"openWallet" params:@{
       @"dataDir":badKeysDir, @"network":@"regtest", @"witnessVersion":@"taproot",
       @"accountXpubVanilla":@"tpubNotAValidKey", @"accountXpubColored":@"tpubNotAValidKey",
-      @"masterFingerprint":@"abcdef12", @"maxAllocationsPerUtxo":@5, @"reuseAddresses":@NO
+      @"masterFingerprint":@"abcdef12", @"maxAllocationsPerUtxo":@5, @"reuseAddresses":@NO, @"supportedSchemas":@[@"Nia",@"Uda",@"Cfa",@"Ifa",@"Bfa"], @"allowRecklessSchemas":@NO
     }];
     check(badKeys[@"error"] != nil, "Invalid public keys opened a wallet");
     NSArray *left = [NSFileManager.defaultManager contentsOfDirectoryAtPath:badKeysDir error:nil];
@@ -40,13 +40,13 @@ int main(void) {
     NSString *recovered = call(@"openWallet", @{
       @"dataDir":badKeysDir, @"network":@"regtest", @"witnessVersion":@"taproot",
       @"mnemonic":@"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-      @"maxAllocationsPerUtxo":@5, @"reuseAddresses":@NO
+      @"maxAllocationsPerUtxo":@5, @"reuseAddresses":@NO, @"supportedSchemas":@[@"Nia",@"Uda",@"Cfa",@"Ifa",@"Bfa"], @"allowRecklessSchemas":@NO
     });
     call(@"closeWallet", @{@"handle":recovered});
     NSMutableDictionary *params = [@{
       @"dataDir":root, @"network":@"regtest", @"witnessVersion":@"taproot",
       @"mnemonic":@"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-      @"maxAllocationsPerUtxo":@5, @"reuseAddresses":@YES
+      @"maxAllocationsPerUtxo":@5, @"reuseAddresses":@YES, @"supportedSchemas":@[@"Nia",@"Uda",@"Cfa",@"Ifa",@"Bfa"], @"allowRecklessSchemas":@NO
     } mutableCopy];
     NSString *handle = call(@"openWallet", params);
     NSDictionary *identity = call(@"getWalletIdentity", @{@"handle":handle});

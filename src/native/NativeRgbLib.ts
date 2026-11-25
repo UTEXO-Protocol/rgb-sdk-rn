@@ -174,7 +174,10 @@ export interface Spec extends TurboModule {
     masterFingerprint: string | null,
     witnessVersion: string,
     maxAllocationsPerUtxo: number,
-    reuseAddresses: boolean
+    reuseAddresses: boolean,
+    /** rgb-lib `AssetSchema` names (`Nia`, `Uda`, `Cfa`, `Ifa`, `Bfa`). */
+    supportedSchemas: string[],
+    allowRecklessSchemas: boolean
   ): Promise<string>;
   closeWallet(handle: string): Promise<void>;
   getWalletIdentity(handle: string): Promise<NativeIdentity>;

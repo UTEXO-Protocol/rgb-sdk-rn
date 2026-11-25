@@ -5,7 +5,7 @@ import { WalletBackendError } from '../wallet-errors';
 /** Release of the Swift and Kotlin bindings, as written in their `version.json`. */
 export const RGB_LIB_VERSION = '0.3.0-beta.7-upstream-dev-bfa.8-bfa';
 export const RGB_LIB_REVISION = 'cafe66e49d58038a69dd05f8065e3fe96a9d1601';
-export const RGB_LIB_BRIDGE_VERSION = 7;
+export const RGB_LIB_BRIDGE_VERSION = 8;
 
 /** Settings fixed for the wallet's lifetime. */
 export interface RgbLibRnOptions {
@@ -15,6 +15,36 @@ export interface RgbLibRnOptions {
   witnessVersion?: 'taproot' | 'segwit-v0';
   maxAllocationsPerUtxo?: number;
   reuseAddresses?: boolean;
+  /**
+   * rgb-lib's `allowRecklessSchemas`, default `false`. rgb-lib refuses to
+   * open a mainnet wallet that supports IFA or BFA unless it is `true`. With
+   * `false`, a mainnet wallet opens with NIA, UDA and CFA only, and the IFA
+   * and BFA operations reject with `UNSUPPORTED_CAPABILITY`. With `true`, it
+   * opens with every schema and rgb-lib logs a warning. Other networks always
+   * have every schema.
+   */
+  allowRecklessSchemas?: boolean;
+}
+
+/** Every schema this rgb-lib has, by the bridge's names. */
+const ALL_SCHEMAS = ['Nia', 'Uda', 'Cfa', 'Ifa', 'Bfa'] as const;
+/** The schemas rgb-lib allows on mainnet without `allowRecklessSchemas`. */
+const MAINNET_SCHEMAS = ['Nia', 'Uda', 'Cfa'] as const;
+
+/**
+ * The schemas a wallet opens with: rgb-lib refuses a mainnet wallet that
+ * supports IFA or BFA unless `allowRecklessSchemas` is set, so without it a
+ * mainnet wallet gets the mainnet schemas only.
+ */
+export function supportedSchemas(
+  network: BitcoinNetwork,
+  allowRecklessSchemas: boolean
+): string[] {
+  return [
+    ...(network === 'mainnet' && !allowRecklessSchemas
+      ? MAINNET_SCHEMAS
+      : ALL_SCHEMAS),
+  ];
 }
 
 /**
@@ -162,6 +192,12 @@ export function validateWalletParams(params: RgbLibRnParams) {
     typeof params.reuseAddresses !== 'boolean'
   ) {
     invalidConfig('reuseAddresses must be a boolean');
+  }
+  if (
+    params.allowRecklessSchemas !== undefined &&
+    typeof params.allowRecklessSchemas !== 'boolean'
+  ) {
+    invalidConfig('allowRecklessSchemas must be a boolean');
   }
 }
 

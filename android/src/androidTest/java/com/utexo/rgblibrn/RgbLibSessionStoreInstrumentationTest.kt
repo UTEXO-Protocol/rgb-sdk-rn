@@ -40,7 +40,7 @@ class RgbLibSessionStoreInstrumentationTest {
     val root = File(context.cacheDir, "rgb-lib-instrumentation-${System.nanoTime()}")
     val params = mutableMapOf<String, Any?>(
       "dataDir" to root.resolve("source").path, "network" to "regtest",
-      "witnessVersion" to "taproot", "maxAllocationsPerUtxo" to 5.0, "reuseAddresses" to true,
+      "witnessVersion" to "taproot", "maxAllocationsPerUtxo" to 5.0, "reuseAddresses" to true, "supportedSchemas" to listOf("Nia", "Uda", "Cfa", "Ifa", "Bfa"), "allowRecklessSchemas" to false,
       "mnemonic" to "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
     )
     var active: String? = null
@@ -150,7 +150,7 @@ class RgbLibSessionStoreInstrumentationTest {
     val root = File(context.cacheDir, "rgb-lib-watch-only-${System.nanoTime()}")
     val full = mapOf<String, Any?>(
       "dataDir" to root.resolve("full").path, "network" to "regtest",
-      "witnessVersion" to "taproot", "maxAllocationsPerUtxo" to 5.0, "reuseAddresses" to true,
+      "witnessVersion" to "taproot", "maxAllocationsPerUtxo" to 5.0, "reuseAddresses" to true, "supportedSchemas" to listOf("Nia", "Uda", "Cfa", "Ifa", "Bfa"), "allowRecklessSchemas" to false,
       "mnemonic" to "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
     )
     fun open(values: Map<String, Any?>) = store.execute("openWallet", values) as String
@@ -186,7 +186,7 @@ class RgbLibSessionStoreInstrumentationTest {
     val root = File(context.cacheDir, "rgb-lib-rejected-keys-${System.nanoTime()}")
     val params = mapOf<String, Any?>(
       "dataDir" to root.path, "network" to "regtest",
-      "witnessVersion" to "taproot", "maxAllocationsPerUtxo" to 5.0, "reuseAddresses" to false
+      "witnessVersion" to "taproot", "maxAllocationsPerUtxo" to 5.0, "reuseAddresses" to false, "supportedSchemas" to listOf("Nia", "Uda", "Cfa", "Ifa", "Bfa"), "allowRecklessSchemas" to false
     )
     try {
       // rgb-lib rejects these keys after the bridge has written the profile.

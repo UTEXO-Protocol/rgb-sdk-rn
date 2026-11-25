@@ -43,6 +43,7 @@ import {
   integer,
   resolveRgbLibConfig,
   splitWalletParams,
+  supportedSchemas,
   validateWalletParams,
 } from './config';
 import type {
@@ -281,6 +282,39 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
     return !this.keys.readMnemonic;
   }
 
+  /** IFA and BFA are off: mainnet without `allowRecklessSchemas`. */
+  private get recklessRefused(): boolean {
+    return (
+      this.params.network === 'mainnet' &&
+      !(this.params.allowRecklessSchemas ?? false)
+    );
+  }
+
+  /** Rejects an IFA or BFA operation the wallet was opened without. */
+  private refuseReckless(operation: string): void {
+    if (this.recklessRefused)
+      throw new WalletBackendError(
+        'UNSUPPORTED_CAPABILITY',
+        `${operation} needs IFA or BFA, which rgb-lib refuses on mainnet unless allowRecklessSchemas is true`,
+        operation,
+        'RGB_L1'
+      );
+  }
+
+  /** `run`, after the IFA/BFA rule: the rejection is the public error. */
+  private reckless<T>(
+    operation: string,
+    requiresOnline: boolean,
+    action: (native: Spec, handle: string) => Promise<T>
+  ): Promise<T> {
+    try {
+      this.refuseReckless(operation);
+    } catch (error) {
+      return Promise.reject(toPublicError(error, operation));
+    }
+    return this.run(operation, requiresOnline, action);
+  }
+
   /**
    * The wallet configuration can sign transactions (it has a mnemonic
    * source). It does not promise that a signing call succeeds.
@@ -501,7 +535,12 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
     operation: string,
     requiresOnline: boolean,
     params: P,
-    rules: { signs?: boolean; prepare?: (owned: P) => R },
+    rules: {
+      signs?: boolean;
+      /** An IFA or BFA operation (see `refuseReckless`). */
+      reckless?: boolean;
+      prepare?: (owned: P) => R;
+    },
     action: (native: Spec, handle: string, owned: P, prepared: R) => Promise<T>
   ): Promise<T> {
     if (typeof params !== 'object' || params === null)
@@ -509,6 +548,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
     const owned = snapshot(params);
     // Before admission and any connect; actions read it with skipSyncOf again.
     skipSyncOf((owned as { skipSync?: unknown }).skipSync);
+    if (rules.reckless) this.refuseReckless(operation);
     if (rules.signs && this.watchOnly) throw this.watchOnlyError(operation);
     const prepared = rules.prepare?.(owned) as R;
     return this.run(operation, requiresOnline, (native, handle) =>
@@ -598,7 +638,12 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           publicKeys?.masterFingerprint ?? null,
           this.params.witnessVersion ?? 'taproot',
           this.params.maxAllocationsPerUtxo ?? 5,
-          this.params.reuseAddresses ?? false
+          this.params.reuseAddresses ?? false,
+          supportedSchemas(
+            this.params.network,
+            this.params.allowRecklessSchemas ?? false
+          ),
+          this.params.allowRecklessSchemas ?? false
         );
       } finally {
         mnemonic = null;
@@ -1083,10 +1128,11 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           }
         ),
       issueAssetIfa: (params) =>
-        this.input(
+        this.checked(
           'issueAssetIfa',
           false,
           params,
+          { reckless: true },
           async (native, handle, params) => {
             const { amounts, inflationAmounts } = issuanceAmounts(
               params.amounts,
@@ -1112,6 +1158,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           params,
           {
             signs: true,
+            reckless: true,
             prepare: inflateInput,
           },
           async (native, handle, params, v) =>
@@ -1452,7 +1499,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
         'inflateBegin',
         true,
         params,
-        { prepare: inflateInput },
+        { reckless: true, prepare: inflateInput },
         (native, handle, params, v) =>
           native.inflateBegin(
             handle,
@@ -1467,7 +1514,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
         'inflateEnd',
         true,
         params,
-        { prepare: (params) => endInput('inflateEnd', params) },
+        { reckless: true, prepare: (params) => endInput('inflateEnd', params) },
         (native, handle, _params, v) =>
           endOnce(native, handle, v, 'Inflation', (signed) =>
             native.inflateEnd(handle, signed)
@@ -1478,7 +1525,10 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
         'burnBegin',
         true,
         params,
-        { prepare: (params) => this.burnInput('burnBegin', params) },
+        {
+          reckless: true,
+          prepare: (params) => this.burnInput('burnBegin', params),
+        },
         async (native, handle, params) => {
           this.assertBurnRuntime();
           const begun = map.burnBegin(
@@ -1499,7 +1549,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
         'burnEnd',
         true,
         params,
-        { prepare: (params) => endInput('burnEnd', params) },
+        { reckless: true, prepare: (params) => endInput('burnEnd', params) },
         (native, handle, _params, v) =>
           endOnce(native, handle, v, 'Burn', (signed) =>
             native.burnEnd(handle, signed)
@@ -1529,20 +1579,17 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
 
   readonly bfa: OnchainWalletBackend<RgbLibRnUnlockParams>['bfa'] =
     this.guarded({
-      getBfaCapabilities: async () => ({
-        // Burning signs a transaction: a watch-only wallet cannot do it.
-        burn:
-          !this.disposed &&
-          !this.stopRequested &&
-          !this.watchOnly &&
-          (this.runtime?.burn ?? false),
-        consignment:
-          !this.disposed &&
-          !this.stopRequested &&
-          (this.runtime?.consignment ?? false),
-        bfa:
-          !this.disposed && !this.stopRequested && (this.runtime?.bfa ?? false),
-      }),
+      getBfaCapabilities: async () => {
+        // Mainnet without allowRecklessSchemas has no BFA schema at all.
+        const open =
+          !this.disposed && !this.stopRequested && !this.recklessRefused;
+        return {
+          // Burning signs a transaction: a watch-only wallet cannot do it.
+          burn: open && !this.watchOnly && (this.runtime?.burn ?? false),
+          consignment: open && (this.runtime?.consignment ?? false),
+          bfa: open && (this.runtime?.bfa ?? false),
+        };
+      },
       burn: (params) =>
         this.checked(
           'burn',
@@ -1550,6 +1597,7 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           params,
           {
             signs: true,
+            reckless: true,
             prepare: (params) => this.burnInput('burn', params),
           },
           async (native, handle, params) => {
@@ -1565,18 +1613,18 @@ export class RgbLibWalletBackend implements OnchainWalletBackend<RgbLibRnUnlockP
           }
         ),
       getConsignment: (assetId, txid) =>
-        this.run('getConsignment', false, (native, handle) => {
+        this.reckless('getConsignment', false, (native, handle) => {
           validateConsignmentLookup(assetId, txid);
           return native.getConsignment(handle, assetId, txid);
         }),
       getConsignmentPath: (assetId, txid) =>
-        this.run('getConsignmentPath', false, (native, handle) => {
+        this.reckless('getConsignmentPath', false, (native, handle) => {
           validateConsignmentLookup(assetId, txid);
           return native.getConsignmentPath(handle, assetId, txid);
         }),
       getReceivedMint: (recipientId, options) => {
         const refreshIncoming = options?.refreshIncoming === true;
-        return this.run(
+        return this.reckless(
           'getReceivedMint',
           refreshIncoming,
           async (native, handle) => {

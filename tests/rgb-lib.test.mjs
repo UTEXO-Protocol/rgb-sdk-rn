@@ -55,6 +55,26 @@ const deferred = () => {
   });
   return { promise, resolve, reject };
 };
+/** rgb-lib's `AssetSchema` names, and those it allows on mainnet (`allowed_on_mainnet`). */
+const ALL_SCHEMAS = ['Nia', 'Uda', 'Cfa', 'Ifa', 'Bfa'];
+const MAINNET_SCHEMAS = ['Nia', 'Uda', 'Cfa'];
+/**
+ * rgb-lib's wallet creation check: an empty schema list is refused, and so is
+ * a mainnet wallet supporting a schema not allowed there, unless
+ * `allowRecklessSchemas`. Without the arguments it checks what the bridge
+ * used to hardcode (every schema, flag off).
+ */
+function rgbLibOpenCheck(network, schemas = ALL_SCHEMAS, reckless = false) {
+  if (schemas.length === 0)
+    throw Object.assign(new Error('No supported schemas'), {
+      code: 'RGB_LIB_NoSupportedSchemas',
+    });
+  const refused = schemas.find((s) => !MAINNET_SCHEMAS.includes(s));
+  if (network === 'mainnet' && refused && !reckless)
+    throw Object.assign(new Error(`Cannot use ${refused} schema on mainnet`), {
+      code: 'RGB_LIB_CannotUseSchemaOnMainnet',
+    });
+}
 function fixture(overrides = {}) {
   const calls = [];
   const native = {
@@ -64,6 +84,7 @@ function fixture(overrides = {}) {
     },
     async openWallet(...args) {
       calls.push(['open', ...args]);
+      rgbLibOpenCheck(args[1], args[9], args[10]);
       return 'handle-1';
     },
     async closeWallet(h) {
@@ -3402,4 +3423,178 @@ test('estimateFee reads Taproot and P2WPKH inputs and refuses others', async () 
     wallet.psbt.estimateFee(buildPsbt({ outputSat: 20_000n }).psbt),
     /outputs exceed/
   );
+});
+
+// ── allowRecklessSchemas on mainnet ─────────────────────────────────────────
+
+/** A wallet on `network` whose native identity matches it. */
+function networkFixture(network, walletParams = {}, overrides = {}) {
+  return publicWalletFixture(
+    {
+      async getWalletIdentity() {
+        return {
+          id: 'identity',
+          network: network === 'utexo' ? 'signet' : network,
+          masterFingerprint: 'abc12345',
+        };
+      },
+      ...overrides,
+    },
+    { ...params, network, ...walletParams }
+  );
+}
+const openArgs = (calls) => {
+  const open = calls.find((c) => Array.isArray(c) && c[0] === 'open');
+  return { schemas: open[10], reckless: open[11] };
+};
+const recklessOperations = (wallet) => ({
+  issueAssetIfa: () =>
+    wallet.issueAssetIfa({
+      ticker: 'T',
+      name: 'Token',
+      precision: 0,
+      amounts: ['1'],
+      inflationAmounts: ['1'],
+      rejectListUrl: null,
+    }),
+  inflate: () => wallet.inflate({ assetId, inflationAmounts: ['1'] }),
+  inflateBegin: () =>
+    wallet.beginEnd.inflateBegin({ assetId, inflationAmounts: ['1'] }),
+  inflateEnd: () => wallet.beginEnd.inflateEnd({ signedPsbt: BUILT.psbt }),
+  burn: () => wallet.burn(burnParams),
+  burnBegin: () => wallet.beginEnd.burnBegin(burnParams),
+  burnEnd: () => wallet.beginEnd.burnEnd({ signedPsbt: BUILT.psbt }),
+  getConsignment: () => wallet.getConsignment(assetId, txid),
+  getConsignmentPath: () => wallet.getConsignmentPath(assetId, txid),
+  getReceivedMint: () =>
+    wallet.getReceivedMint('rid', { refreshIncoming: true }),
+});
+
+test('the test native refuses what rgb-lib refuses on mainnet', () => {
+  assert.throws(
+    () => rgbLibOpenCheck('mainnet'),
+    code('RGB_LIB_CannotUseSchemaOnMainnet')
+  );
+  assert.throws(
+    () => rgbLibOpenCheck('mainnet', ['Nia', 'Bfa'], false),
+    /Cannot use Bfa schema on mainnet/
+  );
+  assert.throws(
+    () => rgbLibOpenCheck('regtest', [], false),
+    code('RGB_LIB_NoSupportedSchemas')
+  );
+  rgbLibOpenCheck('mainnet', MAINNET_SCHEMAS, false);
+  rgbLibOpenCheck('mainnet', ALL_SCHEMAS, true);
+  rgbLibOpenCheck('regtest', ALL_SCHEMAS, false);
+});
+
+test('allowRecklessSchemas: a mainnet wallet opens with the mainnet schemas by default', async () => {
+  for (const flag of [undefined, false]) {
+    const { wallet, calls } = networkFixture('mainnet', {
+      allowRecklessSchemas: flag,
+    });
+    await wallet.init();
+    assert.deepEqual(openArgs(calls), {
+      schemas: MAINNET_SCHEMAS,
+      reckless: false,
+    });
+    assert.equal(await wallet.getAddress(), 'address');
+    assert.deepEqual(await wallet.getBfaCapabilities(), {
+      burn: false,
+      consignment: false,
+      bfa: false,
+    });
+    await wallet.dispose();
+  }
+});
+
+test('allowRecklessSchemas: mainnet IFA and BFA operations reject before any native call', async () => {
+  const { wallet, calls } = networkFixture('mainnet');
+  await wallet.init();
+  for (const [operation, call] of Object.entries(recklessOperations(wallet))) {
+    const before = calls.length;
+    await assert.rejects(call(), (error) => {
+      assert.ok(error instanceof WalletBackendError);
+      assert.equal(error.code, 'UNSUPPORTED_CAPABILITY');
+      assert.equal(error.operation, operation);
+      assert.equal(error.protocol, 'RGB_L1');
+      assert.match(
+        error.message,
+        /needs IFA or BFA, which rgb-lib refuses on mainnet unless allowRecklessSchemas is true/
+      );
+      return true;
+    });
+    // No lazy connect and no native call.
+    assert.deepEqual(calls.slice(before), [], operation);
+  }
+  // A watch-only mainnet wallet gets the same refusal, not the watch-only one.
+  const watchOnly = new RgbLibRn(
+    { ...params, network: 'mainnet' },
+    {
+      accountXpubVanilla: testKey(1, MAINNET_VERSIONS).publicExtendedKey,
+      accountXpubColored: testKey(2, MAINNET_VERSIONS).publicExtendedKey,
+      masterFingerprint: 'abcdef12',
+    },
+    () => fixture().native
+  );
+  await assert.rejects(watchOnly.burn(burnParams), /allowRecklessSchemas/);
+  await watchOnly.dispose();
+  await wallet.dispose();
+});
+
+test('allowRecklessSchemas: true opens a mainnet wallet with every schema', async () => {
+  const { wallet, calls } = networkFixture('mainnet', {
+    allowRecklessSchemas: true,
+  });
+  await wallet.init();
+  assert.deepEqual(openArgs(calls), { schemas: ALL_SCHEMAS, reckless: true });
+  assert.deepEqual(await wallet.getBfaCapabilities(), {
+    burn: true,
+    consignment: true,
+    bfa: true,
+  });
+  assert.equal(await wallet.getConsignment(assetId, txid), 'consignment-bytes');
+  await assert.rejects(
+    recklessOperations(wallet).issueAssetIfa(),
+    /unexpected issuance/
+  );
+  assert.ok(calls.some((c) => Array.isArray(c) && c[0] === 'issueIfa'));
+  await wallet.dispose();
+});
+
+test('allowRecklessSchemas: other networks always open with every schema', async () => {
+  for (const network of ['regtest', 'testnet', 'testnet4', 'signet', 'utexo'])
+    for (const flag of [undefined, false, true]) {
+      const { wallet, calls } = networkFixture(network, {
+        allowRecklessSchemas: flag,
+      });
+      await wallet.init();
+      assert.deepEqual(openArgs(calls), {
+        schemas: ALL_SCHEMAS,
+        reckless: flag ?? false,
+      });
+      assert.equal((await wallet.getBfaCapabilities()).bfa, true);
+      assert.equal(
+        await wallet.getConsignment(assetId, txid),
+        'consignment-bytes'
+      );
+      await wallet.dispose();
+    }
+});
+
+test('allowRecklessSchemas must be a boolean', () => {
+  for (const bad of ['true', 1, null, {}])
+    assert.throws(
+      () =>
+        new RgbLibRn(
+          { ...params, network: 'mainnet', allowRecklessSchemas: bad },
+          'words',
+          () => fixture().native
+        ),
+      (error) => {
+        assert.equal(error.code, 'INVALID_CONFIG');
+        assert.match(error.message, /allowRecklessSchemas must be a boolean/);
+        return true;
+      }
+    );
 });

@@ -186,6 +186,10 @@ public final class RgbLibSwiftHelper: NSObject {
     }
     let max = try p.number("maxAllocationsPerUtxo", UInt32.self)
     guard max > 0 else { throw rgbInvalid("maxAllocationsPerUtxo must be positive") }
+    // Chosen by the JS engine: on mainnet without allowRecklessSchemas, only
+    // the schemas rgb-lib allows there (it refuses IFA and BFA).
+    let schemas = try p.strings("supportedSchemas").map(rgbSchema)
+    let reckless = try p.bool("allowRecklessSchemas")
     let text = "\(net):\(witnessName):\(keys.vanilla):\(keys.colored)"
     let id = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     let expected: [String: Any] = [
@@ -214,7 +218,7 @@ public final class RgbLibSwiftHelper: NSObject {
     let session: RgbLibSession
     do {
       let wallet = try RGBLib.Wallet(
-        walletData: RGBLib.WalletData(dataDir: lease.root.path, bitcoinNetwork: rgbNetworkFromName(net), databaseType: .sqlite, maxAllocationsPerUtxo: max, supportedSchemas: [.nia, .uda, .cfa, .ifa, .bfa], allowRecklessSchemas: false),
+        walletData: RGBLib.WalletData(dataDir: lease.root.path, bitcoinNetwork: rgbNetworkFromName(net), databaseType: .sqlite, maxAllocationsPerUtxo: max, supportedSchemas: schemas, allowRecklessSchemas: reckless),
         keys: RGBLib.SinglesigKeys(accountXpubVanilla: keys.vanilla, accountXpubColored: keys.colored, vanillaKeychain: nil, masterFingerprint: keys.fingerprint, mnemonic: mnemonic, witnessVersion: witness)
       )
       session = RgbLibSession(wallet: wallet, lease: lease, profile: profile, reuse: try p.bool("reuseAddresses"))
@@ -335,7 +339,7 @@ public final class RgbLibSwiftHelper: NSObject {
     switch operation {
     case "getRuntimeInfo":
       let artifact = rgbArtifactInfo()
-      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 7, "burn": true, "consignment": true, "bfa": true]
+      return ["version": artifact["version"] as? String ?? "", "sourceRevision": artifact["source_commit"] as? String ?? "", "bridgeVersion": 8, "burn": true, "consignment": true, "bfa": true]
     case "openWallet": return try open(p)
     case "restoreBackup": try restore(p); return NSNull()
     default: break

@@ -121,6 +121,9 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
       ?: given ?: fail("A mnemonic or public keys are required")
     val max = number(p,"maxAllocationsPerUtxo",0xffffffffL).toUInt()
     if (max == 0U) fail("maxAllocationsPerUtxo must be positive")
+    // Chosen by the JS engine: on mainnet without allowRecklessSchemas, only
+    // the schemas rgb-lib allows there (it refuses IFA and BFA).
+    val schemas = strings(p, "supportedSchemas").map { schema(it) }
     val identity = "$net:${p.getString("witnessVersion")}:${keys.first}:${keys.second}"
     val id = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     val expected = JSONObject(mapOf(
@@ -144,7 +147,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
         created = true
       }
       wallet = Wallet(
-        WalletData(lease.root.path, network(net), DatabaseType.SQLITE, max, AssetSchema.entries.toList(), false),
+        WalletData(lease.root.path, network(net), DatabaseType.SQLITE, max, schemas, p.getBoolean("allowRecklessSchemas")),
         SinglesigKeys(keys.first, keys.second, null, keys.third, mnemonic, witness)
       )
       val session = Session(wallet, lease, profile, p.getBoolean("reuseAddresses"))
@@ -248,7 +251,7 @@ internal class RgbLibSessionStore(private val artifactInfo: () -> String? = { nu
     when(operation) {
       "getRuntimeInfo" -> {
         val artifact = runCatching { JSONObject(artifactInfo()!!) }.getOrNull()
-        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 7,"burn" to true,"consignment" to true,"bfa" to true)
+        return mapOf("version" to (artifact?.optString("version") ?: ""),"sourceRevision" to (artifact?.optString("source_commit") ?: ""),"bridgeVersion" to 8,"burn" to true,"consignment" to true,"bfa" to true)
       }
       "openWallet" -> return open(p)
       "restoreBackup" -> { restore(p); return null }

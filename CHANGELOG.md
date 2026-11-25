@@ -1,6 +1,17 @@
 # Changelog
 
-## 1.0.0-beta.42 (unreleased)
+## 1.0.0-beta.43 (unreleased)
+
+__fixed__
+
+- Mainnet wallets could not open: the bridge opened every wallet with every schema and `allowRecklessSchemas: false`, so rgb-lib refused any mainnet wallet with `RGB_LIB_CannotUseSchemaOnMainnet` (it does not allow IFA or BFA on mainnet) and even BTC and NIA were unusable. A mainnet wallet now opens with the schemas rgb-lib allows there (NIA, UDA, CFA). Other networks keep every schema.
+
+__added__
+
+- `allowRecklessSchemas` wallet option (rgb-lib's name), default `false`. With `false`, a mainnet wallet opens with NIA, UDA and CFA only, and the IFA and BFA operations (`issueAssetIfa`, `inflate`, `inflateBegin/End`, `burn`, `burnBegin/End`, `getConsignment`, `getConsignmentPath`, `getReceivedMint`) reject with `UNSUPPORTED_CAPABILITY` before any native call; `getBfaCapabilities()` reports `burn`, `consignment` and `bfa` as `false`. With `true`, a mainnet wallet opens with every schema and rgb-lib logs a warning. A value that is not a boolean is `INVALID_CONFIG`. It has no effect on other networks.
+- The native bridge version is now 8 (`openWallet` takes the schemas and the flag): rebuild the app.
+
+## 1.0.0-beta.42
 
 Needs `@utexo/rgb-sdk-core` with `ReceivedMintApi` (1.0.0-beta.11).
 

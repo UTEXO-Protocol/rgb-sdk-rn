@@ -25,7 +25,7 @@ An RGB wallet for React Native, powered by native [rgb-lib](https://github.com/U
 ## Installation
 
 ```bash
-npm install @utexo/rgb-sdk-rn @utexo/rgb-sdk-core@1.0.0-beta.10
+npm install @utexo/rgb-sdk-rn @utexo/rgb-sdk-core@1.0.0-beta.11
 npm install react-native-get-random-values buffer
 cd ios && pod install
 ```
@@ -199,7 +199,14 @@ const wallet = new RgbLibRn(
 
 `regtest` has no defaults: set the indexer and proxy in the constructor, or call `goOnline(params)` first.
 
-Wallet options: `witnessVersion` (`'taproot'` by default, or `'segwit-v0'`), `maxAllocationsPerUtxo` (default 5) and `reuseAddresses`.
+Wallet options are set in the constructor only:
+
+| Option                  | Default     | Notes                                                                                                                                                                                                                                                                                 |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `witnessVersion`        | `'taproot'` | Or `'segwit-v0'`                                                                                                                                                                                                                                                                      |
+| `maxAllocationsPerUtxo` | `5`         |                                                                                                                                                                                                                                                                                       |
+| `reuseAddresses`        | `false`     | Return one pinned address instead of a new one on each call                                                                                                                                                                                                                           |
+| `allowRecklessSchemas`  | `false`     | rgb-lib's setting. rgb-lib does not allow IFA and BFA on `mainnet`, so with `false` a mainnet wallet opens with NIA, UDA and CFA only and the IFA and BFA operations reject with `UNSUPPORTED_CAPABILITY`. `true` opens it with every schema. Other networks always have every schema |
 
 The second constructor argument is the keys: a mnemonic string, a sync or async reader, an object with `getMnemonic()`, or account public keys alone for a watch-only wallet.
 
